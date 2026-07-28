@@ -1,0 +1,136 @@
+Implementation Plan - Sprint 001: SAUGC OS Core Visual Architecture & UI Modules
+Sprint 001 focuses exclusively on creating the visual foundation, modern SaaS design system, responsive UI layout shell, and 10 fully styled modules for SAUGC OS using Next.js (App Router), TypeScript, Tailwind CSS, and Shadcn UI primitives.
+
+IMPORTANT
+
+Strict Constraints for Sprint 001:
+
+NO backend / server databases.
+NO Supabase or AI API integrations.
+NO authentication flows or state persistence.
+ONLY frontend visual layout, reusable design components, micro-interactions, dark theme aesthetics, and realistic rich mock data.
+Visual & Aesthetic Direction
+Inspired by OpenAI, Linear, Vercel, Stripe, Notion, Framer, and Supabase:
+
+Palette: Sleek dark slate/zinc background (#09090b / #0d0e12), subtle glowing border highlights (border-white/10), ambient dark gradients, neon emerald/violet/cyan accents.
+Typography: Clean sans-serif hierarchy (Inter / System font), monospace elements for prompt parameters and IDs.
+Micro-Interactions: Hover card lifts, smooth sidebar collapsing, glassmorphism backdrops (backdrop-blur-md), pill badge status indicators.
+User Review Required
+NOTE
+
+Please review the proposed architecture and 10 module screens.
+
+Layout Shell: Collapsible dark sidebar navigation with icon labels, workspace selector, active route highlighting, combined with a top header with global search shortcut (Cmd+K), notification badge, quick action menu, and user profile avatar.
+Mock Data Scope: All 10 modules will be pre-populated with realistic, high-fidelity Brazilian Portuguese mock data (clients, revenue stats, active marketing campaigns, video/creative assets, prompt library with parameters, deal pipelines, and AI Studio interface).
+Open Questions
+None at this time. The requirements for Sprint 001 frontend UI structure are fully specified.
+
+Proposed Changes
+Core Setup & Architecture Configuration
+[NEW] 
+package.json
+Setup Next.js 14/15, React 18/19, TypeScript, Tailwind CSS, lucide-react, clsx, tailwind-merge, framer-motion.
+[NEW] 
+tailwind.config.ts
+Configure dark mode palette, custom animations (shimmer, pulse-glow, fade-in), glassmorphism classes, and color tokens.
+[NEW] 
+app/globals.css
+CSS custom variables for dark aesthetics, scrollbar styling, card borders, grid backgrounds.
+[NEW] 
+lib/utils.ts
+Export standard cn(...) utility for conditional Tailwind class merging.
+Data Models & Mock Store
+[NEW] 
+types/index.ts
+TypeScript interfaces for Client, Campaign, Briefing, Deal, Asset, LibraryItem, PromptItem, and ActivityLog.
+[NEW] 
+lib/mock-data.ts
+High-fidelity mock datasets in Portuguese:
+Metric KPIs (MRR, Active Campaigns, Converted Deals, ROI).
+Clients list with status, MRR, contact, tier, logo.
+Marketing Campaigns with stage, spend, platform (Meta, Google, TikTok), impressions.
+Creative Assets with thumbnail preview placeholders, resolution, format, tags.
+AI Prompts with tags, model recommendations, parameters, copyable prompt code.
+Deals Pipeline across 5 sales stages (Prospecção, Proposta, Negociação, Fechado/Ganho).
+UI Components & Layout Shell
+[NEW] 
+components/ui/button.tsx
+[NEW] 
+components/ui/card.tsx
+[NEW] 
+components/ui/badge.tsx
+[NEW] 
+components/ui/tabs.tsx
+[NEW] 
+components/ui/input.tsx
+[NEW] 
+components/ui/dialog.tsx
+[NEW] 
+components/ui/select.tsx
+[NEW] 
+components/ui/avatar.tsx
+Lightweight, styled Shadcn-compatible Radix/Tailwind components.
+[NEW] 
+components/layout/sidebar.tsx
+Modern vertical sidebar with active indicators, badges, collapsible section dividers, and workspace switcher (SAUGC Studio / Pro).
+[NEW] 
+components/layout/header.tsx
+Header navigation bar with breadcrumb path, command search bar, system status indicator, notifications popover preview, user profile avatar.
+[NEW] 
+components/layout/page-header.tsx
+Unified header block for pages featuring Page Title, Description badge, and primary action buttons (e.g., "+ Novo Client", "+ Nova Campanha").
+Pages (10 Core SaaS Modules)
+[NEW] 
+app/layout.tsx
+Root layout providing dark theme wrapper, sidebar + main view grid.
+[NEW] 
+app/page.tsx
+ - Dashboard
+Top stat metric grid (MRR, Conversions, Active UGC Campaigns, ROI).
+Campaign performance visual breakdown & recent activity log feed.
+Quick actions panel & revenue trajectory overview.
+[NEW] 
+app/clientes/page.tsx
+ - Clientes
+Interactive data table with search, tier filters (Enterprise, Growth, Starter), status pills, MRR badges, contact info, and "Adicionar Cliente" modal.
+[NEW] 
+app/campanhas/page.tsx
+ - Campanhas
+Multi-channel campaign view (Meta Ads, TikTok, Google Ads) with status filters (Ativa, Pausada, Rascunho), Budget, Impressions, and CTR indicators.
+[NEW] 
+app/briefings/page.tsx
+ - Briefings
+UGC & Content briefing cards with approval status (Em Aprovação, Aprovado, Rascunho), assigned creators, deadlines, and key requirement tags.
+[NEW] 
+app/comerciais/page.tsx
+ - Comerciais
+Kanban/Pipeline board for sales deals across 4 columns (Qualificação, Proposta Enviada, Negociação, Contrato Fechado) with total pipeline value totals.
+[NEW] 
+app/assets/page.tsx
+ - Assets
+Digital asset management gallery (Video Ads, Hook Clips, B-Roll, Product Photos) with resolution badges, format tags, download mock buttons, and filters.
+[NEW] 
+app/biblioteca/page.tsx
+ - Biblioteca
+Knowledge vault & playbook templates (UGC Script Templates, Ad Copy Hooks, Creator Guidelines, Strategy Guides).
+[NEW] 
+app/prompts/page.tsx
+ - Prompts
+AI Prompt library featuring prompt cards with variables (e.g. {nicho}, {publico}), target LLMs (GPT-4o, Claude 3.5 Sonnet, Midjourney), copy button, and tags.
+[NEW] 
+app/ia-studio/page.tsx
+ - IA Studio
+OpenAI/Linear style playground interface with model selection, system prompt panel, prompt workspace editor, variable sliders (temperature, max tokens), and mock output generation preview.
+[NEW] 
+app/configuracoes/page.tsx
+ - Configurações
+Tabbed settings panel (Geral, Perfil, Notificações, Equipe & Permissões, Faturamento & Plano, Integrações API mock).
+Verification Plan
+Automated Tests
+TypeScript compilation and type check (npm run build or npx tsc --noEmit).
+Lint check (npm run lint).
+Manual Verification
+Launch local Next.js dev server (npm run dev).
+Test layout responsiveness (desktop, tablet, sidebar toggle).
+Verify dark theme styling and visual harmony across all 10 pages (/, /clientes, /campanhas, /briefings, /comerciais, /assets, /biblioteca, /prompts, /ia-studio, /configuracoes).
+Check interactive UI components (modals, tabs, filters, copy buttons).
