@@ -3,25 +3,18 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium [&_svg]:size-3 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "border-transparent bg-primary/20 text-emerald-400 border-emerald-500/30",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground",
-        outline: "border-white/15 text-foreground",
-        success:
-          "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-        warning:
-          "border-amber-500/30 bg-amber-500/10 text-amber-400",
-        violet:
-          "border-violet-500/30 bg-violet-500/10 text-violet-400",
-        muted:
-          "border-white/10 bg-white/5 text-muted-foreground",
-        destructive:
-          "border-red-500/30 bg-red-500/20 text-red-400",
+        default: "border-primary/30 bg-primary/15 text-primary",
+        secondary: "border-border bg-secondary text-secondary-foreground",
+        destructive: "border-destructive/30 bg-destructive/15 text-destructive",
+        outline: "border-border text-muted-foreground",
+        success: "border-success/30 bg-success/15 text-success",
+        warning: "border-warning/30 bg-warning/15 text-warning",
+        info: "border-info/30 bg-info/15 text-info",
+        violet: "border-ai/30 bg-ai/15 text-ai",
       },
     },
     defaultVariants: {
@@ -30,13 +23,17 @@ const badgeVariants = cva(
   }
 );
 
-export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
-
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({
+  className,
+  variant,
+  ...props
+}: React.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <span
+      data-slot="badge"
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
+    />
   );
 }
 

@@ -115,3 +115,51 @@ export interface RevenuePoint {
   month: string;
   value: number;
 }
+
+/* ============================================
+   NOVOS TIPOS OFICIAIS — Sprint 001
+   ============================================ */
+
+export type CommercialStatus = "Rascunho" | "Produção" | "Revisão" | "Aprovado";
+export type CommercialFormat = "Reels" | "TikTok" | "Shorts" | "Feed";
+export type ThumbnailTone = "blue" | "violet" | "emerald" | "amber" | "pink";
+
+export interface Commercial {
+  id: string;
+  title: string;
+  client: string;
+  format: CommercialFormat;
+  script: string;
+  creator: string;
+  status: CommercialStatus;
+  dueDate: string;
+  thumbnailTone: ThumbnailTone;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  description: string;
+  timestamp: string;
+  unread: boolean;
+}
+
+export type AiModelCategory = "Texto" | "Imagem" | "Vídeo";
+
+export interface AiModel {
+  id: string;
+  name: string;
+  provider: string;
+  category: AiModelCategory;
+  description: string;
+  badge: string;
+}
+
+export interface AiHistoryItem {
+  id: string;
+  agent: string;
+  model: string;
+  prompt: string;
+  output: string;
+  createdAt: string;
+}
