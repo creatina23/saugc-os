@@ -1,10 +1,16 @@
 "use client";
 
-// CRM & Pipeline — primeira tela 100% servida pela camada de serviços.
-// Dados: crmService + dealStageOrder (@/lib/services).
-// "Novo Deal" funciona em memória (some ao recarregar) até o backend chegar.
+// CRM & Pipeline — tela 100% servida pela camada de serviços.
+// Deals criados pelo usuário ficam no NAVEGADOR (localStorage):
+// sobrevivem ao F5 e são trocados pelo banco na fase Supabase —
+// sem mudar uma linha desta tela.
 
-import { useMemo, useState, type FormEvent } from "react";
+import {
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
 import {
   Building2,
   DollarSign,
@@ -12,6 +18,7 @@ import {
   Plus,
   Search,
   Target,
+  Trash2,
   TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -24,10 +31,66 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Tooltip } from "@/components/ui/tooltip";
 import { crmService, dealStageOrder } from "@/lib/services";
 import { formatBRL } from "@/lib/format";
 import type { Deal, DealStage } from "@/types";
+
+// ---------- Mini-store persistente (localStorage) ----------
+
+const STORAGE_KEY = "anuncia:crm-deals";
+
+const listeners = new Set<() => void>();
+let cachedRaw: string | null | undefined;
+let cachedDeals: Deal[] = [];
+
+function parseDeals(raw: string | null | undefined): Deal[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is Deal =>
+        typeof item === "object" && item !== null && "id" in item && "title" in item
+    );
+  } catch {
+    return [];
+  }
+}
+
+function readDealsSnapshot(): Deal[] {
+  if (typeof window === "undefined") return cachedDeals;
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
+    cachedDeals = parseDeals(raw);
+  }
+  return cachedDeals;
+}
+
+function serverDealsSnapshot(): Deal[] {
+  return [];
+}
+
+function subscribeDeals(onStoreChange: () => void): () => void {
+  listeners.add(onStoreChange);
+  window.addEventListener("storage", onStoreChange);
+  return () => {
+    listeners.delete(onStoreChange);
+    window.removeEventListener("storage", onStoreChange);
+  };
+}
+
+function writeDeals(deals: Deal[]): void {
+  cachedRaw = JSON.stringify(deals);
+  cachedDeals = deals;
+  window.localStorage.setItem(STORAGE_KEY, cachedRaw);
+  listeners.forEach((listener) => listener());
+}
+
+// ---------- Regras visuais do funil ----------
 
 const stageBadgeVariant: Record<DealStage, "info" | "violet" | "warning" | "success"> = {
   "Qualificação": "info",
@@ -72,8 +135,13 @@ export function CrmView() {
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  // Deals criados na sessão (demonstração, sem persistência)
-  const [extraDeals, setExtraDeals] = useState<Deal[]>([]);
+
+  // Deals do usuário (persistem no navegador; vazios no SSR)
+  const extraDeals = useSyncExternalStore(
+    subscribeDeals,
+    readDealsSnapshot,
+    serverDealsSnapshot
+  );
 
   const allDeals = useMemo(
     () => [...crmService.listDeals(), ...extraDeals],
@@ -115,24 +183,28 @@ export function CrmView() {
   const kpis = [
     {
       label: "Total do pipeline",
+      tip: "Soma do valor de todos os deals no funil",
       value: formatBRL(totalPipeline),
       sub: `${allDeals.length} deals no funil`,
       icon: DollarSign,
     },
     {
       label: "Pipeline ponderado",
+      tip: "Cada valor multiplicado pela chance de fechamento",
       value: formatBRL(Math.round(weightedPipeline)),
       sub: "valor × probabilidade",
       icon: Target,
     },
     {
       label: "Deals em aberto",
+      tip: "Deals que ainda não viraram contrato",
       value: String(openDealsCount),
       sub: `${allDeals.length - openDealsCount} contratos fechados`,
       icon: TrendingUp,
     },
     {
       label: "Ticket médio",
+      tip: "Valor médio por deal no funil",
       value: formatBRL(averageTicket),
       sub: "média por deal",
       icon: Handshake,
@@ -154,7 +226,7 @@ export function CrmView() {
       owner: form.owner.trim() || "Você",
       probability,
     };
-    setExtraDeals((current) => [...current, newDeal]);
+    writeDeals([...extraDeals, newDeal]);
     setForm(emptyForm);
     setDialogOpen(false);
   }
@@ -171,10 +243,22 @@ export function CrmView() {
             Acompanhe cada negociação do funil, da qualificação ao contrato.
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Novo Deal
-        </Button>
+        <div className="flex items-center gap-3">
+          {extraDeals.length > 0 && (
+            <button
+              type="button"
+              onClick={() => writeDeals([])}
+              className="inline-flex items-center gap-1.5 text-xs text-white/40 underline-offset-2 transition-colors hover:text-white/75 hover:underline"
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Limpar meus deals ({extraDeals.length})
+            </button>
+          )}
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Novo Deal
+          </Button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -189,9 +273,11 @@ export function CrmView() {
                 <p className="text-2xl font-bold text-white">{kpi.value}</p>
                 <p className="text-xs text-white/40">{kpi.sub}</p>
               </div>
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">
-                <kpi.icon className="h-5 w-5 text-white/70" aria-hidden="true" />
-              </span>
+              <Tooltip label={kpi.tip}>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">
+                  <kpi.icon className="h-5 w-5 text-white/70" aria-hidden="true" />
+                </span>
+              </Tooltip>
             </CardContent>
           </Card>
         ))}
@@ -219,7 +305,7 @@ export function CrmView() {
               return (
                 <div
                   key={stage}
-                  className={`${stageBarClass[stage]} h-full`}
+                  className={`${stageBarClass[stage]} h-full transition-all duration-500`}
                   style={{ width: `${(stageTotal / totalPipeline) * 100}%` }}
                 />
               );
@@ -272,10 +358,16 @@ export function CrmView() {
 
       {/* Kanban do funil */}
       {visibleDeals.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center text-sm text-white/50">
-          Nenhum deal encontrado para{" "}
-          <span className="font-semibold text-white/80">“{query}”</span>.
-        </div>
+        <EmptyState
+          icon={Search}
+          title={`Nada encontrado para “${query}”`}
+          description="Tente outro termo, confira a grafia ou limpe a busca para ver todo o funil."
+          action={
+            <Button variant="outline" onClick={() => setQuery("")}>
+              Limpar busca
+            </Button>
+          }
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {dealStageOrder.map((stage) => {
@@ -308,7 +400,10 @@ export function CrmView() {
                   </div>
                 ) : (
                   deals.map((deal) => (
-                    <Card key={deal.id} className="card-glow">
+                    <Card
+                      key={deal.id}
+                      className="card-glow transition-transform duration-200 hover:-translate-y-0.5"
+                    >
                       <CardContent className="space-y-3 p-4">
                         <div>
                           <p className="text-sm font-semibold leading-tight text-white">
@@ -332,14 +427,18 @@ export function CrmView() {
                         </div>
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-[11px] text-white/45">
-                            <span>Probabilidade</span>
+                            <Tooltip label="Chance estimada de fechar este deal">
+                              <span className="cursor-help underline decoration-dotted decoration-white/30 underline-offset-2">
+                                Probabilidade
+                              </span>
+                            </Tooltip>
                             <span className="font-semibold text-white/70">
                               {deal.probability}%
                             </span>
                           </div>
                           <div className="h-1.5 w-full rounded-full bg-white/10">
                             <div
-                              className={`${stageBarClass[stage]} h-full rounded-full`}
+                              className={`${stageBarClass[stage]} h-full rounded-full transition-all duration-500`}
                               style={{ width: `${deal.probability}%` }}
                             />
                           </div>
@@ -360,8 +459,8 @@ export function CrmView() {
           <DialogHeader>
             <DialogTitle>Novo Deal</DialogTitle>
             <DialogDescription>
-              Demonstração sem backend: o deal aparece na coluna Qualificação e
-              some ao recarregar a página.
+              O deal entra na coluna Qualificação e fica salvo neste navegador.
+              Na fase com login, ele passa a valer para toda a equipe.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">

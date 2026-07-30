@@ -28,6 +28,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "./command-palette";
+import { Onboarding } from "./onboarding"; // PASSO 4 — tour de boas-vindas
 import { Toaster } from "./toaster";
 
 const quickActions = [
@@ -438,6 +439,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <Toaster />
+      <Onboarding /> {/* PASSO 4 — tour de boas-vindas (1x por navegador) */}
     </div>
   );
 }

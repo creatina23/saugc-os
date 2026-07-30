@@ -2,7 +2,9 @@
 
 /* ============================================
    AnuncIA — Tokens oficiais (Sprint 001)
+   Polish Sprint 007: foco AA · reduced-motion · mobile/scroll
    ============================================ */
+
 :root {
   --background: #0b0f14;
   --surface: #1f2937;
@@ -88,6 +90,8 @@
 
   html {
     color-scheme: dark;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
@@ -97,6 +101,12 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  /* Foco visível (AA): quem navega pelo TAB sempre sabe onde está */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 
   ::selection {
@@ -118,11 +128,24 @@
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.22);
   }
+
+  /* Acessibilidade: respeita "reduzir movimento" do sistema operacional */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 /* ============================================
    Utilitários premium AnuncIA (CSS puro)
    ============================================ */
+
 .glass-panel {
   background: rgba(17, 24, 39, 0.72);
   backdrop-filter: blur(12px);
