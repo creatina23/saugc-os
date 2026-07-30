@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "SAUGC OS",
-    template: "%s · SAUGC OS",
+    default: "AnuncIA",
+    template: "%s · AnuncIA",
   },
   description: "Sistema Operacional de Anúncios UGC com Inteligência Artificial.",
 };

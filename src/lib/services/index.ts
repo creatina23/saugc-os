@@ -1,5 +1,5 @@
 // ============================================================
-// SAUGC OS — Camada de Serviços
+// AnuncIA — Camada de Serviços
 // ------------------------------------------------------------
 // Porta de entrada oficial para TODOS os dados do sistema.
 //

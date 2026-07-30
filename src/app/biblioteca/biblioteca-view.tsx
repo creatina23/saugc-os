@@ -140,7 +140,7 @@ export function BibliotecaView() {
                     <label htmlFor="library-author" className={fieldLabel}>
                       Autor
                     </label>
-                    <Input id="library-author" placeholder="Equipe SAUGC" />
+                    <Input id="library-author" placeholder="Equipe AnuncIA" />
                   </div>
                 </div>
                 <div>

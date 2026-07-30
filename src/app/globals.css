@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================
-   SAUGC OS — Tokens oficiais (Sprint 001)
+   AnuncIA — Tokens oficiais (Sprint 001)
    ============================================ */
 :root {
   --background: #0b0f14;
@@ -121,7 +121,7 @@
 }
 
 /* ============================================
-   Utilitários premium SAUGC (CSS puro)
+   Utilitários premium AnuncIA (CSS puro)
    ============================================ */
 .glass-panel {
   background: rgba(17, 24, 39, 0.72);

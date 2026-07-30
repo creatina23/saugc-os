@@ -81,10 +81,10 @@ export const assets: Asset[] = [
 ];
 
 export const libraryItems: LibraryItem[] = [
-  { id: "l1", title: "Script UGC — Problema / Solução / CTA", category: "UGC Script Templates", description: "Estrutura de 45s para produtos DTC com hook nos primeiros 3 segundos.", updatedAt: "15/03/2025", author: "Equipe SAUGC" },
+  { id: "l1", title: "Script UGC — Problema / Solução / CTA", category: "UGC Script Templates", description: "Estrutura de 45s para produtos DTC com hook nos primeiros 3 segundos.", updatedAt: "15/03/2025", author: "Equipe AnuncIA" },
   { id: "l2", title: "50 Hooks de Alta Retenção", category: "Ad Copy Hooks", description: "Biblioteca de aberturas testadas em Meta e TikTok para nichos variados.", updatedAt: "10/03/2025", author: "Ana Souza" },
   { id: "l3", title: "Guidelines para Creators — Marca Premium", category: "Creator Guidelines", description: "Tom de voz, restrições legais e checklist de entrega para campanhas enterprise.", updatedAt: "05/03/2025", author: "Pedro Lima" },
-  { id: "l4", title: "Playbook Escala UGC Q1", category: "Strategy Guides", description: "Framework de testes criativos, orçamento e métricas de decisão.", updatedAt: "01/03/2025", author: "Equipe SAUGC" },
+  { id: "l4", title: "Playbook Escala UGC Q1", category: "Strategy Guides", description: "Framework de testes criativos, orçamento e métricas de decisão.", updatedAt: "01/03/2025", author: "Equipe AnuncIA" },
 ];
 
 export const prompts: PromptItem[] = [
@@ -125,7 +125,7 @@ export const pipelineValueByStage: Record<string, number> = {
 };
 
 export const workspaces = [
-  { id: "studio", name: "SAUGC Studio", plan: "Pro" },
+  { id: "studio", name: "AnuncIA Studio", plan: "Pro" },
   { id: "agency", name: "Agência Demo", plan: "Enterprise" },
 ] as const;
 

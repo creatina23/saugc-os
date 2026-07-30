@@ -140,7 +140,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           {showFull && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold tracking-tight">SAUGC OS</p>
+              <p className="truncate text-sm font-bold tracking-tight">AnuncIA</p>
               <p className="truncate text-[11px] text-muted-foreground">UGC Ads Studio</p>
             </div>
           )}
@@ -300,7 +300,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
 
           <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-2 text-sm sm:flex">
-            <span className="text-muted-foreground">SAUGC OS</span>
+            <span className="text-muted-foreground">AnuncIA</span>
             <span className="text-muted-foreground/50">/</span>
             <span className="truncate font-medium">{currentItem.label}</span>
           </nav>

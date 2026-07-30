@@ -185,7 +185,7 @@ export function CommandPalette({
             }}
             onKeyDown={onKeyDown}
             placeholder="Buscar páginas, clientes, campanhas, prompts..."
-            aria-label="Buscar no SAUGC OS"
+            aria-label="Buscar no AnuncIA"
             className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
           />
           <kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
