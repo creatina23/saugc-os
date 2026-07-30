@@ -9,7 +9,7 @@
 
 A AnuncIA é o **sistema operacional da produção de anúncios UGC com IA**.
 Ela organiza num só lugar: clientes, campanhas, briefings, produção de
-comerciais, arquivos (assets), biblioteca de conhecimento, prompts de IA,
+comerciais, arquivos (Mídias), biblioteca de conhecimento, prompts de IA,
 estúdio de IA e o funil de vendas (CRM).
 
 **Para quem é:** agências de marketing, gestores de tráfego, creators UGC
@@ -81,7 +81,7 @@ dinheiro por etapa, busca e o Kanban:
 **Qualificação → Proposta Enviada → Negociação → Contrato Fechado**.
 Botão **"Novo Deal"** registra uma oportunidade na primeira coluna.
 
-### 4.7 Assets (`/assets`)
+### 4.7 Mídias (`/Mídias`)
 A galeria de arquivos da operação: vídeos de anúncios, hooks, B-roll e
 fotos de produto. Filtre por categoria e formato (MP4, MOV, PNG, JPG, GIF).
 

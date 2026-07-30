@@ -79,7 +79,7 @@ const allItems: PaletteItem[] = [
   })),
   ...assets.map((item) => ({
     id: `asset-${item.id}`,
-    group: "Assets",
+    group: "Mídias",
     label: item.name,
     detail: `${item.client} · ${item.category}`,
     href: "/assets",

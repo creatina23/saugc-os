@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { AssetsView } from "./assets-view";
+import { MídiasView } from "./assets-view";
 
-export const metadata: Metadata = { title: "Assets" };
+export const metadata: Metadata = { title: "Mídias" };
 
-export default function AssetsPage() {
-  return <AssetsView />;
+export default function MídiasPage() {
+  return <MídiasView />;
 }

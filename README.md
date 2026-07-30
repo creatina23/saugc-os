@@ -2,7 +2,7 @@
 
 **O sistema operacional da produção de anúncios UGC com IA.**
 
-Clientes, campanhas, briefings, produção de comerciais, assets, biblioteca,
+Clientes, campanhas, briefings, produção de comerciais, Mídias, biblioteca,
 prompts, IA Studio e funil de vendas — organizados num painel único, premium
 e rápido. Fim do caos de planilhas, WhatsApp e pastas soltas.
 
@@ -28,7 +28,7 @@ e rápido. Fim do caos de planilhas, WhatsApp e pastas soltas.
 | Briefings | Pedidos de produção com creators |
 | Comerciais | Kanban UGC: Rascunho → Produção → Revisão → Aprovado |
 | CRM | Funil de vendas com pipeline ponderado |
-| Assets | Galeria de vídeos, hooks, B-roll e fotos |
+| Mídias | Galeria de vídeos, hooks, B-roll e fotos |
 | Biblioteca | Templates, hooks de copy e guias |
 | Prompts | Cofre de prompts com variáveis `{chave}` |
 | IA Studio | 5 agentes × 6 modelos (GPT-4o, Claude, Gemini…) |
@@ -49,7 +49,7 @@ npm run dev# ⚡ AnuncIA
 
 **O sistema operacional da produção de anúncios UGC com IA.**
 
-Clientes, campanhas, briefings, produção de comerciais, assets, biblioteca,
+Clientes, campanhas, briefings, produção de comerciais, Mídias, biblioteca,
 prompts, IA Studio e funil de vendas — organizados num painel único, premium
 e rápido. Fim do caos de planilhas, WhatsApp e pastas soltas.
 
@@ -75,7 +75,7 @@ e rápido. Fim do caos de planilhas, WhatsApp e pastas soltas.
 | Briefings | Pedidos de produção com creators |
 | Comerciais | Kanban UGC: Rascunho → Produção → Revisão → Aprovado |
 | CRM | Funil de vendas com pipeline ponderado |
-| Assets | Galeria de vídeos, hooks, B-roll e fotos |
+| Mídias | Galeria de vídeos, hooks, B-roll e fotos |
 | Biblioteca | Templates, hooks de copy e guias |
 | Prompts | Cofre de prompts com variáveis `{chave}` |
 | IA Studio | 5 agentes × 6 modelos (GPT-4o, Claude, Gemini…) |

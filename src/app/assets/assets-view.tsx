@@ -61,7 +61,7 @@ const categoryIcon: Record<AssetCategory, typeof Film> = {
 
 const fieldLabel = "mb-1.5 block text-xs font-medium text-muted-foreground";
 
-export function AssetsView() {
+export function MídiasView() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("Todas");
   const [client, setClient] = useState("Todos");
@@ -97,7 +97,7 @@ export function AssetsView() {
 
   return (
     <>
-      <PageHeader title="Assets" description="Biblioteca de arquivos de produção da agência.">
+      <PageHeader title="Mídias" description="Biblioteca de arquivos de produção da agência.">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button>

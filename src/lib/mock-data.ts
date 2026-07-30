@@ -35,7 +35,7 @@ export const activityLog: ActivityLog[] = [
   { id: "a1", message: "Campanha TikTok 'Verão Glow' aprovada para Vitória Moda", timestamp: "Há 12 min", type: "campaign" },
   { id: "a2", message: "Novo deal R$ 48.000 movido para Negociação — TechFlow SaaS", timestamp: "Há 45 min", type: "deal" },
   { id: "a3", message: "Cliente NutriPlus assinou tier Growth (MRR R$ 12.900)", timestamp: "Há 2 h", type: "client" },
-  { id: "a4", message: "Asset 'Hook_03_UGC.mp4' enviado para biblioteca compartilhada", timestamp: "Há 3 h", type: "asset" },
+  { id: "a4", message: "Mídia 'Hook_03_UGC.mp4' enviada para biblioteca compartilhada", timestamp: "Há 3 h", type: "asset" },
   { id: "a5", message: "Sincronização de integrações concluída", timestamp: "Há 5 h", type: "system" },
 ];
 
@@ -136,7 +136,7 @@ export const navItems = [
   { href: "/briefings", label: "Briefings", icon: "FileText" },
   { href: "/comerciais", label: "Comerciais", icon: "Kanban" },
   { href: "/crm", label: "CRM", icon: "Handshake" },
-  { href: "/assets", label: "Assets", icon: "Film" },
+  { href: "/assets", label: "Mídias", icon: "Film" },
   { href: "/biblioteca", label: "Biblioteca", icon: "Library" },
   { href: "/prompts", label: "Prompts", icon: "Sparkles" },
   { href: "/ia-studio", label: "IA Studio", icon: "Bot" },
