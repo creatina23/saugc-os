@@ -36,7 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { assets, clients } from "@/lib/mock-data";
+import { Mídias, clients } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import type { AssetCategory } from "@/types";
 
@@ -68,13 +68,13 @@ export function MídiasView() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const clientOptions = useMemo(
-    () => ["Todos", ...new Set(assets.map((item) => item.client))],
+    () => ["Todos", ...new Set(Mídias.map((item) => item.client))],
     []
   );
 
   const filtered = useMemo(
     () =>
-      assets.filter((item) => {
+      Mídias.filter((item) => {
         const query = search.toLowerCase().trim();
         const matchesSearch =
           !query ||
@@ -90,7 +90,7 @@ export function MídiasView() {
 
   const stats = (Object.keys(categoryConfig) as AssetCategory[]).map((item) => ({
     label: item,
-    value: assets.filter((asset) => asset.category === item).length.toString(),
+    value: Mídias.filter((asset) => asset.category === item).length.toString(),
     icon: categoryIcon[item],
     tone: categoryConfig[item].tone,
   }));
@@ -231,7 +231,7 @@ export function MídiasView() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar por nome, cliente ou tag..."
-                aria-label="Buscar assets"
+                aria-label="Buscar Mídias"
                 className="pl-10"
               />
             </div>
@@ -239,8 +239,8 @@ export function MídiasView() {
               {categoryFilters.map((option) => {
                 const count =
                   option === "Todas"
-                    ? assets.length
-                    : assets.filter((item) => item.category === option).length;
+                    ? Mídias.length
+                    : Mídias.filter((item) => item.category === option).length;
                 const active = category === option;
                 return (
                   <button
