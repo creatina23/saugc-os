@@ -135,6 +135,7 @@ export const navItems = [
   { href: "/campanhas", label: "Campanhas", icon: "Megaphone" },
   { href: "/briefings", label: "Briefings", icon: "FileText" },
   { href: "/comerciais", label: "Comerciais", icon: "Kanban" },
+  { href: "/crm", label: "CRM", icon: "Handshake" },
   { href: "/assets", label: "Assets", icon: "Film" },
   { href: "/biblioteca", label: "Biblioteca", icon: "Library" },
   { href: "/prompts", label: "Prompts", icon: "Sparkles" },
