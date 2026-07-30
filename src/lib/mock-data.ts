@@ -36,7 +36,7 @@ export const activityLog: ActivityLog[] = [
   { id: "a2", message: "Novo deal R$ 48.000 movido para Negociação — TechFlow SaaS", timestamp: "Há 45 min", type: "deal" },
   { id: "a3", message: "Cliente NutriPlus assinou tier Growth (MRR R$ 12.900)", timestamp: "Há 2 h", type: "client" },
   { id: "a4", message: "Asset 'Hook_03_UGC.mp4' enviado para biblioteca compartilhada", timestamp: "Há 3 h", type: "asset" },
-  { id: "a5", message: "Sincronização mock de integrações concluída", timestamp: "Há 5 h", type: "system" },
+  { id: "a5", message: "Sincronização de integrações concluída", timestamp: "Há 5 h", type: "system" },
 ];
 
 export const campaignPerformance = [
@@ -126,7 +126,7 @@ export const pipelineValueByStage: Record<string, number> = {
 
 export const workspaces = [
   { id: "studio", name: "AnuncIA Studio", plan: "Pro" },
-  { id: "agency", name: "Agência Demo", plan: "Enterprise" },
+  { id: "agency", name: "Agência Modelo", plan: "Enterprise" },
 ] as const;
 
 export const navItems = [

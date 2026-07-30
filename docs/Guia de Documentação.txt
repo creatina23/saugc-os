@@ -1,0 +1,7 @@
+📚 Documentação
+Arquivo	Para quem
+docs/MANUAL_DE_USO.md	Quem usa o sistema
+docs/GUIA_DE_OPERACAO.md	Quem opera/mantém (deploy, backup, troubleshooting)
+docs/CHECKLIST_COMERCIAL.md	Quem vende (demo, entrega, pós-venda)
+docs/010_CHANGELOG.md	Histórico versão a versão
+docs/011_CURRENT_MISSION.md	GPS do estado atual do projeto
