@@ -1,0 +1,139 @@
+# AnuncIA — Manual de Uso
+
+> Guia para quem **usa** o sistema no dia a dia — sem precisar entender de tecnologia.
+> Versão 1.0 · julho/2026 · Acesso: https://anuncia-three.vercel.app
+
+---
+
+## 1. O que é a AnuncIA
+
+A AnuncIA é o **sistema operacional da produção de anúncios UGC com IA**.
+Ela organiza num só lugar: clientes, campanhas, briefings, produção de
+comerciais, arquivos (assets), biblioteca de conhecimento, prompts de IA,
+estúdio de IA e o funil de vendas (CRM).
+
+**Para quem é:** agências de marketing, gestores de tráfego, creators UGC
+e pequenos/médios negócios que produzem anúncios.
+
+**O que ela resolve:** fim do caos de planilhas, WhatsApp e pastas soltas —
+tudo padronizado num painel só. Menos retrabalho, mais velocidade.
+
+---
+
+## 2. Como acessar
+
+1. Abra no navegador: **https://anuncia-three.vercel.app**
+2. Funciona no **computador e no celular** — não precisa instalar nada
+3. Dica: salve nos **favoritos** (ou "adicionar à tela inicial" no celular)
+4. No celular, o menu abre no botão **☰** no topo da tela
+
+*(Em breve o endereço oficial será `app.useanuncia.com.br`.)*
+
+---
+
+## 3. Tour de 30 segundos
+
+- **Menu lateral esquerdo:** os 11 módulos. O ícone no rodapé do menu
+  encolhe/expande (só ícones ↔ ícones + nomes)
+- **Barra do topo:** busca rápida, status do sistema, notificações 🔔,
+  seletor de workspace e seu perfil
+- **Busca rápida — seu melhor amigo:** aperte **Ctrl + K** (ou clique em
+  "Buscar...") e digite qualquer coisa: página, cliente, campanha,
+  briefing, comercial, asset, item da biblioteca ou prompt.
+  Navegue com **↑ ↓**, abra com **Enter**, feche com **ESC**
+
+---
+
+## 4. Os 11 módulos, um por um
+
+### 4.1 Dashboard (`/`)
+A visão do dono: faturamento (MRR), conversões, campanhas ativas, ROI,
+gráfico de receita dos últimos 6 meses, performance por canal
+(Meta/TikTok/Google), atividades recentes e o resumo do funil de vendas.
+**Comece o dia aqui.**
+
+### 4.2 Clientes (`/clientes`)
+Sua base de empresas atendidas. Busca por nome/e-mail, filtros por plano
+(Enterprise, Growth, Starter) e status (Ativo, Inativo, Em onboarding).
+Botão **"Novo Cliente"** abre o cadastro rápido.
+
+### 4.3 Campanhas (`/campanhas`)
+Todas as campanhas de ads. Filtrar por status (Ativa, Pausada, Rascunho)
+e plataforma (Meta Ads, Google Ads, TikTok). Cada card mostra orçamento,
+gasto, impressões e CTR.
+
+### 4.4 Briefings (`/briefings`)
+Os pedidos de produção com creators: título, cliente, creator
+responsável, status (Rascunho, Em Aprovação, Aprovado), prazo e tags.
+É a ponte entre o que o cliente quer e o que o creator grava.
+
+### 4.5 Comerciais (`/comerciais`)
+O **Kanban da produção** de anúncios UGC. 4 colunas:
+**Rascunho → Produção → Revisão → Aprovado**.
+Cada cartão: título, cliente, formato (Reels, TikTok, Shorts, Feed),
+roteiro resumido, creator e prazo. Arraste o olho e saiba onde cada
+anúncio está em 5 segundos.
+
+### 4.6 CRM (`/crm`)
+O **funil de vendas** do seu negócio. 4 KPIs (total em funil, pipeline
+ponderado, deals em aberto, ticket médio), barra de distribuição do
+dinheiro por etapa, busca e o Kanban:
+**Qualificação → Proposta Enviada → Negociação → Contrato Fechado**.
+Botão **"Novo Deal"** registra uma oportunidade na primeira coluna.
+
+### 4.7 Assets (`/assets`)
+A galeria de arquivos da operação: vídeos de anúncios, hooks, B-roll e
+fotos de produto. Filtre por categoria e formato (MP4, MOV, PNG, JPG, GIF).
+
+### 4.8 Biblioteca (`/biblioteca`)
+O conhecimento da casa organizado em abas: templates de roteiro UGC,
+hooks de copy, diretrizes para creators e guias de estratégia.
+Padronizar = escalar.
+
+### 4.9 Prompts (`/prompts`)
+O cofre de prompts testados. As variáveis aparecem destacadas como
+`{produto}`, `{publico}` — basta trocar pelo seu caso. Botão **copiar**
+em cada prompt, com os parâmetros recomendados ao lado.
+
+### 4.10 IA Studio (`/ia-studio`)
+O estúdio de geração com IA: escolha o **agente** (Strategist, Copywriter,
+UGC Writer, Prompt Engineer, Creative Analyst), o **modelo**
+(GPT-4o, Claude, Gemini, Midjourney, Veo, Flux), ajuste criatividade
+(temperatura) e tamanho da resposta, e gere. O histórico fica salvo
+na lateral para reaproveitar.
+
+### 4.11 Configurações (`/configuracoes`)
+A casa de máquinas: dados gerais, perfil, notificações (liga/desliga),
+equipe e permissões, plano e faturamento, e integrações de API.
+
+---
+
+## 5. Truques que facilitam a vida
+
+| Truque | Como |
+|---|---|
+| Achar qualquer coisa | `Ctrl + K` |
+| Avisos do sistema | Toasts aparecem no canto inferior direito |
+| Carregando | Esqueletos animados mostram que a página está vindo |
+| Caiu numa página que não existe | Tela 404 amigável → botão "Voltar ao Dashboard" |
+| Trocar de workspace | Seletor no topo (você recebe um aviso confirmando) |
+
+---
+
+## 6. Importante saber nesta fase
+
+- Os dados atuais são de **demonstração**. O que você criar em sessão
+  (ex.: um Novo Deal) **some ao recarregar** — é o comportamento esperado
+- A versão com **login individual e dados salvos de verdade** vem na
+  próxima fase técnica (Supabase) — o sistema já foi construído preparado
+  para ela, sem necessidade de refazer nada
+
+---
+
+## 7. Se algo parecer estranho
+
+1. **Recarregue a página** (F5) — resolve 90% dos casos
+2. Não achou algo? `Ctrl + K`
+3. Tela de erro? Botão "Voltar ao Dashboard"
+4. Precisa de ajuda técnica/operação (atualização, deploy, domínio)?
+   Consulte o arquivo **`docs/GUIA_DE_OPERACAO.md`**

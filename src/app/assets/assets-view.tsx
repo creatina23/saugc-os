@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+
 import {
   Building2,
   Clapperboard,
@@ -14,6 +15,7 @@ import {
   SearchX,
   Upload,
 } from "lucide-react";
+
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mídias, clients } from "@/lib/mock-data";
+import { assetsService, clientesService } from "@/lib/services";
 import { cn } from "@/lib/utils";
 import type { AssetCategory } from "@/types";
 
@@ -62,19 +64,22 @@ const categoryIcon: Record<AssetCategory, typeof Film> = {
 const fieldLabel = "mb-1.5 block text-xs font-medium text-muted-foreground";
 
 export function MídiasView() {
+  const assets = assetsService.list();
+  const clients = clientesService.list();
+
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("Todas");
   const [client, setClient] = useState("Todos");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const clientOptions = useMemo(
-    () => ["Todos", ...new Set(Mídias.map((item) => item.client))],
-    []
+    () => ["Todos", ...new Set(clients.map((item) => item.company))],
+    [clients]
   );
 
   const filtered = useMemo(
     () =>
-      Mídias.filter((item) => {
+      assets.filter((item) => {
         const query = search.toLowerCase().trim();
         const matchesSearch =
           !query ||
@@ -85,12 +90,12 @@ export function MídiasView() {
         const matchesClient = client === "Todos" || item.client === client;
         return matchesSearch && matchesCategory && matchesClient;
       }),
-    [search, category, client]
+    [assets, search, category, client]
   );
 
   const stats = (Object.keys(categoryConfig) as AssetCategory[]).map((item) => ({
     label: item,
-    value: Mídias.filter((asset) => asset.category === item).length.toString(),
+    value: assets.filter((asset) => asset.category === item).length.toString(),
     icon: categoryIcon[item],
     tone: categoryConfig[item].tone,
   }));
@@ -101,12 +106,12 @@ export function MídiasView() {
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button>
-              <Upload /> Enviar Asset
+              <Upload /> Enviar Mídia
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Enviar asset</DialogTitle>
+              <DialogTitle>Enviar mídia</DialogTitle>
               <DialogDescription>
                 Adicione um novo arquivo à biblioteca de produção.
               </DialogDescription>
@@ -122,7 +127,7 @@ export function MídiasView() {
                 <Upload className="size-6 text-muted-foreground" />
                 <p className="mt-2 text-sm font-medium">Arraste arquivos aqui</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  MP4, MOV, PNG, JPG ou GIF · upload simulado no MVP
+                  MP4, MOV, PNG, JPG ou GIF
                 </p>
               </div>
               <div className="space-y-4">
@@ -231,7 +236,7 @@ export function MídiasView() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar por nome, cliente ou tag..."
-                aria-label="Buscar Mídias"
+                aria-label="Buscar mídias"
                 className="pl-10"
               />
             </div>
@@ -239,8 +244,8 @@ export function MídiasView() {
               {categoryFilters.map((option) => {
                 const count =
                   option === "Todas"
-                    ? Mídias.length
-                    : Mídias.filter((item) => item.category === option).length;
+                    ? assets.length
+                    : assets.filter((item) => item.category === option).length;
                 const active = category === option;
                 return (
                   <button
@@ -341,7 +346,7 @@ export function MídiasView() {
         <Card className="mt-6">
           <CardContent className="flex flex-col items-center justify-center px-6 py-16 text-center">
             <SearchX className="size-8 text-muted-foreground" />
-            <p className="mt-3 font-medium">Nenhum asset encontrado</p>
+            <p className="mt-3 font-medium">Nenhuma mídia encontrada</p>
             <p className="mt-1 text-sm text-muted-foreground">
               Ajuste a busca ou os filtros para ver resultados.
             </p>
