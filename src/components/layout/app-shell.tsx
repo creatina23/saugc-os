@@ -2,13 +2,14 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Building2,
   Check,
   ChevronsUpDown,
   LayoutDashboard,
+  LogOut,
   Megaphone,
   Menu,
   PanelLeftClose,
@@ -22,13 +23,14 @@ import {
 } from "lucide-react";
 import { iconMap } from "@/lib/icon-map";
 import { navItems, notifications, workspaces } from "@/lib/mock-data";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "./command-palette";
-import { Onboarding } from "./onboarding"; // PASSO 4 — tour de boas-vindas
+import { Onboarding } from "./onboarding"; // tour de boas-vindas
 import { Toaster } from "./toaster";
 
 const quickActions = [
@@ -37,19 +39,40 @@ const quickActions = [
   { label: "Novo Prompt", href: "/prompts", icon: Sparkles },
 ];
 
-type MenuId = "workspace" | "notifications" | "quick" | null;
+type MenuId = "workspace" | "notifications" | "quick" | "user" | null;
 
 // Rotas "de fora": nada de painel, sidebar ou tour — só a página pura
 const ROTAS_SEM_SHELL = ["/login"];
 
+// Deriva nome e iniciais a partir do e-mail (ex.: mateus.costa@x.com → "Mateus Costa" / "MC")
+function nomeDoUsuario(email: string | null): string {
+  if (!email) return "Modo Demo";
+  const partes = email.split("@")[0].split(/[._-]+/).filter(Boolean);
+  const nome = partes
+    .slice(0, 2)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+  return nome || "Usuário";
+}
+
+function iniciaisDoUsuario(email: string | null): string {
+  if (!email) return "MD";
+  const partes = email.split("@")[0].split(/[._-]+/).filter(Boolean);
+  const primeira = partes[0]?.charAt(0) ?? "U";
+  const segunda = partes[1]?.charAt(0) ?? partes[0]?.charAt(1) ?? "";
+  return (primeira + segunda).toUpperCase();
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [workspace, setWorkspace] = useState<string>(workspaces[0].id);
   const [prevPathname, setPrevPathname] = useState(pathname);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   if (prevPathname !== pathname) {
     setPrevPathname(pathname);
@@ -61,6 +84,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   const unreadCount = notifications.filter((item) => item.unread).length;
   const currentItem =
     navItems.find((item) => item.href !== "/" && pathname.startsWith(item.href)) ?? navItems[0];
+
+  // Usuário real da sessão (quando Supabase está configurado)
+  useEffect(() => {
+    const supabase = getSupabaseBrowser();
+    if (!supabase) return;
+
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email ?? null);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -78,6 +119,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Bypass: páginas "de fora" (login) renderizam sozinhas, sem o painel
   if (ROTAS_SEM_SHELL.some((rota) => pathname.startsWith(rota))) {
     return <>{children}</>;
+  }
+
+  const nomeUsuario = nomeDoUsuario(userEmail);
+  const iniciaisUsuario = iniciaisDoUsuario(userEmail);
+
+  async function handleSair() {
+    const supabase = getSupabaseBrowser();
+    setOpenMenu(null);
+    if (supabase) {
+      await supabase.auth.signOut();
+      toast("Sessão encerrada", { description: "Até logo! 👋", type: "success" });
+    }
+    router.push("/login");
+    router.refresh();
   }
 
   function isActive(href: string) {
@@ -224,17 +279,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           {showFull ? (
             <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
               <Avatar className="size-8">
-                <AvatarFallback>MC</AvatarFallback>
+                <AvatarFallback>{iniciaisUsuario}</AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium">Mateus Costa</p>
-                <p className="truncate text-[11px] text-muted-foreground">Administrador</p>
+                <p className="truncate text-xs font-medium">{nomeUsuario}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {userEmail ?? "Usuário local"}
+                </p>
               </div>
             </div>
           ) : (
             <div className="flex justify-center py-1">
               <Avatar className="size-8">
-                <AvatarFallback>MC</AvatarFallback>
+                <AvatarFallback>{iniciaisUsuario}</AvatarFallback>
               </Avatar>
             </div>
           )}
@@ -396,7 +453,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     className="fixed inset-0 z-[45] cursor-default"
                     onClick={() => setOpenMenu(null)}
                   />
-                  <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-border bg-surface shadow-2xl">
+                  <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-border bg-surface shadow-2xl w-80">
                     <div className="flex items-center justify-between border-b border-border px-4 py-3">
                       <p className="text-sm font-semibold">Notificações</p>
                       <Badge variant="violet">{unreadCount} novas</Badge>
@@ -430,11 +487,48 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </div>
 
-            <Button variant="ghost" size="icon" aria-label="Perfil do usuário" className="rounded-full">
-              <Avatar className="size-8">
-                <AvatarFallback>MC</AvatarFallback>
-              </Avatar>
-            </Button>
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Menu do usuário"
+                aria-expanded={openMenu === "user"}
+                onClick={() => toggleMenu("user")}
+                className="rounded-full"
+              >
+                <Avatar className="size-8">
+                  <AvatarFallback>{iniciaisUsuario}</AvatarFallback>
+                </Avatar>
+              </Button>
+              {openMenu === "user" && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Fechar menu do usuário"
+                    className="fixed inset-0 z-[45] cursor-default"
+                    onClick={() => setOpenMenu(null)}
+                  />
+                  <div className="absolute right-0 z-50 mt-2 w-64 rounded-xl border border-border bg-surface shadow-2xl">
+                    <div className="border-b border-border px-4 py-3">
+                      <p className="truncate text-sm font-semibold">{nomeUsuario}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {userEmail ?? "Sessão local (Supabase ausente)"}
+                      </p>
+                    </div>
+                    <div className="p-1.5">
+                      <button
+                        type="button"
+                        onClick={handleSair}
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-red-400 transition-colors hover:bg-[rgba(239,68,68,0.08)] hover:text-red-300"
+                      >
+                        <LogOut className="size-4" />
+                        Sair da conta
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </header>
 
@@ -445,7 +539,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <Toaster />
-      <Onboarding /> {/* PASSO 4 — tour de boas-vindas (1x por navegador) */}
+      <Onboarding /> {/* tour de boas-vindas (1x por navegador) */}
     </div>
   );
 }
