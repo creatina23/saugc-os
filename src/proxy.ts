@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // Rotas que qualquer pessoa pode acessar sem login
 const ROTAS_PUBLICAS = ["/login"];
 
-export async function middleware(request: NextRequest) {
+// Next 16: o antigo "middleware" agora se chama "proxy" — mesma função, nome novo.
+export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -31,8 +32,8 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Importante: getUser() valida a sessão no servidor (seguro) e
-  // já renova o cookie quando necessário — mantém o usuário logado.
+  // getUser() valida a sessão no servidor (seguro) e já renova o cookie
+  // quando necessário — mantém o usuário logado.
   const {
     data: { user },
   } = await supabase.auth.getUser();
