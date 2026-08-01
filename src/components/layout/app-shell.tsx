@@ -39,6 +39,9 @@ const quickActions = [
 
 type MenuId = "workspace" | "notifications" | "quick" | null;
 
+// Rotas "de fora": nada de painel, sidebar ou tour — só a página pura
+const ROTAS_SEM_SHELL = ["/login"];
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -54,12 +57,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     setOpenMenu(null);
   }
 
-  const currentWorkspace =
-    workspaces.find((item) => item.id === workspace) ?? workspaces[0];
+  const currentWorkspace = workspaces.find((item) => item.id === workspace) ?? workspaces[0];
   const unreadCount = notifications.filter((item) => item.unread).length;
   const currentItem =
-    navItems.find((item) => item.href !== "/" && pathname.startsWith(item.href)) ??
-    navItems[0];
+    navItems.find((item) => item.href !== "/" && pathname.startsWith(item.href)) ?? navItems[0];
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -73,6 +74,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // Bypass: páginas "de fora" (login) renderizam sozinhas, sem o painel
+  if (ROTAS_SEM_SHELL.some((rota) => pathname.startsWith(rota))) {
+    return <>{children}</>;
+  }
 
   function isActive(href: string) {
     return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -88,7 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <p
           className={cn(
             "mb-2 px-3 text-[10px] font-semibold tracking-[0.18em] text-muted-foreground uppercase",
-            collapsed && !isMobileDrawer && "sr-only"
+            collapsed && !isMobileDrawer && "sr-only",
           )}
         >
           Menu
@@ -107,7 +113,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 active
                   ? "bg-primary/12 font-medium text-primary shadow-[inset_0_0_0_1px_rgba(59,130,246,0.25)]"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                collapsed && !isMobileDrawer && "justify-center px-0"
+                collapsed && !isMobileDrawer && "justify-center px-0",
               )}
             >
               <Icon className="size-[18px] shrink-0" />
@@ -133,7 +139,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div
           className={cn(
             "flex h-[72px] shrink-0 items-center gap-3 border-b border-border px-4",
-            !showFull && "justify-center px-2"
+            !showFull && "justify-center px-2",
           )}
         >
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-ai shadow-lg">
@@ -155,7 +161,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-expanded={openMenu === "workspace"}
             className={cn(
               "flex w-full cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-[rgba(255,255,255,0.03)] p-2.5 text-left transition-colors hover:border-[rgba(255,255,255,0.16)]",
-              !showFull && "justify-center"
+              !showFull && "justify-center",
             )}
           >
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
@@ -254,7 +260,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-surface-2/80 backdrop-blur-xl transition-[width] duration-300 md:flex",
-          collapsed ? "w-[88px]" : "w-[280px]"
+          collapsed ? "w-[88px]" : "w-[280px]",
         )}
       >
         {renderSidebarBody(false)}
@@ -286,7 +292,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div
         className={cn(
           "flex min-h-screen flex-1 flex-col transition-[margin] duration-300",
-          collapsed ? "md:ml-[88px]" : "md:ml-[280px]"
+          collapsed ? "md:ml-[88px]" : "md:ml-[280px]",
         )}
       >
         <header className="sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-6">
@@ -404,7 +410,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           <span
                             className={cn(
                               "mt-1.5 size-2 shrink-0 rounded-full",
-                              item.unread ? "bg-primary" : "bg-border"
+                              item.unread ? "bg-primary" : "bg-border",
                             )}
                           />
                           <div className="min-w-0">

@@ -50,19 +50,13 @@ export default function LoginPage() {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password: senha,
-    });
+    const { error } = await supabase.auth.signUp({ email, password: senha });
     if (error) {
       setMensagem({ tipo: "erro", texto: traduzErro(error.message) });
       setCarregando(false);
       return;
     }
-    setMensagem({
-      tipo: "ok",
-      texto: "Conta criada! Agora entre com seu e-mail e senha.",
-    });
+    setMensagem({ tipo: "ok", texto: "Conta criada! Agora entre com seu e-mail e senha." });
     setModo("entrar");
     setCarregando(false);
   }
@@ -88,9 +82,7 @@ export default function LoginPage() {
               {modo === "entrar" ? "Entrar na sua conta" : "Criar sua conta"}
             </h2>
             <p className="mt-1 mb-6 text-sm text-muted-foreground">
-              {modo === "entrar"
-                ? "Acesse seu painel de anúncios."
-                : "Leva menos de 1 minuto."}
+              {modo === "entrar" ? "Acesse seu painel de anúncios." : "Leva menos de 1 minuto."}
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -138,11 +130,7 @@ export default function LoginPage() {
                 </div>
               ) : null}
 
-              <Button
-                type="submit"
-                disabled={carregando}
-                className="h-11 w-full text-base"
-              >
+              <Button type="submit" disabled={carregando} className="h-11 w-full text-base">
                 {carregando ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -165,9 +153,7 @@ export default function LoginPage() {
                 }}
                 className="text-sm text-blue-400 transition-colors hover:text-blue-300"
               >
-                {modo === "entrar"
-                  ? "Ainda não tem conta? Criar conta"
-                  : "Já tem conta? Entrar"}
+                {modo === "entrar" ? "Ainda não tem conta? Criar conta" : "Já tem conta? Entrar"}
               </button>
             </div>
           </div>
