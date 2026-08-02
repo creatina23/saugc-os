@@ -1,26 +1,16 @@
 "use client";
 
-// Clientes — agora com memória: clientes cadastrados pelo usuário
-// ficam no NAVEGADOR (localStorage) e migram pro banco na fase
-// Supabase sem mudar uma linha desta tela.
-
-import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
-import {
-  Pencil,
-  Plus,
-  Search,
-  SearchX,
-  Trash2,
-  TrendingUp,
-  UserCheck,
-  Users,
-  Wallet,
-} from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { Loader2, Plus, Search, Users } from "lucide-react";
+import type { Client } from "@/types";
+import { clientesService } from "@/lib/services";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -40,502 +30,431 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Tooltip } from "@/components/ui/tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { formatBRL } from "@/lib/format";
-import { clientesService } from "@/lib/services";
-import { toast } from "@/lib/toast";
-import type { Client, ClientStatus, ClientTier } from "@/types";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// ---------- Mini-store persistente (localStorage) ----------
+const moeda = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  maximumFractionDigits: 0,
+});
 
-const STORAGE_KEY = "anuncia:clientes-extras";
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
-const listeners = new Set<() => void>();
-let cachedRaw: string | null | undefined;
-let cachedClients: Client[] = [];
+function hojeCurto(): string {
+  const d = new Date();
+  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
+}
 
-function parseClients(raw: string | null | undefined): Client[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is Client =>
-        typeof item === "object" &&
-        item !== null &&
-        "id" in item &&
-        "company" in item
-    );
-  } catch {
-    return [];
+function iniciaisDe(texto: string): string {
+  const partes = texto.trim().split(/\s+/).filter(Boolean);
+  const primeira = partes[0]?.charAt(0) ?? "C";
+  const segunda = partes[1]?.charAt(0) ?? partes[0]?.charAt(1) ?? "L";
+  return (primeira + segunda).toUpperCase();
+}
+
+function varianteStatus(status: string) {
+  switch (status.toLowerCase()) {
+    case "ativo":
+      return "success" as const;
+    case "em onboarding":
+      return "info" as const;
+    case "pausado":
+      return "warning" as const;
+    case "churn":
+    case "cancelado":
+      return "destructive" as const;
+    default:
+      return "secondary" as const;
   }
 }
 
-function readSnapshot(): Client[] {
-  if (typeof window === "undefined") return cachedClients;
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (raw !== cachedRaw) {
-    cachedRaw = raw;
-    cachedClients = parseClients(raw);
-  }
-  return cachedClients;
+// Linha como vem do Supabase (snake_case) → Client do app (camelCase)
+interface ClienteRow {
+  id: string;
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  tier: string;
+  status: string;
+  mrr: number | string;
+  logo_initials: string;
+  since: string;
 }
 
-function serverSnapshot(): Client[] {
-  return [];
-}
-
-function subscribe(onStoreChange: () => void): () => void {
-  listeners.add(onStoreChange);
-  window.addEventListener("storage", onStoreChange);
-  return () => {
-    listeners.delete(onStoreChange);
-    window.removeEventListener("storage", onStoreChange);
+function paraCliente(linha: ClienteRow): Client {
+  return {
+    id: linha.id,
+    name: linha.name,
+    company: linha.company,
+    email: linha.email,
+    phone: linha.phone,
+    tier: linha.tier as Client["tier"],
+    status: linha.status as Client["status"],
+    mrr: Number(linha.mrr),
+    logoInitials: linha.logo_initials,
+    since: linha.since,
   };
 }
 
-function writeClients(clients: Client[]): void {
-  cachedRaw = JSON.stringify(clients);
-  cachedClients = clients;
-  window.localStorage.setItem(STORAGE_KEY, cachedRaw);
-  listeners.forEach((listener) => listener());
+const LEGADO_KEY = "anuncia:clientes-extras";
+
+// Busca no banco: migra legado do localStorage (1x) + lê a tabela clients
+async function coletarClientes(
+  supabase: SupabaseClient,
+): Promise<{ clientes: Client[]; erro: string | null }> {
+  try {
+    const legadoBruto = localStorage.getItem(LEGADO_KEY);
+    if (legadoBruto) {
+      const legado = JSON.parse(legadoBruto) as Client[];
+      if (Array.isArray(legado) && legado.length > 0) {
+        await supabase.from("clients").insert(
+          legado.map((c) => ({
+            name: c.name,
+            company: c.company,
+            email: c.email,
+            phone: c.phone,
+            tier: c.tier,
+            status: c.status,
+            mrr: c.mrr,
+            logo_initials: c.logoInitials,
+            since: c.since,
+          })),
+        );
+        localStorage.removeItem(LEGADO_KEY);
+        toast("Clientes migrados", {
+          description: `${legado.length} cliente(s) do armazenamento local foram para o banco.`,
+          type: "success",
+        });
+      } else {
+        localStorage.removeItem(LEGADO_KEY);
+      }
+    }
+  } catch {
+    // migração é best-effort; segue para a leitura
+  }
+
+  const { data, error } = await supabase
+    .from("clients")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return { clientes: [], erro: error.message };
+  }
+  return { clientes: ((data ?? []) as ClienteRow[]).map(paraCliente), erro: null };
 }
-
-// ---------- Regras visuais ----------
-
-const tierOptions = ["Todos", "Enterprise", "Growth", "Starter"] as const;
-const statusOptions = ["Todos", "Ativo", "Inativo", "Em onboarding"] as const;
-
-const tierBadge: Record<ClientTier, "violet" | "default" | "secondary"> = {
-  Enterprise: "violet",
-  Growth: "default",
-  Starter: "secondary",
-};
-
-const statusBadge: Record<ClientStatus, "success" | "secondary" | "warning"> = {
-  Ativo: "success",
-  Inativo: "secondary",
-  "Em onboarding": "warning",
-};
-
-const fieldLabel = "mb-1.5 block text-xs font-medium text-muted-foreground";
-
-const MESES = [
-  "jan", "fev", "mar", "abr", "mai", "jun",
-  "jul", "ago", "set", "out", "nov", "dez",
-];
-
-function hojeCurto(): string {
-  const hoje = new Date();
-  return `${hoje.getDate()} ${MESES[hoje.getMonth()]} ${hoje.getFullYear()}`;
-}
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-const emptyForm = {
-  name: "",
-  company: "",
-  email: "",
-  phone: "",
-  tier: "Starter" as ClientTier,
-  notes: "",
-};
 
 export function ClientesView() {
-  const [search, setSearch] = useState("");
-  const [tier, setTier] = useState<string>("Todos");
-  const [status, setStatus] = useState<string>("Todos");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
+  const [clientes, setClientes] = useState<Client[]>([]);
+  const [carregando, setCarregando] = useState(() => Boolean(supabase));
+  const [busca, setBusca] = useState("");
+  const [dialogAberto, setDialogAberto] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [nome, setNome] = useState("");
+  const [empresa, setEmpresa] = useState("");
+  const [emailForm, setEmailForm] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [tier, setTier] = useState("Pro");
 
-  // Clientes do usuário (persistem no navegador; vazios no SSR)
-  const extraClients = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
+  const modoDemo = !supabase;
+  const listaVisivel = modoDemo ? clientesService.list() : clientes;
 
-  const allClients = useMemo(
-    () => [...clientesService.list(), ...extraClients],
-    [extraClients]
-  );
+  // Effect no padrão permitido: dispara a promessa; setState só dentro de callback
+  useEffect(() => {
+    if (!supabase) return;
+    let ativo = true;
 
-  const filtered = useMemo(
-    () =>
-      allClients.filter((client) => {
-        const query = search.toLowerCase().trim();
-        const matchesSearch =
-          !query ||
-          client.name.toLowerCase().includes(query) ||
-          client.company.toLowerCase().includes(query) ||
-          client.email.toLowerCase().includes(query);
-        const matchesTier = tier === "Todos" || client.tier === tier;
-        const matchesStatus = status === "Todos" || client.status === status;
-        return matchesSearch && matchesTier && matchesStatus;
-      }),
-    [allClients, search, tier, status]
-  );
+    coletarClientes(supabase).then((resultado) => {
+      if (!ativo) return;
+      if (resultado.erro) {
+        toast("Não foi possível carregar os clientes", {
+          description: resultado.erro,
+          type: "error",
+        });
+        setClientes([]);
+      } else {
+        setClientes(resultado.clientes);
+      }
+      setCarregando(false);
+    });
 
-  const totalMrr = allClients.reduce((acc, client) => acc + client.mrr, 0);
-  const activeClients = allClients.filter((client) => client.status === "Ativo").length;
+    return () => {
+      ativo = false;
+    };
+  }, [supabase]);
 
-  const stats = [
-    {
-      label: "Total de clientes",
-      tip: "Empresas na base (mock + as que você cadastrou)",
-      value: allClients.length.toString(),
-      icon: Users,
-      tone: "bg-primary/15 text-primary",
-    },
-    {
-      label: "Clientes ativos",
-      tip: "Clientes com status Ativo",
-      value: activeClients.toString(),
-      icon: UserCheck,
-      tone: "bg-success/15 text-success",
-    },
-    {
-      label: "MRR total",
-      tip: "Soma da receita mensal recorrente de todos",
-      value: formatBRL(totalMrr),
-      icon: Wallet,
-      tone: "bg-ai/15 text-ai",
-    },
-    {
-      label: "Ticket médio",
-      tip: "MRR total dividido pelo número de clientes",
-      value: formatBRL(
-        allClients.length > 0 ? Math.round(totalMrr / allClients.length) : 0
-      ),
-      icon: TrendingUp,
-      tone: "bg-warning/15 text-warning",
-    },
-  ];
+  const filtrados = listaVisivel.filter((c) => {
+    const q = busca.trim().toLowerCase();
+    return (
+      !q ||
+      c.name.toLowerCase().includes(q) ||
+      c.company.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q)
+    );
+  });
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const totalAtivos = listaVisivel.filter((c) => c.status === "Ativo").length;
+  const mrrTotal = listaVisivel.reduce((acc, c) => acc + c.mrr, 0);
+
+  async function handleSalvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const company = form.company.trim();
-    const newClient: Client = {
-      id: `local-${Date.now()}`,
-      name: form.name.trim() || "Contato principal",
-      company,
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      tier: form.tier,
+    if (!supabase) return;
+    setSalvando(true);
+
+    const novo = {
+      name: nome.trim(),
+      company: empresa.trim(),
+      email: emailForm.trim(),
+      phone: telefone.trim(),
+      tier,
       status: "Em onboarding",
       mrr: 0,
-      logoInitials: initials(company),
+      logo_initials: iniciaisDe(empresa || nome),
       since: hojeCurto(),
     };
-    writeClients([...extraClients, newClient]);
-    setForm(emptyForm);
-    setDialogOpen(false);
-    toast("Cliente adicionado", {
-      description: `${company} entrou na base como ${form.tier} · Em onboarding.`,
+
+    const { error } = await supabase.from("clients").insert(novo);
+    setSalvando(false);
+
+    if (error) {
+      toast("Não foi possível cadastrar", { description: error.message, type: "error" });
+      return;
+    }
+
+    toast("Cliente cadastrado 🎉", {
+      description: `${novo.name} entrou em onboarding.`,
       type: "success",
     });
+    setDialogAberto(false);
+    setNome("");
+    setEmpresa("");
+    setEmailForm("");
+    setTelefone("");
+    setTier("Pro");
+
+    const resultado = await coletarClientes(supabase);
+    if (!resultado.erro) {
+      setClientes(resultado.clientes);
+    }
   }
 
   return (
-    <>
-      <PageHeader title="Clientes" description="Gestão da base de clientes da agência.">
-        <div className="flex items-center gap-3">
-          {extraClients.length > 0 && (
-            <button
-              type="button"
-              onClick={() => writeClients([])}
-              className="inline-flex items-center gap-1.5 text-xs text-white/40 underline-offset-2 transition-colors hover:text-white/75 hover:underline"
-            >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              Limpar meus clientes ({extraClients.length})
-            </button>
-          )}
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus /> Novo Cliente
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Adicionar cliente</DialogTitle>
-                <DialogDescription>
-                  Cadastre uma nova empresa na base da agência. Fica salva neste
-                  navegador; na fase com login, vale para toda a equipe.
-                </DialogDescription>
-              </DialogHeader>
-              <form className="space-y-4" onSubmit={handleSubmit}>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="client-name" className={fieldLabel}>
-                      Nome do contato
-                    </label>
-                    <Input
-                      id="client-name"
-                      required
-                      value={form.name}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, name: event.target.value }))
-                      }
-                      placeholder="Ex.: Mariana Costa"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="client-company" className={fieldLabel}>
-                      Empresa
-                    </label>
-                    <Input
-                      id="client-company"
-                      required
-                      value={form.company}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, company: event.target.value }))
-                      }
-                      placeholder="Ex.: Vitória Moda"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="client-email" className={fieldLabel}>
-                      E-mail
-                    </label>
-                    <Input
-                      id="client-email"
-                      type="email"
-                      value={form.email}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, email: event.target.value }))
-                      }
-                      placeholder="contato@empresa.com.br"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="client-phone" className={fieldLabel}>
-                      Telefone
-                    </label>
-                    <Input
-                      id="client-phone"
-                      value={form.phone}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, phone: event.target.value }))
-                      }
-                      placeholder="(11) 98765-4321"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label htmlFor="client-tier" className={fieldLabel}>
-                      Tier
-                    </label>
-                    <Select
-                      value={form.tier}
-                      onValueChange={(value) =>
-                        setForm((current) => ({ ...current, tier: value as ClientTier }))
-                      }
-                    >
-                      <SelectTrigger id="client-tier" aria-label="Selecionar tier">
-                        <SelectValue placeholder="Selecione o tier" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Enterprise">Enterprise</SelectItem>
-                        <SelectItem value="Growth">Growth</SelectItem>
-                        <SelectItem value="Starter">Starter</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label htmlFor="client-notes" className={fieldLabel}>
-                      Observações
-                    </label>
-                    <Textarea
-                      id="client-notes"
-                      value={form.notes}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, notes: event.target.value }))
-                      }
-                      placeholder="Nicho, objetivos, preferências do cliente..."
-                      className="min-h-[88px]"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button type="button" variant="outline">
-                      Cancelar
-                    </Button>
-                  </DialogClose>
-                  <Button type="submit">Salvar cliente</Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Clientes</h1>
+          <p className="text-sm text-muted-foreground">
+            {modoDemo
+              ? "Modo demonstração — configure o Supabase para gravar de verdade."
+              : "Dados reais, salvos no seu banco — recarregue à vontade. 💪"}
+          </p>
         </div>
-      </PageHeader>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="card-glow">
-            <CardContent className="flex items-center gap-3 p-4">
-              <Tooltip label={stat.tip}>
-                <div
-                  className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${stat.tone}`}
-                >
-                  <stat.icon className="size-4" />
-                </div>
-              </Tooltip>
-              <div className="min-w-0">
-                <p className="truncate text-xs text-muted-foreground">{stat.label}</p>
-                <p className="truncate text-lg font-bold">{stat.value}</p>
+        <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
+          <DialogTrigger asChild>
+            <Button disabled={modoDemo}>
+              <Plus />
+              Novo Cliente
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cadastrar cliente</DialogTitle>
+              <DialogDescription>
+                Entra com status &quot;Em onboarding&quot; e MRR R$ 0 — você ajusta depois.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSalvar} className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="nome" className="text-sm font-medium">
+                  Nome do responsável *
+                </label>
+                <Input
+                  id="nome"
+                  required
+                  placeholder="Ana Souza"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                />
               </div>
-            </CardContent>
-          </Card>
-        ))}
+              <div className="space-y-2">
+                <label htmlFor="empresa" className="text-sm font-medium">
+                  Empresa *
+                </label>
+                <Input
+                  id="empresa"
+                  required
+                  placeholder="Clínica Sorriso"
+                  value={empresa}
+                  onChange={(e) => setEmpresa(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="emailCli" className="text-sm font-medium">
+                    E-mail
+                  </label>
+                  <Input
+                    id="emailCli"
+                    type="email"
+                    placeholder="ana@clinica.com"
+                    value={emailForm}
+                    onChange={(e) => setEmailForm(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="telCli" className="text-sm font-medium">
+                    Telefone
+                  </label>
+                  <Input
+                    id="telCli"
+                    placeholder="(24) 99999-0000"
+                    value={telefone}
+                    onChange={(e) => setTelefone(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="tierCli" className="text-sm font-medium">
+                  Plano
+                </label>
+                <Select value={tier} onValueChange={setTier}>
+                  <SelectTrigger id="tierCli">
+                    <SelectValue placeholder="Selecione o plano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Starter">Starter</SelectItem>
+                    <SelectItem value="Pro">Pro</SelectItem>
+                    <SelectItem value="Enterprise">Enterprise</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">
+                    Cancelar
+                  </Button>
+                </DialogClose>
+                <Button type="submit" disabled={salvando}>
+                  {salvando ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Salvando…
+                    </>
+                  ) : (
+                    "Cadastrar"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <Card className="mt-6">
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por nome, empresa ou e-mail..."
-                aria-label="Buscar clientes"
-                className="pl-10"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3 lg:w-[380px]">
-              <Select value={tier} onValueChange={setTier}>
-                <SelectTrigger aria-label="Filtrar por tier">
-                  <SelectValue placeholder="Tier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tierOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option === "Todos" ? "Todos os tiers" : option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger aria-label="Filtrar por status">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option === "Todos" ? "Todos os status" : option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(31,41,55,0.7)] p-4">
+          <p className="text-xs text-muted-foreground">Total de clientes</p>
+          <p className="mt-1 text-2xl font-bold text-white">{listaVisivel.length}</p>
+        </div>
+        <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(31,41,55,0.7)] p-4">
+          <p className="text-xs text-muted-foreground">Ativos</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-400">{totalAtivos}</p>
+        </div>
+        <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(31,41,55,0.7)] p-4">
+          <p className="text-xs text-muted-foreground">MRR somado</p>
+          <p className="mt-1 text-2xl font-bold text-blue-400">{moeda.format(mrrTotal)}</p>
+        </div>
+      </div>
 
-        {filtered.length > 0 ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead className="hidden lg:table-cell">Contato</TableHead>
-                <TableHead>Tier</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">MRR</TableHead>
-                <TableHead className="hidden xl:table-cell">Desde</TableHead>
-                <TableHead className="w-[100px] text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((client) => (
-                <TableRow key={client.id}>
-                  <TableCell>
+      <div className="relative max-w-sm">
+        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label="Buscar cliente"
+          placeholder="Buscar por nome, empresa ou e-mail…"
+          className="pl-9"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+        />
+      </div>
+
+      {carregando && !modoDemo ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Carregando clientes">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : filtrados.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title={busca ? "Nenhum cliente encontrado" : "Nenhum cliente ainda"}
+          description={
+            busca
+              ? `Nada encontrado para "${busca}". Tente outro termo.`
+              : "Cadastre seu primeiro cliente e ele fica salvo no banco pra sempre."
+          }
+          action={
+            !modoDemo && !busca ? (
+              <Button onClick={() => setDialogAberto(true)}>
+                <Plus /> Cadastrar primeiro cliente
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)]">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] text-xs text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Cliente</th>
+                <th className="hidden px-4 py-3 font-medium md:table-cell">E-mail</th>
+                <th className="hidden px-4 py-3 font-medium lg:table-cell">Plano</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 text-right font-medium">MRR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map((cliente) => (
+                <tr
+                  key={cliente.id}
+                  className="border-b border-[rgba(255,255,255,0.05)] transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                >
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarFallback>{client.logoInitials}</AvatarFallback>
+                      <Avatar className="size-9">
+                        <AvatarFallback>{cliente.logoInitials}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <p className="truncate font-medium">{client.name}</p>
+                        <p className="truncate font-medium text-white">{cliente.name}</p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {client.company}
+                          {cliente.company} · desde {cliente.since}
                         </p>
                       </div>
                     </div>
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <p className="truncate text-sm">{client.email}</p>
-                    <p className="text-xs text-muted-foreground">{client.phone}</p>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={tierBadge[client.tier]}>{client.tier}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusBadge[client.status]}>{client.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {client.mrr > 0 ? formatBRL(client.mrr) : "—"}
-                  </TableCell>
-                  <TableCell className="hidden text-muted-foreground xl:table-cell">
-                    {client.since}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Editar ${client.company}`}
-                        className="size-8 text-muted-foreground"
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Excluir ${client.company}`}
-                        className="size-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                    {cliente.email || "—"}
+                  </td>
+                  <td className="hidden px-4 py-3 lg:table-cell">
+                    <Badge variant="secondary">{cliente.tier}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={varianteStatus(cliente.status)}>{cliente.status}</Badge>
+                  </td>
+                  <td
+                    className={cn(
+                      "px-4 py-3 text-right font-medium",
+                      cliente.mrr > 0 ? "text-white" : "text-muted-foreground",
+                    )}
+                  >
+                    {moeda.format(cliente.mrr)}
+                  </td>
+                </tr>
               ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <EmptyState
-            icon={SearchX}
-            title="Nenhum cliente encontrado"
-            description="Ajuste a busca ou os filtros para ver resultados."
-            className="m-4"
-            action={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearch("");
-                  setTier("Todos");
-                  setStatus("Todos");
-                }}
-              >
-                Limpar filtros
-              </Button>
-            }
-          />
-        )}
-      </Card>
-    </>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
