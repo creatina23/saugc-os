@@ -1,5 +1,14 @@
 "use client";
 
+// Login — AnuncIA
+// ------------------------------------------------------------------
+// 🔒 INTERRUPTOR DE CADASTRO (uma linha muda tudo):
+// CADASTRO_ABERTO = false → a tela só oferece "Entrar" (fase fechada:
+//   acesso por convite; o cadastro também está desligado no Supabase).
+// CADASTRO_ABERTO = true  → volta o botão "Criar conta" (fase pública,
+//   Sprint 013: religar junto com o toggle "Allow new users" no Supabase
+//   e com o "Confirm email").
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
@@ -7,11 +16,16 @@ import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+// 🔒 O interruptor. Só mude para true na fase pública (Sprint 013+).
+const CADASTRO_ABERTO = false;
+
 function traduzErro(msg: string): string {
   if (msg.includes("Invalid login credentials")) return "E-mail ou senha incorretos.";
   if (msg.includes("User already registered")) return "Este e-mail já tem conta. Troque para Entrar.";
   if (msg.includes("at least 6 characters")) return "A senha precisa de pelo menos 6 caracteres.";
   if (msg.includes("rate limit")) return "Muitas tentativas. Aguarde um minuto e tente de novo.";
+  if (msg.toLowerCase().includes("signups not allowed"))
+    return "Cadastro fechado no momento. O acesso é por convite.";
   return "Não foi possível concluir. Tente novamente.";
 }
 
@@ -67,6 +81,7 @@ export default function LoginPage() {
 
       <div className="relative flex min-h-full items-center justify-center px-4 py-10">
         <div className="w-full max-w-md">
+          {/* Logo + nome */}
           <div className="mb-8 flex flex-col items-center text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgba(139,92,246,0.15)] ring-1 ring-[rgba(139,92,246,0.35)]">
               <Sparkles className="h-7 w-7 text-violet-400" aria-hidden />
@@ -77,12 +92,15 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {/* Cartão de acesso */}
           <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(31,41,55,0.7)] p-6 shadow-2xl backdrop-blur">
             <h2 className="text-lg font-semibold text-white">
               {modo === "entrar" ? "Entrar na sua conta" : "Criar sua conta"}
             </h2>
             <p className="mt-1 mb-6 text-sm text-muted-foreground">
-              {modo === "entrar" ? "Acesse seu painel de anúncios." : "Leva menos de 1 minuto."}
+              {modo === "entrar"
+                ? "Acesse seu painel de anúncios."
+                : "Leva menos de 1 minuto."}
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -144,17 +162,26 @@ export default function LoginPage() {
               </Button>
             </form>
 
+            {/* Rodapé do cartão: troca de modo OU aviso de convite */}
             <div className="mt-6 border-t border-[rgba(255,255,255,0.08)] pt-4 text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setModo(modo === "entrar" ? "cadastrar" : "entrar");
-                  setMensagem(null);
-                }}
-                className="text-sm text-blue-400 transition-colors hover:text-blue-300"
-              >
-                {modo === "entrar" ? "Ainda não tem conta? Criar conta" : "Já tem conta? Entrar"}
-              </button>
+              {CADASTRO_ABERTO ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModo(modo === "entrar" ? "cadastrar" : "entrar");
+                    setMensagem(null);
+                  }}
+                  className="text-sm text-blue-400 transition-colors hover:text-blue-300"
+                >
+                  {modo === "entrar"
+                    ? "Ainda não tem conta? Criar conta"
+                    : "Já tem conta? Entrar"}
+                </button>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Acesso por convite · solicite sua conta ao administrador
+                </p>
+              )}
             </div>
           </div>
 
