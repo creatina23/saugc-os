@@ -9,6 +9,8 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 //   testa em ordem. Modelo reprovado (404 / aposentado) entra na lista
 //   de reprovados e nunca mais é escolhido neste boot. O primeiro que
 //   responder 200 vira o modelo fixado até o próximo boot.
+// • v4: aceita "temperatura" (0–1) e "maxTokens" (256–4096) no pedido —
+//   os controles das telas passam a valer de verdade.
 // • Providers futuros (Groq, GitHub Models, OpenRouter) entram NESTE
 //   arquivo, sem mudar uma linha das telas — elas falam só com iaService.
 // • Só atende usuário logado: protege a cota gratuita de estranhos.
@@ -31,7 +33,12 @@ const MODELOS_BLOQUEADOS = [
 let modeloAprovado: string | null = null; // já respondeu 200 → fica fixado
 const modelosReprovados = new Set<string>(); // recusados (404) pelo Google
 
-type PedidoIA = { acao?: string; prompt?: string };
+type PedidoIA = {
+  acao?: string;
+  prompt?: string;
+  temperatura?: number;
+  maxTokens?: number;
+};
 
 type ParteGemini = { text?: string };
 type RespostaGemini = {
@@ -49,6 +56,19 @@ function versaoDoModelo(nome: string): number {
   const alvo = /gemini-(\d+)(?:\.(\d+))?/i.exec(nome);
   if (!alvo) return 0;
   return Number(alvo[1]) * 100 + Number(alvo[2] ?? "0");
+}
+
+// Parâmetros da geração, com limites saudáveis (protege cota e bolso)
+function pegarTemperatura(valor: unknown): number {
+  const numero = Number(valor);
+  if (!Number.isFinite(numero)) return 0.7;
+  return Math.min(1, Math.max(0, numero));
+}
+
+function pegarMaxTokens(valor: unknown): number {
+  const numero = Number(valor);
+  if (!Number.isFinite(numero)) return 1024;
+  return Math.min(4096, Math.max(256, Math.round(numero)));
 }
 
 // Pergunta ao Google os modelos da chave e escolhe o melhor candidato,
@@ -182,6 +202,10 @@ export async function POST(request: Request) {
     );
   }
 
+  // Parâmetros vivos dos controles das telas (com limites saudáveis)
+  const temperatura = pegarTemperatura(corpo.temperatura);
+  const maxTokens = pegarMaxTokens(corpo.maxTokens);
+
   // 4) Gemini — desfila candidatos até um responder 200
   let texto = "";
   let ultimoStatus = 0;
@@ -210,7 +234,10 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+            generationConfig: {
+              temperature: temperatura,
+              maxOutputTokens: maxTokens,
+            },
           }),
           signal: AbortSignal.timeout(45000),
         }

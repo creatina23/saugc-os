@@ -4,6 +4,8 @@
 // falam com este serviço, que chama a nossa /api/ia (servidor),
 // onde as chaves vivem escondidas. Trocar de provider um dia =
 // mexer só no servidor, zero mudança aqui e nas telas.
+// v2: gerarTexto aceita opções { temperatura, maxTokens } — os
+// controles das telas chegam de verdade ao modelo.
 
 export interface RespostaIA {
   ok: boolean;
@@ -11,13 +13,26 @@ export interface RespostaIA {
   erro: string | null;
 }
 
+export interface OpcoesGeracaoIA {
+  temperatura?: number; // 0–1 (o servidor limita)
+  maxTokens?: number; // 256–4096 (o servidor limita)
+}
+
 export const iaService = {
-  async gerarTexto(prompt: string): Promise<RespostaIA> {
+  async gerarTexto(
+    prompt: string,
+    opcoes: OpcoesGeracaoIA = {}
+  ): Promise<RespostaIA> {
     try {
       const resposta = await fetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "gerar-texto", prompt }),
+        body: JSON.stringify({
+          acao: "gerar-texto",
+          prompt,
+          temperatura: opcoes.temperatura,
+          maxTokens: opcoes.maxTokens,
+        }),
       });
 
       const dados = (await resposta.json().catch(() => null)) as {
