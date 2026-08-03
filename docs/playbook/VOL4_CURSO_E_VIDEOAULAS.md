@@ -157,6 +157,7 @@ Meta conservadora do 1º lançamento: 10 vendas founder = **R$ 1.970** + 10 case
 ## 10 · Checklist de produção (quando a fase chegar)
 
 - [ ] 3–5 clientes reais atendidos (a lei cumprida) ✅
+
 - [ ] Roteiros das 21 aulas gerados pela IA
 - [ ] E-book escrito, ilustrado e exportado em PDF
 - [ ] Templates B.2 empacotados em ZIP
