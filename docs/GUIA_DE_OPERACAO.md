@@ -1,7 +1,9 @@
 # AnuncIA — Guia de Operação
 
 > Para quem **mantém o sistema no ar** (você, operador).
+
 > Quem só USA o sistema lê o `docs/MANUAL_DE_USO.md`.
+
 > Versão 1.0 · julho/2026
 
 ---
@@ -39,6 +41,7 @@ npm run dev       # roda local
 Regra de ouro da casa: nunca commita sem lint ✅ + build ✅.
 
 3. Atualizar o sistema (o ciclo de 1 minuto)
+
 Alterar código no VS Code (com as entregas guiadas)
 npm run lint + npm run build — os dois verdes
 git add -A
@@ -49,6 +52,7 @@ A Vercel publica sozinha em ~1 minuto — usuários só dão F5
 sempre: PC → commit → push → Vercel.
 
 4. GitHub (o cofre)
+
 O repositório é a única fonte oficial do código
 Commits pequenos e frequentes (1 sprint/etapa = 1 commit)
 Branch de trabalho: main
@@ -60,7 +64,9 @@ nos 3 pontinhos do deploy anterior que funcionava → Promote to
 Production (rollback em 1 clique)
 Environment Variables: hoje nenhuma. Na fase Supabase entram as
 chaves — sempre aqui, nunca no código
+
 6. Backup
+
 O Git É o backup: cada commit guarda a foto completa do sistema.
 Perdeu o PC? git clone e tudo volta
 Backup extra mensal (opcional 5 estrelas): GitHub → botão Code →

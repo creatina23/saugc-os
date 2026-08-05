@@ -1,15 +1,16 @@
 "use client";
 
-// Mídias — biblioteca de arquivos REAL (Supabase Storage + tabela assets).
 // ------------------------------------------------------------------
-// • Upload: arquivo vai pro bucket "midias" na pasta do dono (user_id/…)
-//   e os metadados viram linha na tabela assets (RLS por usuário).
-// • Visualização: imagens ganham prévia real (URL assinada, 60 min);
-//   vídeos mostram placeholder + botão Baixar (link assinado).
-// • Lixeira: apaga o arquivo do Storage E a linha do banco.
-// • Categorias: valores do cofre em inglês (tipo AssetCategory),
+// Mídias — biblioteca de arquivos REAL (Supabase Storage + tabela assets).
+// v2 "dedo-duro confesso":
+// • Upload: grava user_id explícito + erros mostram o detalhe técnico.
+// • Baixar: abre via âncora invisível (não tromba no bloqueador de pop-up)
+//   e confessa o erro se o link falhar.
+// • Lixeira: confirma no banco ANTES de tirar da tela; confessa se falhar.
+// • Categorias: valores do cofre em inglês (AssetCategory),
 //   rótulos na tela em PT-BR (Lei da Língua: tela PT, motor EN).
 // • Sem banco configurado → modo demonstração (mock, com selo visível).
+// ------------------------------------------------------------------
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -27,6 +28,7 @@ import {
   SearchX,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +56,7 @@ import { assetsService, clientesService } from "@/lib/services";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Asset, AssetCategory } from "@/types";
+
 
 // ---------- Regras fixas ----------
 
@@ -107,6 +110,7 @@ const categoryIcon: Record<AssetCategory, typeof Film> = {
 
 const fieldLabel = "mb-1.5 block text-xs font-medium text-muted-foreground";
 
+
 // ---------- Utilitários ----------
 
 const EXTS_IMAGEM = ["png", "jpg", "jpeg", "gif", "webp"];
@@ -156,6 +160,7 @@ function sanitizarNome(nome: string): string {
     .replace(/[^a-z0-9.\-_]+/g, "-")
     .replace(/-+/g, "-");
 }
+
 
 // ---------- Ponte com o banco ----------
 
@@ -266,6 +271,7 @@ async function coletarUrlsAssinadas(
   return mapa;
 }
 
+
 // ---------- Componente ----------
 
 export function MídiasView() {
@@ -289,6 +295,10 @@ export function MídiasView() {
   const [etiquetasInput, setEtiquetasInput] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erroDialog, setErroDialog] = useState<string | null>(null);
+
+  // Ações dos cards (baixar/excluir): id ocupado + aviso confesso
+  const [ocupandoId, setOcupandoId] = useState<string | null>(null);
+  const [erroAcao, setErroAcao] = useState<string | null>(null);
 
   // Carga inicial — todo setState dentro de .then() (lei do ESLint)
   useEffect(() => {
@@ -404,7 +414,7 @@ export function MídiasView() {
     if (erroUpload) {
       setEnviando(false);
       setErroDialog(
-        "Não consegui enviar o arquivo. Confira sua conexão e tente de novo."
+        `Não consegui enviar o arquivo. Detalhe técnico: ${erroUpload.message}`
       );
       return;
     }
@@ -417,6 +427,7 @@ export function MídiasView() {
     const { data: linha, error: erroBanco } = await supabase
       .from("assets")
       .insert({
+        user_id: user.id,
         name: nomeFinal,
         category: categoriaSel,
         client_name: clienteSel === "Sem cliente" ? null : clienteSel,
@@ -432,7 +443,9 @@ export function MídiasView() {
 
     if (erroBanco || !linha) {
       setErroDialog(
-        "O arquivo subiu, mas não consegui registrar na biblioteca. Me chama que a gente confere o banco."
+        `O arquivo subiu, mas não consegui registrar na biblioteca. Detalhe técnico: ${
+          erroBanco?.message ?? "o banco não devolveu a linha registrada"
+        }`
       );
       return;
     }
@@ -457,22 +470,60 @@ export function MídiasView() {
     if (!midia.caminho) return;
     const supabase = getSupabaseBrowser();
     if (!supabase) return;
-    const { data } = await supabase.storage
+    setErroAcao(null);
+    setOcupandoId(midia.id);
+    const { data, error } = await supabase.storage
       .from(BALDE)
-      .createSignedUrl(midia.caminho, 60);
-    if (data?.signedUrl) {
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      .createSignedUrl(midia.caminho, 600);
+    setOcupandoId(null);
+    if (error || !data?.signedUrl) {
+      setErroAcao(
+        `Não consegui abrir "${midia.nome}". Detalhe técnico: ${
+          error?.message ?? "o cofre devolveu um link vazio"
+        }`
+      );
+      return;
     }
+    // Âncora invisível: abre/baixa sem trombar no bloqueador de pop-up
+    const ancora = document.createElement("a");
+    ancora.href = data.signedUrl;
+    ancora.target = "_blank";
+    ancora.rel = "noopener";
+    ancora.download = midia.nome;
+    document.body.appendChild(ancora);
+    ancora.click();
+    ancora.remove();
   }
 
   async function handleExcluir(midia: MidiaReal) {
-    setMidias((atual) => atual.filter((m) => m.id !== midia.id));
     const supabase = getSupabaseBrowser();
     if (!supabase) return;
+    setErroAcao(null);
+    setOcupandoId(midia.id);
     if (midia.caminho) {
-      await supabase.storage.from(BALDE).remove([midia.caminho]);
+      const { error: erroNuvem } = await supabase.storage
+        .from(BALDE)
+        .remove([midia.caminho]);
+      if (erroNuvem) {
+        setOcupandoId(null);
+        setErroAcao(
+          `Não consegui apagar "${midia.nome}" da nuvem. Detalhe técnico: ${erroNuvem.message}`
+        );
+        return;
+      }
     }
-    await supabase.from("assets").delete().eq("id", midia.id);
+    const { error: erroBanco } = await supabase
+      .from("assets")
+      .delete()
+      .eq("id", midia.id);
+    setOcupandoId(null);
+    if (erroBanco) {
+      setErroAcao(
+        `O arquivo saiu da nuvem, mas a linha do cofre resistiu. Detalhe técnico: ${erroBanco.message}`
+      );
+      return;
+    }
+    setMidias((atual) => atual.filter((m) => m.id !== midia.id));
   }
 
   // ---------- Carregamento ----------
@@ -734,6 +785,23 @@ export function MídiasView() {
         </CardContent>
       </Card>
 
+      {erroAcao && (
+        <div
+          role="alert"
+          className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3"
+        >
+          <p className="text-sm text-red-300">{erroAcao}</p>
+          <button
+            type="button"
+            onClick={() => setErroAcao(null)}
+            aria-label="Fechar aviso"
+            className="cursor-pointer text-red-300 transition-colors hover:text-red-100"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
       {filtered.length > 0 ? (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {filtered.map((midia) => {
@@ -743,6 +811,7 @@ export function MídiasView() {
             const previewUrl = midia.caminho
               ? urlsAssinadas[midia.caminho]
               : undefined;
+            const ocupado = ocupandoId === midia.id;
             return (
               <Card key={midia.id} className="card-glow overflow-hidden">
                 <div
@@ -787,7 +856,7 @@ export function MídiasView() {
                   <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Building2 className="size-3" />
-                      {midia.cliente || "Sem cliente"}
+                      {rotuloCategoria(midia.categoria) && (midia.cliente || "Sem cliente")}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="size-3" />
@@ -813,16 +882,25 @@ export function MídiasView() {
                       size="sm"
                       className="flex-1"
                       onClick={() => void handleBaixar(midia)}
-                      disabled={!midia.caminho}
+                      disabled={!midia.caminho || ocupado}
                     >
-                      <Download />
-                      Baixar arquivo
+                      {ocupado ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" /> Abrindo…
+                        </>
+                      ) : (
+                        <>
+                          <Download />
+                          Baixar arquivo
+                        </>
+                      )}
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       aria-label={`Excluir ${midia.nome}`}
                       onClick={() => void handleExcluir(midia)}
+                      disabled={ocupado}
                       className="size-8 shrink-0 text-muted-foreground hover:text-red-400"
                     >
                       <Trash2 className="size-4" />
