@@ -2406,6 +2406,23 @@ Sempre:
 010_CHANGELOG.md
 SAUGC OS — Histórico de Alterações
 
+## [v1.4] — 5 ago 2026 — Sprint 013: Trio CRUD real (Campanhas, Briefings, Comerciais)
+
+### Adicionado
+- **Campanhas real**: CRUD completo, plataforma/status/estágio, métricas no DNA (investido, impressões, cliques, conversões, receita, meta de ROAS) — CTR calculado sozinho e ROAS com semáforo contra a meta (casa do v3.0)
+- **Briefings real**: CRUD + código BRF-XXXX + prazo-data exibido "12 ago 2026" + campo "Detalhes do pedido" (base pra IA da Sprint 015)
+- **Comerciais real**: Kanban com setas ‹ › que gravam a etapa no banco (otimista + desfaz/confessa), edição clicando no cartão, tons em rodízio
+- Schemas novos: campaigns (16 colunas), briefings (10), commercials (10) — todos com policy "dono total", grants e reload de cache na blindagem
+
+### Corrigido
+- Jaulas NOT NULL herdadas abertas (client_name/goal/roas_meta e campos opcionais) — "Sem cliente"/campos em branco passaram a valer
+- Mocks restantes caíram de 6 → 3 (Biblioteca, Prompts, Configurações)
+
+### Lições operacionais
+- Coluna NOT NULL do schema velho trava insert com null — blindagem já abre as jaulas dos campos opcionais de fábrica
+- `next build` + `next dev` juntos corrompem `.next` (validator "Cannot find name 'TCH'") — cozinha vazia: parar dev + limpar cache antes do build
+- localhost ≠ vitrine: produção só muda depois do push + ~2 min
+
 ## [v1.3] — 5 ago 2026 — Sprint 012: Mídias 100% real + Memória Estratégica
 
 ### Adicionado
@@ -2784,24 +2801,24 @@ Implementar
 ---
 011_CURRENT_MISSION.md
 
-# 🧭 GPS — MISSÃO ATUAL (v2.3)
+# 🧭 GPS — MISSÃO ATUAL (v2.4)
 
 > Memória viva do projeto. Este arquivo é SUBSTITUÍDO POR INTEIRO a cada fechamento de sprint.
-> Última atualização: 5 ago 2026 — fechamento da Sprint 012.
+> Última atualização: 5 ago 2026 — fechamento da Sprint 013 (Trio CRUD).
 
 ## 1. ONDE ESTAMOS
 
-- Produto: **AnuncIA v1.3** — Sistema Operacional de Anúncios UGC com IA
-- Sprint ativa: **nenhuma** (Sprint 012 ✅ FECHADA em 5 ago 2026)
-- Próxima: **Sprint 013 — Trio CRUD** (Campanhas → Briefings → Comerciais); Campanhas nasce com campos de métricas no DNA (casa pronta pro v3.0)
+- Produto: **AnuncIA v1.4** — Sistema Operacional de Anúncios UGC com IA
+- Sprint ativa: **nenhuma** (Sprint 013 ✅ FECHADA em 5 ago 2026)
+- Próxima: **Sprint 014 — Biblioteca + Prompts reais** (reativa "Salvar na biblioteca" no IA Studio)
 
 ## 2. ESTADO DO PRODUTO (o que já é real)
 
 - Login real + `src/proxy.ts` porteiro + `/login` premium (bypass ROTAS_SEM_SHELL)
 - Cadastro público TRANCADO (toggle Supabase OFF + `CADASTRO_ABERTO=false`)
-- Banco por usuário: 8 tabelas com `user_id` + RLS "dono total" · Storage: bucket `midias` privado + policy "dono da pasta"
-- Clientes 100% real ✅ · CRM/Funil 100% real ✅ · IA Studio 100% real ✅ · **Mídias 100% real** ✅ (upload, prévia assinada, Baixar, lixeira, erros que confessam)
-- Mocks restantes (6): Campanhas · Briefings · Comerciais · Biblioteca · Prompts · Configurações
+- Banco por usuário: 11 tabelas com `user_id` + RLS "dono total" · Storage: bucket `midias` privado + policy "dono da pasta"
+- Clientes 100% real ✅ · CRM/Funil 100% real ✅ · IA Studio 100% real ✅ · Mídias 100% real ✅ · **Campanhas 100% real** ✅ · **Briefings 100% real** ✅ · **Comerciais 100% real** ✅
+- Mocks restantes (3): Biblioteca · Prompts · Configurações
 - IA REAL no ar (local + produção): motor `/api/ia` + `iaService` + IA Studio (5 agentes PT-BR) + Laboratório `/laboratorio` (fora do menu)
 - Modelo em uso: `gemini-3.6-flash` (autodescoberto; troca sozinho se o Google aposentar)
 - Docs vivos: `010_CHANGELOG` (append-only) · `011_CURRENT_MISSION` (este) · `012_MEMORIA_ESTRATEGICA` (decisões, visão, estacionamento, ponto de retomada)
@@ -2815,23 +2832,23 @@ Implementar
 - Regra de ouro: publishable pode circular · `sb_secret_service_role`/chaves de IA = só `.env.local` e Vercel · **segredo colado no chat = revogar sem discutir e gerar outro**
 - Cadeado "Development" nas envs da Vercel = comportamento normal
 
-## 4. ARQUITETURA DE DADOS REAIS (padrão provado 3×: Clientes, CRM, Mídias)
+## 4. ARQUITETURA DE DADOS REAIS (padrão provado 6×)
 
 - `getSupabaseBrowser()` retorna `null` sem env → tela cai em **modo demonstração** sem quebrar (selo visível = banco recusou operação, rodar SQL faltante)
-- Carga: `coletarX()` module-level (migração localStorage→DB + select) + `.then()` no `useEffect` com `let ativo` — setState SÓ em `.then()`/callbacks (lei do ESLint)
-- Linha do banco (snake) → tipo da tela (camel) com casts `as Tipo["campo"]`
-- Insert `.select().single()` → prepend · update/delete otimistas + gravação silenciosa
-- **Storage real (Mídias):** upload primeiro → insert com `user_id` explícito + `storage_path` → prévia/Baixar via `createSignedUrl(s)` · lixeira = Storage + delete, confirma o banco ANTES de tirar da tela
-- **Erros de ação confessam "Detalhe técnico:"** (padrão dedo-duro confesso) — nunca falha silenciosa
+- Carga: `coletarX()` module-level + `.then()` no `useEffect` com `let ativo` — setState SÓ em `.then()`/callbacks (lei do ESLint)
+- Linha do banco (snake) → tipo da tela (camel); `numeric` chega como string → helper `numero()`
+- Insert `.select().single()` → prepend · update `.select().single()` → troca no lugar · delete após confirmar
+- **Kanban otimista com setas** (CRM, Comerciais): muda na tela → grava → erro = desfaz + confessa
+- **Erros de ação confessam "Detalhe técnico:"** — nunca falha silenciosa
+- SQL de blindagem padrão: create if not exists → add column if not exists → **drop not null dos opcionais ("jaulas")** → RLS + policy conditionada → **grant authenticated** → `notify pgrst, 'reload schema'` → select de prova
 - localStorage = só sala de espera de migração
 
 ## 5. ARQUITETURA DE IA (provada na Sprint 011)
 
 - Telas falam com `iaService` → POST `/api/ia`. Providers futuros (Groq, GitHub Models, OpenRouter) entram SÓ no route handler, sem tocar telas
-- Route handler: exige login (`getSupabaseServer` null-safe) → valida pedido → **autodescoberta de modelo**: lista `/v1beta/models` → filtra especialidades (image/tts/embedding…) → ordena por versão (mais novo 1º) → testa em ordem → **hall dos reprovados** (404 = nunca mais neste boot) → fixa o 1º que responder 200 · reserva `gemini-2.0-flash`
+- Route handler: exige login → **autodescoberta de modelo**: lista `/v1beta/models` → filtra especialidades → ordena por versão → testa em ordem → **hall dos reprovados** → fixa o 1º 200 · reserva `gemini-2.0-flash`
 - Parâmetros: `temperatura` (0–1) e `maxTokens` (256–4096) via body, com clamp no servidor
 - Logs `[motor-ia]` só no terminal do servidor — ali aparece o modelo fixado
-- Erros PT-BR: 429 cota · 401/403 chave · 400 pedido · 5xx instável · timeout
 - IA Studio: agente = persona (prefixo) + tarefa + regra "pt-BR direto, sem cercas de código"; histórico real da sessão; providers honestos
 
 ## 6. LEIS VIGENTES
@@ -2848,8 +2865,8 @@ Implementar
 
 ### Modo Soberano Universal (2 ago 2026)
 
-- Veredito em decisões: 🏆 recomendação · ⚠️ risco · 🚀 potencial · 📈 próximo movimento
-- 3 níveis (tático/estratégico/sistêmico) · horizontes 30/90/1a/3a nas viradas · clareza > complexidade · execução > perfeccionismo · escopo fechado
+- 🏆 recomendação · ⚠️ risco · 🚀 potencial · 📈 próximo movimento
+- 3 níveis (tático/estratégico/sistêmico) · horizontes 30/90/1a/3a · clareza > complexidade · execução > perfeccionismo · escopo fechado
 
 ### Leis ativas das sprints
 
@@ -2859,35 +2876,36 @@ Implementar
 ### Leis estratégicas (travadas)
 
 - Venda primeiro, ensine depois · Vendeu → construiu · 50% entrada · Escopo fechado
-- Oferta: R$ 9.997 à vista ou 12× R$ 997 + R$ 497/mês · Oferta Cliente-Fundador (5 vagas, R$ 297/mês) = estacionada
-- Ordem travada: terminar → usar todo dia (dogfooding, usuário = Cliente Zero) → ensinar e vender
+- Oferta: R$ 9.997 à vista ou 12× R$ 997 + R$ 497/mês · Cliente-Fundador (5 vagas, R$ 297/mês) = estacionada
+- Ordem travada: terminar → usar todo dia (dogfooding) → ensinar e vender
 
 ## 7. PRÓXIMOS MOVIMENTOS
 
-- **Sprint 013 = Trio CRUD** na ordem: Campanhas → Briefings → Comerciais (dono cola o `*-view.tsx` mock → copiloto devolve real)
-- **Campanhas nasce com DNA de métricas** (investimento, CTR, CPA, ROAS, meta de ROAS) — casa pronta pro v3.0
-- **v3.0 "Waze do tráfego"** (travado 5 ago 2026, memória 012): 🧠 Cérebro 1º (agente "Diretor de Tráfego" com cola manual de métricas — alvo Sprint 015/v2.5) → 👁️ Olho (APIs Meta/Google/TikTok + conversões) → ✋ Mão (ações, sempre com confirmação antes de tocar no dinheiro)
-- Pós-v2.0 (⭐ ranking): **Portal do Cliente** (Mídias real ✅ = peça-chave pronta) · Link público de Briefing · Relatório 1-clique
-- Pendências pequenas: login `traduzErro` + "Invalid API key" · `proxy.ts` try/catch · `iaService` no barrel · **cravar NODE_OPTIONS no script "build"** · providers IA sob demanda (~30 min cada)
+- **Sprint 014 = Biblioteca + Prompts reais** → **Sprint 015 = IA tecida + Configurações** → 🏁 **v2.0 "100% UTILIZÁVEL"**
+- v3.0 "Waze do tráfego" (travado 5 ago 2026): 🧠 Cérebro 1º (agente "Diretor de Tráfego" com cola de métricas) → 👁️ Olho (APIs) → ✋ Mão (com confirmação)
+- Pós-v2.0 (⭐): **Portal do Cliente** (Mídias real ✅ pronta) · Link público de Briefing (Briefings real ✅ pronto) · Relatório 1-clique
+- Pendências pequenas: login `traduzErro` + "Invalid API key" · `proxy.ts` try/catch · `iaService` no barrel · NODE_OPTIONS no script "build" · fiapo `erroAcao` em campanhas-view (remover na próxima edição) · providers IA sob demanda
 - Paralelo diário: **caça comercial 30 min/dia** (Playbook Vol. 6)
 
 ## 8. LIÇÕES OPERACIONAIS (cicatrizes que viraram regra)
 
-1. Entrega = arquivo COMPLETO; micro-edição = risco de duplicar linha · cola grande = botão 📋 do bloco + prova Ctrl+F (1 resultado = completo)
-2. Porteiros ANTES do carteiro: `npm run lint` → `npm run build` → `git add -A` → `git commit` → `git push`
-3. "nothing to commit, working tree clean" = já foi (eco, não erro) · "U/untracked" = arquivo novo normal, some no commit
-4. 1 terminal = 1 servidor ("node" × "powershell") · Ctrl+C devolve o prompt · porta zumbi: `taskkill /PID <n> /F` · cache zumbi: `Remove-Item -Recurse -Force .next`
+1. Entrega = arquivo COMPLETO; cola grande = botão 📋 + prova Ctrl+F (1 resultado = completo)
+2. Porteiros ANTES do carteiro: lint → build → add/commit/push
+3. "nothing to commit, working tree clean" = já foi (eco, não erro)
+4. 1 terminal = 1 servidor · Ctrl+C devolve o prompt · cache zumbi: `Remove-Item -Recurse -Force .next`
 5. Next 16.2.12: `middleware` virou `proxy` (`src/proxy.ts`)
 6. Código colado chega com `&lt;` e links falsos — decodificar
-7. Supabase Free hiberna: pingar 1×/semana · `.env.local` novo → reiniciar dev (lei da largada)
-8. **Gremlin IPv6** (Node no Windows: fetch timeout; navegador ok): `NODE_OPTIONS=--dns-result-order=ipv4first` cravado no script "dev"; no "build" hoje é por sessão (cravar = pendente)
-9. **Modelo de IA aposentado** (404 "no longer available"): autodescoberta resolve pra sempre — nunca mais nome fixo de modelo
-10. Env var nova na Vercel não é retroativa — precisa de deploy novo (qualquer push no main serve)
-11. Dono leigo-TDAH: 1 ação por vez, 1 comando por linha, resultado esperado explícito, erro = colar o bloco vermelho INTEIRO
-12. **RLS ≠ grants** (Sprint 012): registro travando com política "dono total" certa → checar grants da tabela pro role `authenticated` (`grant select, insert, update, delete`)
-13. **Cache da API** (Sprint 012): depois de ALTER TABLE no SQL Editor → `notify pgrst, 'reload schema'`
-14. **Pop-up engolido** (Sprint 012): `window.open` depois de `await` = bloqueador come · abrir links com âncora invisível (`document.createElement("a")` + `click()`)
-15. **Fóssil de mock no banco** (Sprint 012): coluna de schema velho (`type`/`size`/`url`) bloqueou o insert invisível — diagnóstico: `information_schema.columns` + "era do mock"
+7. Supabase Free hiberna: pingar 1×/semana · `.env.local` novo → reiniciar dev
+8. **Gremlin IPv6**: `NODE_OPTIONS=--dns-result-order=ipv4first` no "dev" cravado; no "build" por sessão (cravar = pendente)
+9. Modelo de IA aposentado (404) → autodescoberta; nunca nome fixo
+10. Env var na Vercel não é retroativa — deploy novo
+11. Dono leigo-TDAH: 1 ação por vez, 1 comando por linha, erro = colar o bloco vermelho INTEIRO
+12. **RLS ≠ grants** — registro travando com policy certa → checar grants `authenticated`
+13. Depois de ALTER TABLE → `notify pgrst, 'reload schema'`
+14. `window.open` após `await` = bloqueador come · âncora invisível (`createElement("a")`)
+15. **Fóssil de mock no banco** — diagnosticar com `information_schema.columns`
+16. **Jaula NOT NULL** (Sprint 013): `null value in column ... violates not-null` = campo opcional trancado → `alter column drop not null` (produto manda, banco obedece)
+17. **Build × dev = cozinha lotada** (Sprint 013): os dois juntos corrompem `.next` ("Cannot find name 'TCH'") → parar dev + limpar cache + rebuild
 
 ## 9. GATILHOS DO DONO
 
