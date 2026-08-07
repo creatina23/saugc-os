@@ -2406,6 +2406,22 @@ Sempre:
 010_CHANGELOG.md
 SAUGC OS — Histórico de Alterações
 
+
+## [v1.5] — 5 ago 2026 — Sprint 014: Biblioteca + Prompts reais + baú da IA
+
+### Adicionado
+- **Biblioteca real** (`library_items`, 8 col): CRUD completo, abas por categoria, rótulos PT-BR com valores EN no cofre, campo "Conteúdo completo" + botão Copiar de verdade
+- **Prompts real** (`prompts`, 9 col): CRUD + Editar no cartão, variáveis {chaves} destacadas, filtro por modelo, opção "Gemini", copiar com feedback
+- **IA Studio v3.1**: "Salvar na biblioteca" reconectado — qualquer saída (atual ou do histórico) vira item permanente, com categoria sugerida pelo agente e autor = agente
+
+### Corrigido
+- Extinção em massa do fóssil `name` nas 5 tabelas novas (era do mock × canônico `title`) — Prompts e Biblioteca destravaram
+- Mocks restantes caíram de 3 → 1 (Configurações) — v2.0 à vista
+
+### Lições operacionais
+- Coluna `name` NOT NULL herdada ao lado do `title` novo = gêmeo fóssil — `drop column if exists` em lote resolve nas 5 tabelas de uma vez
+
+
 ## [v1.4] — 5 ago 2026 — Sprint 013: Trio CRUD real (Campanhas, Briefings, Comerciais)
 
 ### Adicionado
@@ -2801,116 +2817,107 @@ Implementar
 ---
 011_CURRENT_MISSION.md
 
-# 🧭 GPS — MISSÃO ATUAL (v2.4)
+# 🧭 GPS — MISSÃO ATUAL (v2.5)
 
 > Memória viva do projeto. Este arquivo é SUBSTITUÍDO POR INTEIRO a cada fechamento de sprint.
-> Última atualização: 5 ago 2026 — fechamento da Sprint 013 (Trio CRUD).
+> Última atualização: 5 ago 2026 — fechamento da Sprint 014.
 
 ## 1. ONDE ESTAMOS
 
-- Produto: **AnuncIA v1.4** — Sistema Operacional de Anúncios UGC com IA
-- Sprint ativa: **nenhuma** (Sprint 013 ✅ FECHADA em 5 ago 2026)
-- Próxima: **Sprint 014 — Biblioteca + Prompts reais** (reativa "Salvar na biblioteca" no IA Studio)
+- Produto: **AnuncIA v1.5** — Sistema Operacional de Anúncios UGC com IA
+- Sprint ativa: **nenhuma** (Sprint 014 ✅ FECHADA em 5 ago 2026)
+- Próxima: **Sprint 015 — IA tecida + Configurações** → 🏁 **v2.0 "100% UTILIZÁVEL"**
 
 ## 2. ESTADO DO PRODUTO (o que já é real)
 
-- Login real + `src/proxy.ts` porteiro + `/login` premium (bypass ROTAS_SEM_SHELL)
-- Cadastro público TRANCADO (toggle Supabase OFF + `CADASTRO_ABERTO=false`)
-- Banco por usuário: 11 tabelas com `user_id` + RLS "dono total" · Storage: bucket `midias` privado + policy "dono da pasta"
-- Clientes 100% real ✅ · CRM/Funil 100% real ✅ · IA Studio 100% real ✅ · Mídias 100% real ✅ · **Campanhas 100% real** ✅ · **Briefings 100% real** ✅ · **Comerciais 100% real** ✅
-- Mocks restantes (3): Biblioteca · Prompts · Configurações
-- IA REAL no ar (local + produção): motor `/api/ia` + `iaService` + IA Studio (5 agentes PT-BR) + Laboratório `/laboratorio` (fora do menu)
-- Modelo em uso: `gemini-3.6-flash` (autodescoberto; troca sozinho se o Google aposentar)
-- Docs vivos: `010_CHANGELOG` (append-only) · `011_CURRENT_MISSION` (este) · `012_MEMORIA_ESTRATEGICA` (decisões, visão, estacionamento, ponto de retomada)
+- Login real + `src/proxy.ts` porteiro + `/login` premium · Cadastro público TRANCADO
+- Banco por usuário: 13 tabelas com `user_id` + RLS "dono total" · Storage: bucket `midias` privado
+- Clientes ✅ · CRM ✅ · **IA Studio ✅ (com baú — "Salvar na biblioteca" reconectado)** · Mídias ✅ · Campanhas ✅ · Briefings ✅ · Comerciais ✅ · **Biblioteca ✅** · **Prompts ✅**
+- Mocks restantes (1): **Configurações**
+- IA REAL no ar: motor `/api/ia` + `iaService` + Laboratório `/laboratorio` · Modelo: `gemini-3.6-flash` (autodescoberto)
+- Docs vivos: `010_CHANGELOG` · `011_CURRENT_MISSION` (este) · `012_MEMORIA_ESTRATEGICA`
 
 ## 3. INFRA (cola rápida)
 
 - Repo: `github.com/creatina23/saugc-os` (main) · Local: `C:\Projetos\BKp\saugc-os`
-- Produção: `anuncia-three.vercel.app` (Vercel Hobby; push no main = deploy ~2 min; env var nova na Vercel só vale a partir do próximo deploy)
+- Produção: `anuncia-three.vercel.app` (push no main = deploy ~2 min; env var nova só vale no próximo deploy)
 - Supabase: projeto `ugaessoebkqfqezmuwhc` · sa-east-1 · Free (pingar 1×/semana)
-- Env (`.env.local` + Vercel Production/Preview): `NEXT_PUBLIC_SUPABASE_URL` (SEM `/rest/v1`) · `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable) · `GEMINI_API_KEY` (**server-side: JAMAIS em NEXT_PUBLIC_, chat ou código**)
-- Regra de ouro: publishable pode circular · `sb_secret_service_role`/chaves de IA = só `.env.local` e Vercel · **segredo colado no chat = revogar sem discutir e gerar outro**
-- Cadeado "Development" nas envs da Vercel = comportamento normal
+- Env (`.env.local` + Vercel): `NEXT_PUBLIC_SUPABASE_URL` (SEM `/rest/v1`) · `NEXT_PUBLIC_SUPABASE_ANON_KEY` · `GEMINI_API_KEY` (**server-side: JAMAIS em NEXT_PUBLIC_, chat ou código**)
+- Regra de ouro: publishable pode circular · segredos = só `.env.local`/Vercel · **segredo no chat = revogar sem discutir**
 
-## 4. ARQUITETURA DE DADOS REAIS (padrão provado 6×)
+## 4. ARQUITETURA DE DADOS REAIS (padrão provado 8×)
 
-- `getSupabaseBrowser()` retorna `null` sem env → tela cai em **modo demonstração** sem quebrar (selo visível = banco recusou operação, rodar SQL faltante)
-- Carga: `coletarX()` module-level + `.then()` no `useEffect` com `let ativo` — setState SÓ em `.then()`/callbacks (lei do ESLint)
-- Linha do banco (snake) → tipo da tela (camel); `numeric` chega como string → helper `numero()`
-- Insert `.select().single()` → prepend · update `.select().single()` → troca no lugar · delete após confirmar
-- **Kanban otimista com setas** (CRM, Comerciais): muda na tela → grava → erro = desfaz + confessa
-- **Erros de ação confessam "Detalhe técnico:"** — nunca falha silenciosa
-- SQL de blindagem padrão: create if not exists → add column if not exists → **drop not null dos opcionais ("jaulas")** → RLS + policy conditionada → **grant authenticated** → `notify pgrst, 'reload schema'` → select de prova
-- localStorage = só sala de espera de migração
+- `getSupabaseBrowser()` null → **modo demonstração** sem quebrar (selo visível)
+- Carga: `coletarX()` module-level + `.then()` no `useEffect` com `let ativo` — setState SÓ em `.then()`
+- snake (banco) → camel (tela); `numeric` chega string → helper `numero()`
+- Insert `.select().single()` → prepend · update → troca no lugar · delete após confirmar
+- Kanban otimista com setas: muda na tela → grava → erro = desfaz + confessa
+- **Erros confessam "Detalhe técnico:"** — nunca falha silenciosa
+- Blindagem SQL padrão: create if not exists → add column if not exists → **drops not null dos opcionais** → RLS + policy conditionada → **grant authenticated** → `notify pgrst, 'reload schema'` → select de prova
+- Biblioteca = baú da IA: IA Studio grava em `library_items` com categoria sugerida pelo agente
 
 ## 5. ARQUITETURA DE IA (provada na Sprint 011)
 
-- Telas falam com `iaService` → POST `/api/ia`. Providers futuros (Groq, GitHub Models, OpenRouter) entram SÓ no route handler, sem tocar telas
-- Route handler: exige login → **autodescoberta de modelo**: lista `/v1beta/models` → filtra especialidades → ordena por versão → testa em ordem → **hall dos reprovados** → fixa o 1º 200 · reserva `gemini-2.0-flash`
-- Parâmetros: `temperatura` (0–1) e `maxTokens` (256–4096) via body, com clamp no servidor
-- Logs `[motor-ia]` só no terminal do servidor — ali aparece o modelo fixado
-- IA Studio: agente = persona (prefixo) + tarefa + regra "pt-BR direto, sem cercas de código"; histórico real da sessão; providers honestos
+- Telas → `iaService` → POST `/api/ia` · providers futuros entram SÓ no route handler
+- Autodescoberta de modelo: lista `/v1beta/models` → filtra especialidades → ordena por versão → **hall dos reprovados** → fixa o 1º 200 · reserva `gemini-2.0-flash`
+- `temperatura` (0–1) e `maxTokens` (256–4096) com clamp · logs `[motor-ia]` no terminal
+- Agentes = persona (prefixo) + tarefa + "pt-BR direto, sem cercas de código"
 
 ## 6. LEIS VIGENTES
 
 ### Comando Mestre (produto/código)
-
-- Badges: default/secondary/destructive/outline/success/warning/info/violet (Button tem tb "ai") · Tailwind 4 CSS-first (tokens em `@theme inline`; rgba só em CSS; arbitrárias ok no JSX)
-- Telas leem de services (nunca mock-data direto) · CHANGELOG append-only (novo no topo) · GPS = substituição completa · **Memória (012) atualizada a cada decisão**
-- Sem backend sem pedido explícito · QA-lens 6 perguntas de conversão
+- Badges: default/secondary/destructive/outline/success/warning/info/violet (Button tb "ai") · Tailwind 4 CSS-first
+- Telas leem de services · CHANGELOG append-only · GPS substituição completa · Memória (012) a cada decisão
+- Sem backend sem pedido explícito
 
 ### Lei da Língua (2 ago 2026)
-
-- Tela: ZERO inglês · Motor (código/banco): inglês padrão · **PT-BR entregue é CONTRATO — mudança só com aviso prévio**
+- Tela: ZERO inglês · Motor: inglês padrão · **PT-BR entregue é CONTRATO — mudança só com aviso prévio**
 
 ### Modo Soberano Universal (2 ago 2026)
+- 🏆 recomendação · ⚠️ risco · 🚀 potencial · 📈 próximo movimento · 3 níveis · horizontes 30/90/1a/3a
 
-- 🏆 recomendação · ⚠️ risco · 🚀 potencial · 📈 próximo movimento
-- 3 níveis (tático/estratégico/sistêmico) · horizontes 30/90/1a/3a · clareza > complexidade · execução > perfeccionismo · escopo fechado
-
-### Leis ativas das sprints
-
-- **Verdade na tela:** controle/botão sem efeito real = bug de produto (ou liga, ou tira)
-- **Segredo no chat = revogar sem discutir** · chave de IA mora no servidor; a tela nunca vê
+### Leis ativas
+- **Verdade na tela** · **Segredo no chat = revogar sem discutir**
 
 ### Leis estratégicas (travadas)
-
-- Venda primeiro, ensine depois · Vendeu → construiu · 50% entrada · Escopo fechado
-- Oferta: R$ 9.997 à vista ou 12× R$ 997 + R$ 497/mês · Cliente-Fundador (5 vagas, R$ 297/mês) = estacionada
-- Ordem travada: terminar → usar todo dia (dogfooding) → ensinar e vender
+- Venda primeiro · Vendeu → construiu · 50% entrada · Escopo fechado
+- Oferta: R$ 9.997 ou 12× R$ 997 + R$ 497/mês · Cliente-Fundador = estacionada
+- Ordem: terminar → usar todo dia → ensinar e vender
 
 ## 7. PRÓXIMOS MOVIMENTOS
 
-- **Sprint 014 = Biblioteca + Prompts reais** → **Sprint 015 = IA tecida + Configurações** → 🏁 **v2.0 "100% UTILIZÁVEL"**
-- v3.0 "Waze do tráfego" (travado 5 ago 2026): 🧠 Cérebro 1º (agente "Diretor de Tráfego" com cola de métricas) → 👁️ Olho (APIs) → ✋ Mão (com confirmação)
-- Pós-v2.0 (⭐): **Portal do Cliente** (Mídias real ✅ pronta) · Link público de Briefing (Briefings real ✅ pronto) · Relatório 1-clique
-- Pendências pequenas: login `traduzErro` + "Invalid API key" · `proxy.ts` try/catch · `iaService` no barrel · NODE_OPTIONS no script "build" · fiapo `erroAcao` em campanhas-view (remover na próxima edição) · providers IA sob demanda
-- Paralelo diário: **caça comercial 30 min/dia** (Playbook Vol. 6)
+- **Sprint 015 = IA tecida + Configurações** ("Gerar a partir do briefing", agente Diretor de Tráfego com cola de métricas — Cérebro do Waze v1) → 🏁 **v2.0 declarada**
+- v3.0 "Waze do tráfego": 🧠 Cérebro 1º → 👁️ Olho (APIs) → ✋ Mão (com confirmação)
+- Pós-v2.0 (⭐): **Portal do Cliente** · Link público de Briefing · Relatório 1-clique
+- Pendências pequenas: login `traduzErro` + "Invalid API key" · `proxy.ts` try/catch · `iaService` no barrel · NODE_OPTIONS no "build" · fiapo `erroAcao` em campanhas-view · providers IA sob demanda · cravar NODE_OPTIONS no build
+- Paralelo diário: **caça comercial 30 min/dia**
 
 ## 8. LIÇÕES OPERACIONAIS (cicatrizes que viraram regra)
 
-1. Entrega = arquivo COMPLETO; cola grande = botão 📋 + prova Ctrl+F (1 resultado = completo)
-2. Porteiros ANTES do carteiro: lint → build → add/commit/push
-3. "nothing to commit, working tree clean" = já foi (eco, não erro)
-4. 1 terminal = 1 servidor · Ctrl+C devolve o prompt · cache zumbi: `Remove-Item -Recurse -Force .next`
-5. Next 16.2.12: `middleware` virou `proxy` (`src/proxy.ts`)
-6. Código colado chega com `&lt;` e links falsos — decodificar
-7. Supabase Free hiberna: pingar 1×/semana · `.env.local` novo → reiniciar dev
-8. **Gremlin IPv6**: `NODE_OPTIONS=--dns-result-order=ipv4first` no "dev" cravado; no "build" por sessão (cravar = pendente)
-9. Modelo de IA aposentado (404) → autodescoberta; nunca nome fixo
-10. Env var na Vercel não é retroativa — deploy novo
-11. Dono leigo-TDAH: 1 ação por vez, 1 comando por linha, erro = colar o bloco vermelho INTEIRO
-12. **RLS ≠ grants** — registro travando com policy certa → checar grants `authenticated`
-13. Depois de ALTER TABLE → `notify pgrst, 'reload schema'`
-14. `window.open` após `await` = bloqueador come · âncora invisível (`createElement("a")`)
-15. **Fóssil de mock no banco** — diagnosticar com `information_schema.columns`
-16. **Jaula NOT NULL** (Sprint 013): `null value in column ... violates not-null` = campo opcional trancado → `alter column drop not null` (produto manda, banco obedece)
-17. **Build × dev = cozinha lotada** (Sprint 013): os dois juntos corrompem `.next` ("Cannot find name 'TCH'") → parar dev + limpar cache + rebuild
+1. Arquivo COMPLETO; cola = 📋 + prova Ctrl+F (1 resultado)
+2. Porteiros ANTES do carteiro
+3. "working tree clean" = já foi (eco)
+4. 1 terminal = 1 servidor · cache zumbi: `Remove-Item -Recurse -Force .next`
+5. Next 16.2.12: middleware virou `proxy`
+6. Cola chega com `&lt;` e links falsos — decodificar
+7. Supabase Free hiberna: ping 1×/semana · `.env.local` novo → reiniciar dev
+8. Gremlin IPv6: `NODE_OPTIONS=--dns-result-order=ipv4first` (cravar no build = pendente)
+9. Modelo IA aposentado → autodescoberta; nunca nome fixo
+10. Env na Vercel não é retroativa — deploy novo
+11. 1 ação por vez; erro = bloco vermelho INTEIRO
+12. **RLS ≠ grants** — política certa + registro travando → grants
+13. ALTER → `notify pgrst, 'reload schema'`
+14. `window.open` após `await` = bloqueador come · âncora invisível
+15. Fóssil de mock no banco → `information_schema.columns`
+16. **Jaula NOT NULL** → `alter column drop not null` (produto manda)
+17. **Build × dev = cozinha lotada** → parar dev + limpar cache
+18. **Gêmeo fóssil `name` × canônico `title`** (Sprint 014) → `drop column if exists` em lote nas tabelas novas
 
 ## 9. GATILHOS DO DONO
 
 - "les go" = começar sprint · "deu certo" = confirmado · "segue o baile" = retoma · "só se for agora" = Modo Sexta-Feira · "abre o roadmap" = o que fazer hoje · "INICIAR FASE EDUCAÇÃO E LANÇAMENTO" = futura fase de curso
-- "reunião aberta" = pausa o código → estratégia/dúvidas (Modo Soberano) · "re" = volta pro projeto com recapitulação de 3 linhas
+- "reunião aberta" = pausa código → Modo Soberano · "re" = volta com recapitulação de 3 linhas
+
 
 
 ---

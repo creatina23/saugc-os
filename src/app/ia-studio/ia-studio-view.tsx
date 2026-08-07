@@ -2,15 +2,17 @@
 
 // IA Studio — playground de agentes ligado no MOTOR REAL (/api/ia).
 // ------------------------------------------------------------------
-// • Cada agente é uma persona de verdade (prefixo de instrução enviado
-//   junto com a tarefa do usuário).
+// • Cada agente é uma persona de verdade (prefixo enviado junto com a tarefa).
 // • Temperatura e Máx. tokens são controles REAIS (chegam ao modelo).
-// • Providers: mostramos a verdade — Gemini conectado; demais "Em breve".
-// • Histórico: gerações reais DESTA sessão (persistência vem na fase
-//   de Integrações/Storage, em sprint futura).
+// • Providers: a verdade — Gemini conectado; demais "Em breve".
+// • Histórico: gerações reais DESTA sessão.
+// • v3.1 — "Salvar na biblioteca" reconectado: qualquer saída vira item
+//   permanente na tabela library_items (categoria sugerida pelo agente).
+// ------------------------------------------------------------------
 
 import { useState } from "react";
 import {
+  BookMarked,
   Bot,
   Brain,
   Check,
@@ -37,9 +39,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { iaService } from "@/lib/services/ia-service";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import type { LibraryCategory } from "@/types";
+
 
 // ---------- Agentes (personas reais, em PT-BR) ----------
 
@@ -81,6 +103,7 @@ const agents = [
   },
 ];
 
+
 // ---------- Providers (a verdade, sem fingimento) ----------
 
 const providers = [
@@ -118,7 +141,34 @@ const providers = [
   },
 ];
 
+
 const MODELO_ROTULO = "Gemini Flash (auto)";
+
+// ---------- Salvar na biblioteca (baú real) ----------
+
+const categoriasBiblioteca = [
+  { valor: "UGC Script Templates" as LibraryCategory, rotulo: "Modelos de Roteiro UGC" },
+  { valor: "Ad Copy Hooks" as LibraryCategory, rotulo: "Hooks de Copy" },
+  { valor: "Creator Guidelines" as LibraryCategory, rotulo: "Guias do Creator" },
+  { valor: "Strategy Guides" as LibraryCategory, rotulo: "Guias de Estratégia" },
+];
+
+// Categoria sugerida conforme o agente que gerou
+const mapaCategoriaAgente: Record<string, LibraryCategory> = {
+  "Estrategista IA": "Strategy Guides",
+  "Copywriter IA": "Ad Copy Hooks",
+  "Roteirista UGC IA": "UGC Script Templates",
+  "Engenheiro de Prompts IA": "UGC Script Templates",
+  "Analista Criativo IA": "Strategy Guides",
+};
+
+type AlvoSalvamento = {
+  alvo: string; // identificador ("saida-atual" ou id do histórico)
+  agente: string;
+  prompt: string;
+  output: string;
+};
+
 
 type GeracaoReal = {
   id: string;
@@ -128,6 +178,7 @@ type GeracaoReal = {
   output: string;
   hora: string;
 };
+
 
 export function IaStudioView() {
   const [selectedAgent, setSelectedAgent] = useState(agents[0].name);
@@ -139,6 +190,16 @@ export function IaStudioView() {
   const [generating, setGenerating] = useState(false);
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
   const [historico, setHistorico] = useState<GeracaoReal[]>([]);
+
+  // Salvar na biblioteca
+  const [salvamentoAberto, setSalvamentoAberto] = useState(false);
+  const [alvoSalvamento, setAlvoSalvamento] = useState<AlvoSalvamento | null>(null);
+  const [tituloSalvoF, setTituloSalvoF] = useState("");
+  const [categoriaSalvaF, setCategoriaSalvaF] = useState<LibraryCategory>("UGC Script Templates");
+  const [autorSalvoF, setAutorSalvoF] = useState("");
+  const [salvandoNaBiblioteca, setSalvandoNaBiblioteca] = useState(false);
+  const [erroSalvamento, setErroSalvamento] = useState<string | null>(null);
+  const [salvoRecente, setSalvoRecente] = useState<string | null>(null);
 
   const stats = [
     {
@@ -173,6 +234,7 @@ export function IaStudioView() {
     setGenerating(true);
     setOutput("");
     setErro(null);
+    setSalvoRecente(null);
 
     const agente =
       agents.find((item) => item.name === selectedAgent) ?? agents[0];
@@ -224,8 +286,149 @@ export function IaStudioView() {
     }
   }
 
+  // ---------- Salvar na biblioteca ----------
+
+  function abrirSalvamento(payload: AlvoSalvamento) {
+    setAlvoSalvamento(payload);
+    setTituloSalvoF(
+      payload.prompt.trim().slice(0, 60) || `Geração do ${payload.agente}`
+    );
+    setCategoriaSalvaF(
+      mapaCategoriaAgente[payload.agente] ?? "Strategy Guides"
+    );
+    setAutorSalvoF(payload.agente);
+    setErroSalvamento(null);
+    setSalvamentoAberto(true);
+  }
+
+  async function handleSalvarNaBiblioteca() {
+    if (!alvoSalvamento || salvandoNaBiblioteca) return;
+    setErroSalvamento(null);
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setErroSalvamento("Banco não configurado — a biblioteca real precisa dele.");
+      return;
+    }
+    setSalvandoNaBiblioteca(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSalvandoNaBiblioteca(false);
+      setErroSalvamento("Sua sessão caiu. Entre de novo e repita o salvamento.");
+      return;
+    }
+
+    const { error } = await supabase.from("library_items").insert({
+      user_id: user.id,
+      title: tituloSalvoF.trim() || "Geração do IA Studio",
+      category: categoriaSalvaF,
+      author: autorSalvoF.trim() || "Equipe AnuncIA",
+      description: `Gerado no IA Studio · agente ${alvoSalvamento.agente} · modelo ${MODELO_ROTULO}`,
+      content: alvoSalvamento.output,
+    });
+
+    setSalvandoNaBiblioteca(false);
+
+    if (error) {
+      setErroSalvamento(
+        `Não consegui gravar na biblioteca. Detalhe técnico: ${error.message}`
+      );
+      return;
+    }
+
+    setSalvoRecente(alvoSalvamento.alvo);
+    setSalvamentoAberto(false);
+    setAlvoSalvamento(null);
+  }
+
   return (
     <>
+      <Dialog open={salvamentoAberto} onOpenChange={setSalvamentoAberto}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Salvar na biblioteca</DialogTitle>
+            <DialogDescription>
+              Esta geração vira um item permanente — aparece na página
+              Biblioteca e fica guardada no seu cofre.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="salvar-titulo" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Título
+              </label>
+              <Input
+                id="salvar-titulo"
+                value={tituloSalvoF}
+                onChange={(event) => setTituloSalvoF(event.target.value)}
+                placeholder="Ex.: Hooks Verão Glow — prova social"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="salvar-categoria" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Categoria
+                </label>
+                <Select
+                  value={categoriaSalvaF}
+                  onValueChange={(valor) => setCategoriaSalvaF(valor as LibraryCategory)}
+                >
+                  <SelectTrigger id="salvar-categoria" aria-label="Selecionar categoria">
+                    <SelectValue placeholder="Selecione a categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoriasBiblioteca.map((cat) => (
+                      <SelectItem key={cat.valor} value={cat.valor}>
+                        {cat.rotulo}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label htmlFor="salvar-autor" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Autor
+                </label>
+                <Input
+                  id="salvar-autor"
+                  value={autorSalvoF}
+                  onChange={(event) => setAutorSalvoF(event.target.value)}
+                  placeholder="Equipe AnuncIA"
+                />
+              </div>
+            </div>
+            {erroSalvamento && (
+              <p role="alert" className="text-sm text-red-400">
+                {erroSalvamento}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button
+              variant="ai"
+              onClick={() => void handleSalvarNaBiblioteca()}
+              disabled={salvandoNaBiblioteca}
+            >
+              {salvandoNaBiblioteca ? (
+                <>
+                  <Loader2 className="animate-spin" /> Gravando…
+                </>
+              ) : (
+                <>
+                  <BookMarked /> Gravar na biblioteca
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <PageHeader
         title="IA Studio"
         badge="IA real"
@@ -500,6 +703,28 @@ export function IaStudioView() {
                   )}
                   {copiedTarget === "output" ? "Copiado" : "Copiar"}
                 </Button>
+                <Button
+                  variant="ai"
+                  size="sm"
+                  onClick={() =>
+                    abrirSalvamento({
+                      alvo: "saida-atual",
+                      agente: selectedAgent,
+                      prompt: promptText,
+                      output,
+                    })
+                  }
+                >
+                  {salvoRecente === "saida-atual" ? (
+                    <>
+                      <Check className="text-success" /> Salvo na biblioteca
+                    </>
+                  ) : (
+                    <>
+                      <BookMarked /> Salvar na biblioteca
+                    </>
+                  )}
+                </Button>
               </div>
             )}
           </CardContent>
@@ -513,7 +738,8 @@ export function IaStudioView() {
             Histórico de gerações
           </CardTitle>
           <CardDescription>
-            Suas gerações reais — vivem nesta sessão
+            Suas gerações reais — vivem nesta sessão; salve os melhores na
+            Biblioteca pra guardar de vez
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -537,6 +763,27 @@ export function IaStudioView() {
                     <span className="text-[11px] text-muted-foreground">
                       {item.hora}
                     </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Salvar resposta na biblioteca"
+                      title="Salvar na biblioteca"
+                      onClick={() =>
+                        abrirSalvamento({
+                          alvo: item.id,
+                          agente: item.agente,
+                          prompt: item.prompt,
+                          output: item.output,
+                        })
+                      }
+                      className="size-8 text-muted-foreground"
+                    >
+                      {salvoRecente === item.id ? (
+                        <Check className="size-3.5 text-success" />
+                      ) : (
+                        <BookMarked className="size-3.5" />
+                      )}
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
