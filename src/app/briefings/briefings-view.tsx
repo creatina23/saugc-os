@@ -4,9 +4,13 @@
 // Briefings — pedidos de conteúdo UGC REAIS (tabela briefings).
 // • CRUD completo: criar, editar (Abrir briefing), excluir, filtrar.
 // • Prazo é data de verdade (type=date) exibida "12 ago 2026".
-// • Campo "Detalhes do pedido" (notes): base pra IA gerar roteiro (Sprint 015).
+// • Sprint 015b: botão "✨ Gerar roteiro" — a IA lê este briefing
+//   (título, cliente, creator, tags, prazo e detalhes) e escreve o
+//   roteiro; editável na hora; 1 clique vira criativo no quadro
+//   Comerciais (tabela commercials, status Rascunho, formato Reels).
 // • Erros confessam "Detalhe técnico:" — nunca falha em silêncio.
-// • Sem banco configurado → modo demonstração (mock, selo visível).
+// • Sem banco configurado → modo demonstração (mock, selo visível);
+//   a IA gera mesmo assim — só o "salvar no quadro" pede o banco.
 // ------------------------------------------------------------------
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -15,13 +19,16 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  Clapperboard,
   Clock,
   FileText,
   Loader2,
   PenLine,
   Plus,
+  RefreshCw,
   Search,
   SearchX,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -49,10 +56,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { briefings, clients } from "@/lib/mock-data";
+import { iaService } from "@/lib/services/ia-service";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { BriefingStatus } from "@/types";
-
 
 // ---------- Regras fixas ----------
 
@@ -65,7 +72,6 @@ const statusBadge: Record<BriefingStatus, "warning" | "success" | "secondary"> =
 };
 
 const fieldLabel = "mb-1.5 block text-xs font-medium text-muted-foreground";
-
 
 // ---------- Tipos e ponte com o banco ----------
 
@@ -179,7 +185,6 @@ async function coletarTudo(): Promise<{
   };
 }
 
-
 // ---------- Componente ----------
 
 export function BriefingsView() {
@@ -196,7 +201,7 @@ export function BriefingsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tituloF, setTituloF] = useState("");
   const [clienteSel, setClienteSel] = useState("Sem cliente");
-  const [creatorF, setCreatorF] = useState("");
+  const [creatorF, setCriadorF] = useState("");
   const [statusSel, setStatusSel] = useState<BriefingStatus>("Rascunho");
   const [prazoF, setPrazoF] = useState("");
   const [etiquetasF, setEtiquetasF] = useState("");
@@ -204,6 +209,13 @@ export function BriefingsView() {
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [erroDialog, setErroDialog] = useState<string | null>(null);
+
+  // IA — briefing vira roteiro (Sprint 015b)
+  const [roteiro, setRoteiro] = useState("");
+  const [gerando, setGerando] = useState(false);
+  const [salvandoCriativo, setSalvandoCriativo] = useState(false);
+  const [sucessoIa, setSucessoIa] = useState(false);
+  const [erroIa, setErroIa] = useState<string | null>(null);
 
   // Carga inicial — setState SÓ em .then() (lei do ESLint)
   useEffect(() => {
@@ -264,16 +276,25 @@ export function BriefingsView() {
     },
   ];
 
+  function limparIa() {
+    setRoteiro("");
+    setGerando(false);
+    setSalvandoCriativo(false);
+    setSucessoIa(false);
+    setErroIa(null);
+  }
+
   function limparFormulario() {
     setEditingId(null);
     setTituloF("");
     setClienteSel("Sem cliente");
-    setCreatorF("");
+    setCriadorF("");
     setStatusSel("Rascunho");
     setPrazoF("");
     setEtiquetasF("");
     setNotasF("");
     setErroDialog(null);
+    limparIa();
   }
 
   function abrirNovo() {
@@ -285,12 +306,13 @@ export function BriefingsView() {
     setEditingId(b.id);
     setTituloF(b.titulo);
     setClienteSel(b.cliente || "Sem cliente");
-    setCreatorF(b.creator);
+    setCriadorF(b.creator);
     setStatusSel(b.status);
     setPrazoF(b.prazoIso);
     setEtiquetasF(b.etiquetas.join(", "));
     setNotasF(b.notas);
     setErroDialog(null);
+    limparIa();
     setDialogOpen(true);
   }
 
@@ -391,6 +413,102 @@ export function BriefingsView() {
     limparFormulario();
   }
 
+  // ---------- IA: briefing vira roteiro (Sprint 015b) ----------
+
+  function montarPromptRoteiro(): string {
+    const prazoLegivel = prazoF ? dataCurta(prazoF) : "";
+    const contexto = [
+      `- Título do briefing: ${tituloF.trim() || "(não informado)"}`,
+      clienteSel !== "Sem cliente" ? `- Cliente/marca: ${clienteSel}` : "",
+      creatorF.trim() ? `- Criador que vai gravar: ${creatorF.trim()}` : "",
+      etiquetasF.trim() ? `- Requisitos (tags): ${etiquetasF.trim()}` : "",
+      prazoLegivel ? `- Prazo de entrega: ${prazoLegivel}` : "",
+      notasF.trim() ? `- Detalhes do pedido: ${notasF.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return `Você é um roteirista sênior de anúncios UGC — vídeos curtos que parecem orgânicos, gravados por pessoas reais com o celular — especialista em Meta Ads. Você escreve sempre em português do Brasil, natural, como gente de verdade fala. Nada de texto corporativo.
+
+Com base no briefing abaixo, escreva o roteiro completo do criativo, pronto para o creator gravar.
+
+BRIEFING:
+${contexto}
+
+Entregue o roteiro EXATAMENTE nesta estrutura, sem introdução nem conclusão:
+
+🎯 CONCEITO: a ideia central do vídeo em 1 frase
+🎣 GANCHO (0–3s): a fala ou ação exata que para o scroll
+🎬 CENA A CENA: 3 a 6 cenas numeradas — cada uma com "O que aparece:" e "O que é dito:"
+💬 LEGENDA SUGERIDA: texto do post com 1 pergunta que puxe comentário
+📣 CTA: a chamada final para ação`;
+  }
+
+  async function handleGerarRoteiro() {
+    setErroIa(null);
+    setSucessoIa(false);
+    if (!tituloF.trim() && !notasF.trim()) {
+      setErroIa(
+        "Escreva pelo menos o título ou os detalhes do pedido — a IA precisa de contexto pra criar."
+      );
+      return;
+    }
+    setGerando(true);
+    const resposta = await iaService.gerarTexto(montarPromptRoteiro(), {
+      temperatura: 0.8,
+      maxTokens: 1500,
+    });
+    setGerando(false);
+    if (!resposta.ok || !resposta.texto.trim()) {
+      setErroIa(
+        `A IA não conseguiu escrever agora. Detalhe técnico: ${resposta.erro ?? "resposta vazia do modelo"}`
+      );
+      return;
+    }
+    setRoteiro(resposta.texto.trim());
+  }
+
+  async function handleSalvarCriativo() {
+    setErroIa(null);
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setErroIa(
+        "Modo demonstração: o roteiro sai de boa, mas pra salvar o criativo no quadro o banco precisa estar configurado."
+      );
+      return;
+    }
+    if (!roteiro.trim()) return;
+    setSalvandoCriativo(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSalvandoCriativo(false);
+      setErroIa("Sua sessão caiu. Entre de novo e repita o envio.");
+      return;
+    }
+
+    const { error } = await supabase.from("commercials").insert({
+      user_id: user.id,
+      title: tituloF.trim() || "Roteiro gerado por IA",
+      client_name: clienteSel === "Sem cliente" ? null : clienteSel,
+      creator: creatorF.trim() || null,
+      format: "Reels",
+      script: roteiro.trim(),
+      deadline: prazoF || null,
+      status: "Rascunho",
+      thumbnail_tone: "violet",
+    });
+    setSalvandoCriativo(false);
+    if (error) {
+      setErroIa(
+        `O roteiro tá pronto, mas não consegui gravar o criativo no quadro. Detalhe técnico: ${error.message}`
+      );
+      return;
+    }
+    setSucessoIa(true);
+  }
+
   // ---------- Carregamento ----------
   if (carregando) {
     return (
@@ -415,7 +533,7 @@ export function BriefingsView() {
       <PageHeader
         title="Briefings"
         badge={modoDemo ? "Modo demonstração" : undefined}
-        description="Briefings de conteúdo UGC padronizados."
+        description="Pedidos que dá origem aos anúncio e campanhas."
       >
         <Dialog
           open={dialogOpen}
@@ -473,12 +591,12 @@ export function BriefingsView() {
                 </div>
                 <div>
                   <label htmlFor="briefing-creator" className={fieldLabel}>
-                    Creator responsável
+                    Criador responsável
                   </label>
                   <Input
                     id="briefing-creator"
                     value={creatorF}
-                    onChange={(event) => setCreatorF(event.target.value)}
+                    onChange={(event) => setCriadorF(event.target.value)}
                     placeholder="@ana.cria"
                   />
                 </div>
@@ -536,6 +654,107 @@ export function BriefingsView() {
                   placeholder="O que o creator precisa saber: produto, ângulo, obrigatórios, o que evitar..."
                   rows={4}
                 />
+              </div>
+
+              {/* ---------- IA: briefing vira roteiro (Sprint 015b) ---------- */}
+              <div className="space-y-3 rounded-xl border border-ai/30 bg-ai/10 p-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-ai">
+                      <Sparkles className="size-4" /> Roteirista IA
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Lê este briefing e escreve o roteiro pronto pro creator
+                      gravar.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ai"
+                    size="sm"
+                    disabled={gerando || salvandoCriativo}
+                    onClick={() => void handleGerarRoteiro()}
+                  >
+                    {gerando ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Escrevendo
+                        roteiro…
+                      </>
+                    ) : roteiro ? (
+                      <>
+                        <RefreshCw /> Gerar outra versão
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles /> Gerar roteiro
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {roteiro && (
+                  <>
+                    <Textarea
+                      id="roteiro-ia"
+                      value={roteiro}
+                      onChange={(event) => {
+                        setRoteiro(event.target.value);
+                        setSucessoIa(false);
+                      }}
+                      rows={12}
+                      aria-label="Roteiro gerado pela IA — editável"
+                      className="bg-background/60 text-sm leading-relaxed"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Pode editar à vontade — o que estiver aqui é exatamente o
+                      que vai pro quadro.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={
+                          salvandoCriativo || gerando || !roteiro.trim() || sucessoIa
+                        }
+                        onClick={() => void handleSalvarCriativo()}
+                      >
+                        {salvandoCriativo ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Enviando
+                            pro quadro…
+                          </>
+                        ) : (
+                          <>
+                            <Clapperboard /> Salvar como criativo no quadro
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={salvandoCriativo || gerando}
+                        onClick={limparIa}
+                      >
+                        Descartar roteiro
+                      </Button>
+                    </div>
+                  </>
+                )}
+
+                {sucessoIa && (
+                  <p className="flex items-center gap-1.5 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
+                    <CheckCircle2 className="size-4 shrink-0" />
+                    Roteiro enviado! Abra a página Comerciais — o cartão novo tá
+                    na coluna Rascunho, formato Reels.
+                  </p>
+                )}
+
+                {erroIa && (
+                  <p role="alert" className="text-sm text-red-400">
+                    {erroIa}
+                  </p>
+                )}
               </div>
 
               {erroDialog && (

@@ -21,7 +21,7 @@ export const briefingsService = {
     briefings.filter((briefing) => briefing.client === clientName),
 
   /** Lista briefings de um creator (pelo nome). */
-  filterByCreator: (creator: string): Briefing[] =>
+  filterByCriador: (creator: string): Briefing[] =>
     briefings.filter((briefing) => briefing.creator === creator),
 
   /** Busca livre por título, cliente ou creator. */

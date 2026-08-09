@@ -402,7 +402,7 @@ export function CrmView() {
             {modoDemo && <Badge variant="outline">Modo demonstração</Badge>}
           </div>
           <p className="text-sm text-white/60">
-            Acompanhe cada negócio do funil, da qualificação ao contrato.
+            Acompanhe cada etapa do funil, da qualificação ao contrato.
           </p>
         </div>
         <Button onClick={() => setDialogOpen(true)}>

@@ -149,7 +149,7 @@ const MODELO_ROTULO = "Gemini Flash (auto)";
 const categoriasBiblioteca = [
   { valor: "UGC Script Templates" as LibraryCategory, rotulo: "Modelos de Roteiro UGC" },
   { valor: "Ad Copy Hooks" as LibraryCategory, rotulo: "Hooks de Copy" },
-  { valor: "Creator Guidelines" as LibraryCategory, rotulo: "Guias do Creator" },
+  { valor: "Criador Guidelines" as LibraryCategory, rotulo: "Guias do Criador" },
   { valor: "Strategy Guides" as LibraryCategory, rotulo: "Guias de Estratégia" },
 ];
 
@@ -431,8 +431,8 @@ export function IaStudioView() {
 
       <PageHeader
         title="IA Studio"
-        badge="IA real"
-        description="Seus agentes de IA — ligados no motor de verdade."
+        badge="Agentes exclusivos"
+        description="Agentes especializados para cada etapa do processo."
       >
         <Button
           variant="ai"
@@ -463,7 +463,7 @@ export function IaStudioView() {
       </div>
 
       <h2 className="mt-8 mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-        Providers de IA
+        Motor de IA
       </h2>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {providers.map((provider) => (

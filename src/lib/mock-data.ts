@@ -16,9 +16,9 @@ import type {
 } from "@/types";
 
 export const dashboardMetrics: DashboardMetric[] = [
-  { label: "MRR", value: "R$ 284.500", change: "+12,4% vs mês anterior", trend: "up" },
+  { label: "Receita do mês", value: "R$ 284.500", change: "+12,4% vs mês anterior", trend: "up" },
   { label: "Conversões", value: "1.842", change: "+8,2% esta semana", trend: "up" },
-  { label: "Campanhas UGC Ativas", value: "37", change: "5 novas em março", trend: "up" },
+  { label: "Campanhas ativas", value: "37", change: "5 novas em março", trend: "up" },
   { label: "ROI Médio", value: "4,2x", change: "+0,3x no trimestre", trend: "up" },
 ];
 
@@ -34,7 +34,7 @@ export const revenueTrajectory: RevenuePoint[] = [
 export const activityLog: ActivityLog[] = [
   { id: "a1", message: "Campanha TikTok 'Verão Glow' aprovada para Vitória Moda", timestamp: "Há 12 min", type: "campaign" },
   { id: "a2", message: "Novo deal R$ 48.000 movido para Negociação — TechFlow SaaS", timestamp: "Há 45 min", type: "deal" },
-  { id: "a3", message: "Cliente NutriPlus assinou tier Growth (MRR R$ 12.900)", timestamp: "Há 2 h", type: "client" },
+  { id: "a3", message: "Cliente NutriPlus assinou tier Growth (Receita do mês R$ 12.900)", timestamp: "Há 2 h", type: "client" },
   { id: "a4", message: "Mídia 'Hook_03_UGC.mp4' enviada para biblioteca compartilhada", timestamp: "Há 3 h", type: "asset" },
   { id: "a5", message: "Sincronização de integrações concluída", timestamp: "Há 5 h", type: "system" },
 ];
@@ -54,7 +54,7 @@ export const clients: Client[] = [
 ];
 
 export const campaigns: Campaign[] = [
-  { id: "cp1", name: "Verão Glow — UGC Creators", client: "Vitória Moda", platform: "TikTok", status: "Ativa", budget: 45000, spend: 31200, impressions: 2400000, ctr: 3.8, stage: "Otimização" },
+  { id: "cp1", name: "Verão Glow — UGC Criadors", client: "Vitória Moda", platform: "TikTok", status: "Ativa", budget: 45000, spend: 31200, impressions: 2400000, ctr: 3.8, stage: "Otimização" },
   { id: "cp2", name: "Retargeting Carrinho", client: "NutriPlus", platform: "Meta Ads", status: "Ativa", budget: 22000, spend: 18400, impressions: 890000, ctr: 2.1, stage: "Escala" },
   { id: "cp3", name: "Search Brand — TechFlow", client: "TechFlow SaaS", platform: "Google Ads", status: "Pausada", budget: 15000, spend: 9800, impressions: 420000, ctr: 4.5, stage: "Pausada" },
   { id: "cp4", name: "Lançamento EcoHome", client: "EcoHome BR", platform: "Meta Ads", status: "Rascunho", budget: 8000, spend: 0, impressions: 0, ctr: 0, stage: "Briefing" },
@@ -70,7 +70,7 @@ export const deals: Deal[] = [
   { id: "d1", title: "Pacote Enterprise Anual", company: "TechFlow SaaS", value: 480000, stage: "Negociação", owner: "Pedro Lima", probability: 75 },
   { id: "d2", title: "Campanhas Q2 — Growth", company: "NutriPlus", value: 96000, stage: "Proposta Enviada", owner: "Ana Souza", probability: 55 },
   { id: "d3", title: "Pilot UGC 90 dias", company: "EcoHome BR", value: 42000, stage: "Qualificação", owner: "Pedro Lima", probability: 30 },
-  { id: "d4", title: "Renovação + Upsell Creators", company: "Vitória Moda", value: 156000, stage: "Contrato Fechado", owner: "Ana Souza", probability: 100 },
+  { id: "d4", title: "Renovação + Upsell Criadors", company: "Vitória Moda", value: 156000, stage: "Contrato Fechado", owner: "Ana Souza", probability: 100 },
 ];
 
 export const assets: Asset[] = [
@@ -83,7 +83,7 @@ export const assets: Asset[] = [
 export const libraryItems: LibraryItem[] = [
   { id: "l1", title: "Script UGC — Problema / Solução / CTA", category: "UGC Script Templates", description: "Estrutura de 45s para produtos DTC com hook nos primeiros 3 segundos.", updatedAt: "15/03/2025", author: "Equipe AnuncIA" },
   { id: "l2", title: "50 Hooks de Alta Retenção", category: "Ad Copy Hooks", description: "Biblioteca de aberturas testadas em Meta e TikTok para nichos variados.", updatedAt: "10/03/2025", author: "Ana Souza" },
-  { id: "l3", title: "Guidelines para Creators — Marca Premium", category: "Creator Guidelines", description: "Tom de voz, restrições legais e checklist de entrega para campanhas enterprise.", updatedAt: "05/03/2025", author: "Pedro Lima" },
+  { id: "l3", title: "Guidelines para Criadors — Marca Premium", category: "Criador Guidelines", description: "Tom de voz, restrições legais e checklist de entrega para campanhas enterprise.", updatedAt: "05/03/2025", author: "Pedro Lima" },
   { id: "l4", title: "Playbook Escala UGC Q1", category: "Strategy Guides", description: "Framework de testes criativos, orçamento e métricas de decisão.", updatedAt: "01/03/2025", author: "Equipe AnuncIA" },
 ];
 

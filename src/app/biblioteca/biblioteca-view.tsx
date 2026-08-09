@@ -65,7 +65,7 @@ const categoryConfig: Record<
 > = {
   "UGC Script Templates": { icon: ScrollText, badge: "violet", tone: "bg-ai/15 text-ai" },
   "Ad Copy Hooks": { icon: Zap, badge: "warning", tone: "bg-warning/15 text-warning" },
-  "Creator Guidelines": { icon: BookOpen, badge: "info", tone: "bg-info/15 text-info" },
+  "Criador Guidelines": { icon: BookOpen, badge: "info", tone: "bg-info/15 text-info" },
   "Strategy Guides": { icon: Compass, badge: "success", tone: "bg-success/15 text-success" },
 };
 
@@ -73,7 +73,7 @@ const categoryConfig: Record<
 const categorias = [
   { valor: "UGC Script Templates" as LibraryCategory, rotulo: "Modelos de Roteiro UGC" },
   { valor: "Ad Copy Hooks" as LibraryCategory, rotulo: "Hooks de Copy" },
-  { valor: "Creator Guidelines" as LibraryCategory, rotulo: "Guias do Creator" },
+  { valor: "Criador Guidelines" as LibraryCategory, rotulo: "Guias do Criador" },
   { valor: "Strategy Guides" as LibraryCategory, rotulo: "Guias de Estratégia" },
 ];
 

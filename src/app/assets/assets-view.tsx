@@ -549,8 +549,8 @@ export function MídiasView() {
     <>
       <PageHeader
         title="Mídias"
-        badge={modoDemo ? "Modo demonstração" : "Nuvem privada"}
-        description="Biblioteca de arquivos de produção da agência — salva na sua nuvem privada."
+        badge={modoDemo ? "Modo demonstração" : "Arquivos seguros"}
+        description="Biblioteca de arquivos de produção."
       >
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>

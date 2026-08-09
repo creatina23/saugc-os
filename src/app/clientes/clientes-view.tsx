@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Loader2, Plus, Search, Users } from "lucide-react";
+import { Loader2, Plus, Search, Trash2, Users } from "lucide-react";
 import type { Client } from "@/types";
 import { clientesService } from "@/lib/services";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -157,6 +157,8 @@ export function ClientesView() {
   const [emailForm, setEmailForm] = useState("");
   const [telefone, setTelefone] = useState("");
   const [tier, setTier] = useState("Pro");
+  const [clienteParaExcluir, setClienteParaExcluir] = useState<Client | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const modoDemo = !supabase;
   const listaVisivel = modoDemo ? clientesService.list() : clientes;
@@ -170,7 +172,7 @@ export function ClientesView() {
       if (!ativo) return;
       if (resultado.erro) {
         toast("Não foi possível carregar os clientes", {
-          description: resultado.erro,
+          description: `Detalhe técnico: ${resultado.erro}`,
           type: "error",
         });
         setClientes([]);
@@ -219,7 +221,10 @@ export function ClientesView() {
     setSalvando(false);
 
     if (error) {
-      toast("Não foi possível cadastrar", { description: error.message, type: "error" });
+      toast("Não consegui cadastrar o cliente", {
+        description: `Detalhe técnico: ${error.message}`,
+        type: "error",
+      });
       return;
     }
 
@@ -240,6 +245,42 @@ export function ClientesView() {
     }
   }
 
+  function handlePedirExclusao(cliente: Client) {
+    if (modoDemo) {
+      toast("Modo demonstração", {
+        description:
+          "Os dados de exemplo não podem ser excluídos. Entre com sua conta real para gerenciar seus clientes.",
+        type: "error",
+      });
+      return;
+    }
+    setClienteParaExcluir(cliente);
+  }
+
+  async function handleExcluir() {
+    if (!clienteParaExcluir || !supabase) return;
+    const alvo = clienteParaExcluir;
+    setExcluindo(true);
+
+    const { error } = await supabase.from("clients").delete().eq("id", alvo.id);
+    setExcluindo(false);
+
+    if (error) {
+      toast("Não consegui excluir o cliente", {
+        description: `Detalhe técnico: ${error.message}`,
+        type: "error",
+      });
+      return;
+    }
+
+    setClientes((lista) => lista.filter((c) => c.id !== alvo.id));
+    setClienteParaExcluir(null);
+    toast("Cliente excluído 🗑️", {
+      description: `${alvo.name} saiu da sua operação pra sempre.`,
+      type: "success",
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -248,7 +289,7 @@ export function ClientesView() {
           <p className="text-sm text-muted-foreground">
             {modoDemo
               ? "Modo demonstração — configure o Supabase para gravar de verdade."
-              : "Dados reais, salvos no seu banco — recarregue à vontade. 💪"}
+              : "Os clientes da sua operação, num lugar só."}
           </p>
         </div>
 
@@ -263,7 +304,7 @@ export function ClientesView() {
             <DialogHeader>
               <DialogTitle>Cadastrar cliente</DialogTitle>
               <DialogDescription>
-                Entra com status &quot;Em onboarding&quot; e MRR R$ 0 — você ajusta depois.
+                Entra com status “Em onboarding” e Receita do mês R$ 0 — você ajusta depois.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSalvar} className="space-y-4">
@@ -352,6 +393,49 @@ export function ClientesView() {
         </Dialog>
       </div>
 
+      {/* Confirmação de exclusão — nada de apagar num clique só */}
+      <Dialog
+        open={clienteParaExcluir !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setClienteParaExcluir(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir cliente?</DialogTitle>
+            <DialogDescription>
+              Essa ação não tem volta: {clienteParaExcluir?.name} (
+              {clienteParaExcluir?.company}) sai do banco pra sempre. Os anúncios e briefings que
+              citam esse cliente continuam salvos.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleExcluir}
+              disabled={excluindo}
+              className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+            >
+              {excluindo ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Excluindo…
+                </>
+              ) : (
+                <>
+                  <Trash2 /> Sim, excluir pra sempre
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(31,41,55,0.7)] p-4">
           <p className="text-xs text-muted-foreground">Total de clientes</p>
@@ -362,7 +446,7 @@ export function ClientesView() {
           <p className="mt-1 text-2xl font-bold text-emerald-400">{totalAtivos}</p>
         </div>
         <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(31,41,55,0.7)] p-4">
-          <p className="text-xs text-muted-foreground">MRR somado</p>
+          <p className="text-xs text-muted-foreground">Receita do mês somado</p>
           <p className="mt-1 text-2xl font-bold text-blue-400">{moeda.format(mrrTotal)}</p>
         </div>
       </div>
@@ -410,7 +494,10 @@ export function ClientesView() {
                 <th className="hidden px-4 py-3 font-medium md:table-cell">E-mail</th>
                 <th className="hidden px-4 py-3 font-medium lg:table-cell">Plano</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">MRR</th>
+                <th className="px-4 py-3 text-right font-medium">Receita do mês</th>
+                <th className="px-2 py-3 text-right font-medium">
+                  <span className="sr-only">Ações</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -448,6 +535,17 @@ export function ClientesView() {
                     )}
                   >
                     {moeda.format(cliente.mrr)}
+                  </td>
+                  <td className="px-2 py-3 text-right">
+                    <button
+                      type="button"
+                      aria-label={`Excluir ${cliente.name}`}
+                      title={`Excluir ${cliente.name}`}
+                      onClick={() => handlePedirExclusao(cliente)}
+                      className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
                   </td>
                 </tr>
               ))}

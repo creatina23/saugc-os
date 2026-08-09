@@ -40,10 +40,12 @@ import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
+// Rótulos dos cartões — SEMPRE entre aspas (têm espaço/acento; sem aspas
+// o código quebra, aprendizado do Passo 015d).
 const kpiConfig: Record<string, { icon: LucideIcon; tone: string }> = {
-  MRR: { icon: Wallet, tone: "bg-primary/15 text-primary" },
+  "Receita do mês": { icon: Wallet, tone: "bg-primary/15 text-primary" },
   Conversões: { icon: Target, tone: "bg-success/15 text-success" },
-  "Campanhas UGC Ativas": { icon: Megaphone, tone: "bg-ai/15 text-ai" },
+  "Campanhas ativas": { icon: Megaphone, tone: "bg-ai/15 text-ai" },
   "ROI Médio": { icon: TrendingUp, tone: "bg-warning/15 text-warning" },
 };
 
@@ -110,19 +112,23 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Visão geral da operação da agência em tempo real."
+        description="Visão geral da sua operação, num relance."
       >
-        <Button variant="secondary">
-          <Plus /> Nova Campanha
+        <Button variant="secondary" asChild>
+          <Link href="/campanhas">
+            <Plus /> Nova Campanha
+          </Link>
         </Button>
-        <Button variant="ai">
-          <Sparkles /> Gerar com IA
+        <Button variant="ai" asChild>
+          <Link href="/ia-studio">
+            <Sparkles /> Gerar com IA
+          </Link>
         </Button>
       </PageHeader>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {dashboardMetrics.map((metric) => {
-          const config = kpiConfig[metric.label] ?? kpiConfig["MRR"];
+          const config = kpiConfig[metric.label] ?? kpiConfig["Receita do mês"];
           const TrendIcon = trendIcon[metric.trend];
           return (
             <Card key={metric.label} className="card-glow">
@@ -188,7 +194,7 @@ export default function DashboardPage() {
           <CardHeader className="flex-row items-start justify-between space-y-0">
             <div>
               <CardTitle>Trajetória de Receita</CardTitle>
-              <CardDescription>Últimos 6 meses de MRR</CardDescription>
+              <CardDescription>Últimos 6 meses de receita</CardDescription>
             </div>
             <div className="flex items-center gap-3">
               <Badge variant="success">+12,4%</Badge>
@@ -289,9 +295,9 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Pipeline Comercial</CardTitle>
+            <CardTitle>Negociações em andamento</CardTitle>
             <CardDescription>
-              {openDeals} deals ativos · {formatBRL(pipelineTotal)} em funil
+              {openDeals} negociações ativas · {formatBRL(pipelineTotal)} em funil
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">

@@ -75,7 +75,7 @@ export interface Asset {
 export type LibraryCategory =
   | "UGC Script Templates"
   | "Ad Copy Hooks"
-  | "Creator Guidelines"
+  | "Criador Guidelines"
   | "Strategy Guides";
 
 export interface LibraryItem {

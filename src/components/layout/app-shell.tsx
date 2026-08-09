@@ -19,7 +19,6 @@ import {
   Sparkles,
   Users,
   X,
-  Zap,
 } from "lucide-react";
 import { iconMap } from "@/lib/icon-map";
 import { navItems, notifications, workspaces } from "@/lib/mock-data";
@@ -61,6 +60,24 @@ function iniciaisDoUsuario(email: string | null): string {
   const primeira = partes[0]?.charAt(0) ?? "U";
   const segunda = partes[1]?.charAt(0) ?? partes[0]?.charAt(1) ?? "";
   return (primeira + segunda).toUpperCase();
+}
+
+// Marca AnuncIA — "A com corte de raio", raio grosso/centro (o MESMO
+// desenho do login; trocar um = trocar o outro)
+function LogoAnuncIA({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
+      <defs>
+        <clipPath id="anuncia-logo-corte">
+          <path d="M3 22 L11 2 H13 L21 22 H18.2 L12 8.2 L5.8 22 Z" />
+        </clipPath>
+      </defs>
+      <path d="M3 22 L11 2 H13 L21 22 H18.2 L12 8.2 L5.8 22 Z" fill="#FFFFFF" />
+      <g clipPath="url(#anuncia-logo-corte)">
+        <path d="M15.2 4.8 L7.9 14.5 H11.3 L8.6 21.8 L16.6 9.6 H13.2 Z" fill="#0B0D12" />
+      </g>
+    </svg>
+  );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -198,12 +215,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         >
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-ai shadow-lg">
-            <Zap className="size-4 text-white" />
+            <LogoAnuncIA className="size-5" />
           </div>
           {showFull && (
             <div className="min-w-0">
               <p className="truncate text-sm font-bold tracking-tight">AnuncIA</p>
-              <p className="truncate text-[11px] text-muted-foreground">UGC Ads Studio</p>
+              <p className="truncate text-[11px] text-muted-foreground">central de comando</p>
             </div>
           )}
         </div>

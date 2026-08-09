@@ -1,22 +1,32 @@
 "use client";
 
-// Login — AnuncIA
+// Login — AnuncIA (v2.0 · Passo 015e final)
 // ------------------------------------------------------------------
+// VITRINE minimalista, estilo Vercel/Linear: só a marca (A com raio em
+// destaque) + o cartão de vidro. Zero texto de apoio — o produto fala.
+// Cartão: vidro com backdrop blur, borda fina, radius 16, ambiente com
+// brilho violeta/indigo no padrão do app.
+// MOTOR 100% preservado: interruptor CADASTRO_ABERTO, traduzErro (com
+// "Invalid API key" em PT), signIn/signUp e redirecionos.
+// Nota: o SVG da marca está duplicado aqui e no app-shell por ora
+// (estacionamento: extrair pra componente compartilhado).
+//
 // 🔒 INTERRUPTOR DE CADASTRO (uma linha muda tudo):
 // CADASTRO_ABERTO = false → a tela só oferece "Entrar" (fase fechada:
 //   acesso por convite; o cadastro também está desligado no Supabase).
-// CADASTRO_ABERTO = true  → volta o botão "Criar conta" (fase pública,
-//   Sprint 013: religar junto com o toggle "Allow new users" no Supabase
-//   e com o "Confirm email").
+// CADASTRO_ABERTO = true  → volta o botão "Criar conta" (fase pública:
+//   religar junto com o toggle "Allow new users" no Supabase e com o
+//   "Confirm email").
+// ------------------------------------------------------------------
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-// 🔒 O interruptor. Só mude para true na fase pública (Sprint 013+).
+// 🔒 O interruptor. Só mude para true na fase pública.
 const CADASTRO_ABERTO = false;
 
 function traduzErro(msg: string): string {
@@ -26,7 +36,27 @@ function traduzErro(msg: string): string {
   if (msg.includes("rate limit")) return "Muitas tentativas. Aguarde um minuto e tente de novo.";
   if (msg.toLowerCase().includes("signups not allowed"))
     return "Cadastro fechado no momento. O acesso é por convite.";
+  if (msg.includes("Invalid API key"))
+    return "Chave do banco inválida neste ambiente. Confira o arquivo .env.local.";
   return "Não foi possível concluir. Tente novamente.";
+}
+
+// Marca AnuncIA — "A com corte de raio", raio grosso/centro (o MESMO
+// desenho da barra lateral; trocar um = trocar o outro)
+function LogoMarca() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden="true" fill="none">
+      <defs>
+        <clipPath id="anuncia-logo-corte-login">
+          <path d="M3 22 L11 2 H13 L21 22 H18.2 L12 8.2 L5.8 22 Z" />
+        </clipPath>
+      </defs>
+      <path d="M3 22 L11 2 H13 L21 22 H18.2 L12 8.2 L5.8 22 Z" fill="#FFFFFF" />
+      <g clipPath="url(#anuncia-logo-corte-login)">
+        <path d="M15.2 4.8 L7.9 14.5 H11.3 L8.6 21.8 L16.6 9.6 H13.2 Z" fill="#0B0D12" />
+      </g>
+    </svg>
+  );
 }
 
 export default function LoginPage() {
@@ -77,29 +107,28 @@ export default function LoginPage() {
 
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-background bg-grid">
+      {/* Brilhos de ambiente — violeta em cima, indigo embaixo */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(closest-side,rgba(139,92,246,0.18),transparent)]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-80 bg-[radial-gradient(closest-side,rgba(59,130,246,0.12),transparent)]" />
 
       <div className="relative flex min-h-full items-center justify-center px-4 py-10">
         <div className="w-full max-w-md">
-          {/* Logo + nome */}
+          {/* Marca — só símbolo e nome. Nada mais. */}
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[rgba(139,92,246,0.15)] ring-1 ring-[rgba(139,92,246,0.35)]">
-              <Sparkles className="h-7 w-7 text-violet-400" aria-hidden />
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-ai shadow-lg ring-1 ring-[rgba(139,92,246,0.35)]">
+              <LogoMarca />
             </div>
             <h1 className="text-3xl font-bold text-gradient">AnuncIA</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Sistema Operacional de Anúncios UGC com IA
-            </p>
           </div>
 
-          {/* Cartão de acesso */}
-          <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(31,41,55,0.7)] p-6 shadow-2xl backdrop-blur">
+          {/* Cartão de acesso — vidro: blur, borda fina, radius 16 */}
+          <div className="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[rgba(31,41,55,0.7)] p-6 shadow-2xl backdrop-blur-xl">
             <h2 className="text-lg font-semibold text-white">
               {modo === "entrar" ? "Entrar na sua conta" : "Criar sua conta"}
             </h2>
             <p className="mt-1 mb-6 text-sm text-muted-foreground">
               {modo === "entrar"
-                ? "Acesse seu painel de anúncios."
+                ? "Abra as portas do seu centro de comando."
                 : "Leva menos de 1 minuto."}
             </p>
 

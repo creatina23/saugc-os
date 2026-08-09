@@ -221,7 +221,7 @@ export function ComerciaisView() {
   const [tituloF, setTituloF] = useState("");
   const [clienteSel, setClienteSel] = useState("Sem cliente");
   const [formatoSel, setFormatoSel] = useState<string>("Reels");
-  const [creatorF, setCreatorF] = useState("");
+  const [creatorF, setCriadorF] = useState("");
   const [prazoF, setPrazoF] = useState("");
   const [statusSel, setStatusSel] = useState<CommercialStatus>("Rascunho");
   const [roteiroF, setRoteiroF] = useState("");
@@ -301,7 +301,7 @@ export function ComerciaisView() {
     setTituloF("");
     setClienteSel("Sem cliente");
     setFormatoSel("Reels");
-    setCreatorF("");
+    setCriadorF("");
     setPrazoF("");
     setStatusSel("Rascunho");
     setRoteiroF("");
@@ -318,7 +318,7 @@ export function ComerciaisView() {
     setTituloF(c.titulo);
     setClienteSel(c.cliente || "Sem cliente");
     setFormatoSel(c.formato);
-    setCreatorF(c.creator);
+    setCriadorF(c.creator);
     setPrazoF(c.prazoIso);
     setStatusSel(c.status);
     setRoteiroF(c.roteiro);
@@ -474,7 +474,7 @@ export function ComerciaisView() {
       <PageHeader
         title="Comerciais"
         badge={modoDemo ? "Modo demonstração" : undefined}
-        description="Anúncios UGC em produção pela equipe."
+        description="Anúncios  em produção pela equipe."
       >
         <Dialog
           open={dialogOpen}
@@ -551,12 +551,12 @@ export function ComerciaisView() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="commercial-creator" className={fieldLabel}>
-                    Creator responsável
+                    Criador responsável
                   </label>
                   <Input
                     id="commercial-creator"
                     value={creatorF}
-                    onChange={(event) => setCreatorF(event.target.value)}
+                    onChange={(event) => setCriadorF(event.target.value)}
                     placeholder="@ana.cria"
                   />
                 </div>

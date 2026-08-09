@@ -7,19 +7,29 @@
 //   ROAS) — casa pronta pro "Waze do tráfego" (v3.0).
 // • CTR calculado (cliques/impressões), ROAS calculado (receita/investido)
 //   com semáforo contra a meta.
+// • Sprint 015c: "🧠 Diretor de Tráfego IA" — lê os resultados da
+//   campanha e devolve o relatório do gestor sênior (diagnóstico +
+//   semáforo + as 3 ações de hoje). Editável; 1 clique guarda na
+//   Biblioteca (library_items, categoria Strategy Guides). É o Cérebro
+//   v1 do "Waze do tráfego". Sem banco: a análise gera mesmo assim —
+//   só o "salvar na Biblioteca" pede o banco configurado.
 // • Erros confessam "Detalhe técnico:" — nunca falha em silêncio.
 // • Sem banco configurado → modo demonstração (mock, selo visível).
 // ------------------------------------------------------------------
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
+  Brain,
   Building2,
+  CheckCircle2,
   ChevronRight,
   CreditCard,
   Eye,
+  LibraryBig,
   Loader2,
   Percent,
   Plus,
+  RefreshCw,
   Search,
   SearchX,
   Trash2,
@@ -47,12 +57,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { formatBRL, formatCompact } from "@/lib/format";
 import { campaigns, clients } from "@/lib/mock-data";
+import { iaService } from "@/lib/services/ia-service";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { CampaignPlatform, CampaignStatus } from "@/types";
-
 
 // ---------- Regras fixas ----------
 
@@ -73,7 +84,6 @@ const statusBadge: Record<CampaignStatus, "success" | "warning" | "secondary"> =
 };
 
 const fieldLabel = "mb-1.5 block text-xs font-medium text-muted-foreground";
-
 
 // ---------- Tipos e ponte com o banco ----------
 
@@ -192,8 +202,28 @@ async function coletarTudo(): Promise<{
   };
 }
 
-
 // ---------- Formatadores ----------
+
+const MESES = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez",
+];
+
+// "7 ago 2026" — carimbo do relatório
+function hojeCurto(): string {
+  const hoje = new Date();
+  return `${hoje.getDate()} ${MESES[hoje.getMonth()]} ${hoje.getFullYear()}`;
+}
 
 function formatarPct(valor: number): string {
   return `${valor.toFixed(1).replace(".", ",")}%`;
@@ -213,7 +243,6 @@ function toNumero(texto: string): number {
   const n = parseFloat(limpo);
   return Number.isFinite(n) ? n : 0;
 }
-
 
 // ---------- Componente ----------
 
@@ -246,7 +275,13 @@ export function CampanhasView() {
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [erroDialog, setErroDialog] = useState<string | null>(null);
-  const [erroAcao, setErroAcao] = useState<string | null>(null);
+
+  // IA — Diretor de Tráfego (Sprint 015c)
+  const [relatorio, setRelatorio] = useState("");
+  const [analisando, setAnalisando] = useState(false);
+  const [salvandoRelatorio, setSalvandoRelatorio] = useState(false);
+  const [sucessoIa, setSucessoIa] = useState(false);
+  const [erroIa, setErroIa] = useState<string | null>(null);
 
   // Carga inicial — setState SÓ em .then() (lei do ESLint)
   useEffect(() => {
@@ -300,6 +335,14 @@ export function CampanhasView() {
     { label: "CTR médio", value: formatarPct(ctrGeral), icon: Percent, tone: "bg-success/15 text-success" },
   ];
 
+  function limparIa() {
+    setRelatorio("");
+    setAnalisando(false);
+    setSalvandoRelatorio(false);
+    setSucessoIa(false);
+    setErroIa(null);
+  }
+
   function limparFormulario() {
     setEditingId(null);
     setNomeF("");
@@ -316,6 +359,7 @@ export function CampanhasView() {
     setConversoesF("");
     setReceitaF("");
     setErroDialog(null);
+    limparIa();
   }
 
   function abrirNova() {
@@ -339,6 +383,7 @@ export function CampanhasView() {
     setConversoesF(c.conversoes > 0 ? String(c.conversoes) : "");
     setReceitaF(c.receita > 0 ? String(c.receita) : "");
     setErroDialog(null);
+    limparIa();
     setDialogOpen(true);
   }
 
@@ -444,6 +489,131 @@ export function CampanhasView() {
     limparFormulario();
   }
 
+  // ---------- IA: Diretor de Tráfego (Sprint 015c) ----------
+
+  function montarPromptAnalise(): string {
+    const orcamento = toNumero(orcamentoF);
+    const investido = toNumero(investidoF);
+    const impressoes = Math.round(toNumero(impressoesF));
+    const cliques = Math.round(toNumero(cliquesF));
+    const conversoes = Math.round(toNumero(conversoesF));
+    const receita = toNumero(receitaF);
+    const roasMeta = roasMetaF.trim() === "" ? null : toNumero(roasMetaF);
+    const ctr = impressoes > 0 ? (cliques / impressoes) * 100 : 0;
+    const roas = investido > 0 ? receita / investido : 0;
+    const cpa = conversoes > 0 ? investido / conversoes : 0;
+    const usoOrcamento = orcamento > 0 ? (investido / orcamento) * 100 : 0;
+
+    const sobreACampanha = [
+      `- Nome: ${nomeF.trim() || "(sem nome)"}`,
+      clienteSel !== "Sem cliente" ? `- Cliente: ${clienteSel}` : "",
+      `- Plataforma: ${plataformaSel} · Status: ${statusSel} · Estágio: ${estagioSel}`,
+      objetivoF.trim() ? `- Objetivo: ${objetivoF.trim()}` : "",
+      orcamento > 0 ? `- Orçamento mensal: ${formatBRL(orcamento)}` : "- Orçamento mensal: não informado",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const numeros = [
+      `- Investido: ${formatBRL(investido)}${orcamento > 0 ? ` (${formatarPct(usoOrcamento)} do orçamento)` : ""}`,
+      `- Impressões: ${formatCompact(impressoes)}`,
+      `- Cliques: ${formatCompact(cliques)} · CTR ${formatarPct(ctr)}`,
+      `- Conversões: ${conversoes}${conversoes > 0 ? ` · custo por conversão ${formatBRL(cpa)}` : ""}`,
+      `- Receita gerada: ${formatBRL(receita)} · ROAS ${roas.toFixed(1).replace(".", ",")}×${
+        roasMeta !== null
+          ? ` contra a meta de ${String(roasMeta).replace(".", ",")}×`
+          : " (sem meta definida)"
+      }`,
+    ].join("\n");
+
+    return `Você é o Diretor de Tráfego: gestor de tráfego pago sênior (Meta Ads, Google Ads, TikTok Ads), com anos de estrada em e-commerce e infoprodutos, viciado em retorno sobre investimento. Você fala português do Brasil claro e direto, como se estivesse ao lado do cliente olhando o painel. Nada de jargão técnico sem explicação.
+
+Analise os números desta campanha e escreva o relatório do gestor sênior.
+
+CAMPANHA:
+${sobreACampanha}
+
+NÚMEROS ATÉ AGORA:
+${numeros}
+
+Referências pra sua leitura: em Meta Ads, CTR acima de 1% costuma ser saudável; abaixo de 0,5% sugere criativo fraco ou público errado. ROAS é julgado contra a meta; sem meta, abaixo de 1× é prejuízo. No estágio de Teste, volume baixo é normal — não trate poucos dados como desastre.
+
+Entregue EXATAMENTE nesta estrutura, sem introdução nem conclusão:
+
+🩺 DIAGNÓSTICO: o que esses números estão dizendo, em 3 a 5 frases claras
+🚦 SEMÁFORO: 🟢 saudável · 🟡 atenção · 🔴 crítico — e o porquê em 1 frase
+🎯 AS 3 AÇÕES DE HOJE: numeradas (1., 2., 3.), específicas e executáveis hoje — nada genérico
+⚠️ RISCO SE NADA MUDAR: 1 frase honesta`;
+  }
+
+  async function handleAnalisar() {
+    setErroIa(null);
+    setSucessoIa(false);
+    const investido = toNumero(investidoF);
+    const temAlgumResultado =
+      toNumero(impressoesF) > 0 ||
+      toNumero(cliquesF) > 0 ||
+      toNumero(conversoesF) > 0 ||
+      toNumero(receitaF) > 0;
+    if (investido <= 0 || !temAlgumResultado) {
+      setErroIa(
+        "Preencha o Investido e pelo menos mais um resultado (impressões, cliques, conversões ou receita) lá em cima — sem números o Diretor não tem o que analisar."
+      );
+      return;
+    }
+    setAnalisando(true);
+    const resposta = await iaService.gerarTexto(montarPromptAnalise(), {
+      temperatura: 0.4,
+      maxTokens: 1500,
+    });
+    setAnalisando(false);
+    if (!resposta.ok || !resposta.texto.trim()) {
+      setErroIa(
+        `O Diretor não conseguiu analisar agora. Detalhe técnico: ${resposta.erro ?? "resposta vazia do modelo"}`
+      );
+      return;
+    }
+    setRelatorio(resposta.texto.trim());
+  }
+
+  async function handleSalvarRelatorio() {
+    setErroIa(null);
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setErroIa(
+        "Modo demonstração: a análise sai de boa, mas pra guardar o relatório na Biblioteca o banco precisa estar configurado."
+      );
+      return;
+    }
+    if (!relatorio.trim()) return;
+    setSalvandoRelatorio(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSalvandoRelatorio(false);
+      setErroIa("Sua sessão caiu. Entre de novo e repita o salvamento.");
+      return;
+    }
+
+    const { error } = await supabase.from("library_items").insert({
+      user_id: user.id,
+      title: `Relatório — ${nomeF.trim() || "Campanha sem nome"} · ${hojeCurto()}`,
+      category: "Strategy Guides",
+      author: "Diretor de Tráfego IA",
+      description: `Análise da campanha ${nomeF.trim() || "(sem nome)"} (${plataformaSel}) gerada pelo Diretor de Tráfego IA em ${hojeCurto()}`,
+      content: relatorio.trim(),
+    });
+    setSalvandoRelatorio(false);
+    if (error) {
+      setErroIa(
+        `O relatório tá pronto, mas não consegui guardar na Biblioteca. Detalhe técnico: ${error.message}`
+      );
+      return;
+    }
+    setSucessoIa(true);
+  }
+
   // ---------- Carregamento ----------
   if (carregando) {
     return (
@@ -468,7 +638,7 @@ export function CampanhasView() {
       <PageHeader
         title="Campanhas"
         badge={modoDemo ? "Modo demonstração" : undefined}
-        description="Campanhas multicanal de performance da agência."
+        description="Central de performance de Campanhas. "
       >
         <Dialog
           open={dialogOpen}
@@ -502,7 +672,7 @@ export function CampanhasView() {
                   id="campaign-name"
                   value={nomeF}
                   onChange={(event) => setNomeF(event.target.value)}
-                  placeholder="Ex.: Verão Glow — UGC Creators"
+                  placeholder="Ex.: Verão Glow — UGC Criadors"
                 />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -626,7 +796,8 @@ export function CampanhasView() {
                 </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   Traga os números do Gerenciador de Anúncios — são eles que
-                  alimentam os indicadores do painel.
+                  alimentam os indicadores do painel e a análise do Diretor de
+                  Tráfego IA.
                 </p>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <div>
@@ -690,6 +861,106 @@ export function CampanhasView() {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* ---------- IA: Diretor de Tráfego (Sprint 015c) ---------- */}
+              <div className="space-y-3 rounded-xl border border-ai/30 bg-ai/10 p-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-ai">
+                      <Brain className="size-4" /> Diretor de Tráfego IA
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Lê os números acima e devolve o relatório do gestor
+                      sênior, com as 3 ações de hoje.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ai"
+                    size="sm"
+                    disabled={analisando || salvandoRelatorio}
+                    onClick={() => void handleAnalisar()}
+                  >
+                    {analisando ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Analisando
+                        números…
+                      </>
+                    ) : relatorio ? (
+                      <>
+                        <RefreshCw /> Analisar de novo
+                      </>
+                    ) : (
+                      <>
+                        <Brain /> Analisar com IA
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {relatorio && (
+                  <>
+                    <Textarea
+                      id="relatorio-ia"
+                      value={relatorio}
+                      onChange={(event) => {
+                        setRelatorio(event.target.value);
+                        setSucessoIa(false);
+                      }}
+                      rows={14}
+                      aria-label="Relatório do Diretor de Tráfego IA — editável"
+                      className="bg-background/60 text-sm leading-relaxed"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Pode editar à vontade — o que estiver aqui é exatamente o
+                      que vai pra Biblioteca.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={
+                          salvandoRelatorio || analisando || !relatorio.trim() || sucessoIa
+                        }
+                        onClick={() => void handleSalvarRelatorio()}
+                      >
+                        {salvandoRelatorio ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Guardando…
+                          </>
+                        ) : (
+                          <>
+                            <LibraryBig /> Salvar relatório na Biblioteca
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={salvandoRelatorio || analisando}
+                        onClick={limparIa}
+                      >
+                        Descartar relatório
+                      </Button>
+                    </div>
+                  </>
+                )}
+
+                {sucessoIa && (
+                  <p className="flex items-center gap-1.5 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
+                    <CheckCircle2 className="size-4 shrink-0" />
+                    Relatório guardado! Abra a Biblioteca — tá nos guias de
+                    estratégia, assinado pelo Diretor de Tráfego IA.
+                  </p>
+                )}
+
+                {erroIa && (
+                  <p role="alert" className="text-sm text-red-400">
+                    {erroIa}
+                  </p>
+                )}
               </div>
 
               {erroDialog && (
@@ -822,12 +1093,6 @@ export function CampanhasView() {
           </div>
         </CardContent>
       </Card>
-
-      {erroAcao && (
-        <p role="alert" className="mt-4 text-sm text-red-400">
-          {erroAcao}
-        </p>
-      )}
 
       {filtered.length > 0 ? (
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
