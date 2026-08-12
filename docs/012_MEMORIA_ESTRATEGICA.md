@@ -3,7 +3,7 @@
 > O cérebro externo do projeto. Toda decisão tomada em "reunião aberta" mora aqui.
 > **Regras do arquivo:** nunca deletar histórico (só arquivar em "Decisões antigas") · atualizado sempre que uma decisão nasce · o GPS (`011_CURRENT_MISSION`) diz O QUE fazer hoje; ESTE arquivo diz O QUE FOI DECIDIDO e POR QUÊ.
 
-**Última atualização:** 9 ago 2026 (fechamento da era v2.0 + reunião "Páginas & Motores")
+**Última atualização:** 12 ago 2026 (fechamento da Sprint 016 + reunião relâmpago "Sem internet & Agente no Zap")
 
 ---
 
@@ -11,12 +11,27 @@
 
 AnuncIA cresce em **ANDARES de um prédio só** (nunca produtos separados):
 
-- **Andar 1 — Fábrica criativa** (production OS): briefings → comerciais → mídias → IA que escreve. **= v2.0 ✅ NO AR (9 ago 2026)** · ganha em breve a **Sala de Páginas** (Sprint 017)
+- **Andar 1 — Fábrica criativa** (production OS): briefings → comerciais → mídias → IA que escreve. **= v2.0 ✅ NO AR (9 ago 2026) · VERDADE TOTAL desde 12 ago (Sprint 016)** · ganha em breve a **Sala de Páginas** (Sprint 017)
 - **Andar 2 — Inteligência de tráfego** ("Waze do tráfego"): vê as métricas, diz o que fazer em PT-BR de gente, maximiza vendas até pra quem não sabe tráfego. **= v3.0** (🧠 Cérebro MVP já vivo: Diretor de Tráfego nas Campanhas)
 
 ---
 
 ## 🏆 Decisões ativas (mais novas no topo)
+
+### 12 ago 2026 — 🏆 Sprint 016 "Verdade total + Celular" NO AR
+
+- **016a Dashboard real** ✅ (KPIs/canais/funil/atividades tudo calculado do banco; "Trajetória" cenográfica aposentada) · **016b Modo celular** ✅ (viewport oficial, régua 17px, kanban trilho-com-ímã, tabelas que rolam) · **016c Foto de perfil** ✅ (bucket `avatars`; aparece nos 3 pontos; USER_UPDATED reflete sozinho) · **016d Varredura** ✅.
+- **Sentenças da varredura:** seletor de workspace e sininho SAÍRAM DE CENA (voltam reais: workspace com os planos no lançamento · sininho como central de novidades lendo o banco, sprint futura) · selo "Operacional" agora honesto (🟢 real / 🟠 demo) · Mídias e IA Studio APROVADAS sem retoque. **Cenográficos no app: ZERO.**
+- **Porteiros trabalharam de verdade:** pegaram 2 bombas antes da vitrine — ① `AvatarUsuario` declarado dentro do AppShell (lei nova do ESLint `react-hooks/static-components`: componente dentro de componente é proibido — mora no módulo, recebe props) ② `crm-view.tsx` TRUNCADO na linha 384 por fissura de colagem da 016b (metade de baixo nunca existiu no disco) → metade inferior reconstruída pelo copiloto; desvio declarado: EmptyState/Tooltip saíram (API incerta às cegas), dica vira `title` nativo.
+- **Regra nova da cola longa:** depois de colar, conferir se a ÚLTIMA linha entregue existe no arquivo. O lint pegou o corte — mas a prova de fim-de-arquivo pega na hora.
+- 🐕 **Dogfooding aberto 12 → 26 ago:** Cliente Zero opera de verdade todo dia dentro do AnuncIA · atrito/bug = anota no diário de bordo e chama o copiloto, NUNCA conserta sozinho · 26 ago = reunião de balanço → abre a 017 com dados reais.
+
+### 12 ago 2026 — Reunião relâmpago "Sem internet & Agente no Zap" (TRAVADA)
+
+- **Offline real 100% = DESCARTADO PRA SEMPRE.** A nuvem É o produto: mesma verdade no PC e no celular, backup automático, multi-dispositivo. Sem internet o app degrada com dignidade (proxy blindado + modo demonstração) — já está no ar e é o bastante. (Resposta ao "por que localhost:3000 pede internet": casca roda local; cofre/login/IA/fotos moram na nuvem de propósito.)
+- **Agente de vendas no WhatsApp: SIM — 100% nuvem, R$ 0/mês, PC desligado.** Arquitetura travada: cliente chama → **Meta WhatsApp Cloud API** (oficial) → **webhook na Vercel** → **Gemini** (a Mesa de Motores da 017 empresta a cadeia de reserva) → **Supabase** guarda memória do lead → resposta volta pelo mesmo caminho. Custo: R$ 0/mês + chip pré-pago ~R$ 15 uma vez (ou número de teste grátis da Meta pra desenvolver).
+- **Pegadinhas mapeadas:** o número vira da API (não dá pra usar o WhatsApp pessoal — chip separado) · janela de 24h (responder quem chamou = grátis; disparar propaganda ativa = pago por mensagem) · handoff humano obrigatório ("chama humano" quando o lead esquenta) · **Evolution API / Baileys PROIBIDO** (fere os termos = risco de banimento do número + precisa de servidor ligado 24h — justamente o que queremos evitar).
+- **Justificativa de fila:** já é promessa visível no app (Configurações → Integrações: "WhatsApp Cloud API — Em breve") → construí-la DEPOIS do lançamento também cumpre a tela. **Candidata #1 a sprint pós-lançamento.**
 
 ### 9 ago 2026 — 🏁 v2.0 "100% UTILIZÁVEL" NO AR
 
@@ -32,7 +47,7 @@ AnuncIA cresce em **ANDARES de um prédio só** (nunca produtos separados):
 - **Campos do agente:** base (oferta+público puxados do briefing · botão WhatsApp/checkout · cor da marca · Pixel da Meta opcional) + acréscimos aprovados pra escolha na 017: objetivo da página (⭐ vender direto/levar pro WhatsApp/captar contato) · preço âncora+parcela (⭐ BR decide por parcela) · garantia (selo automático) · depoimentos · urgência c/ contador · VSL YouTube · tom de voz (4 botões). Filosofia: cada pergunta a menos = um cliente a mais terminando.
 - **Monetização:** cota de páginas por plano (Starter/Pro/Enterprise) = alavanca de upgrade.
 - **Mesa de Motores (Sprint 017):** cadeia de reserva Gemini → GitHub Models ("GPT-4o grátis", 50–150 req/dia) → Groq (~14,4 mil req/dia) → OpenRouter (~28 modelos free). **Fato 2026: Claude e OpenAI direto NÃO têm cota grátis de API** (só ~US$5 de trial) — sem orçamento pago, ficam fora.
-- **Fila travada na mesa:** push v2.0 ✅ → Sprint 016 (Verdade total + Celular + foto) → dogfooding 2 semanas → Sprint 017 → lançamento.
+- **Fila travada na mesa:** push v2.0 ✅ → Sprint 016 ✅ (12 ago) → dogfooding 2 semanas (EM CURSO) → Sprint 017 → lançamento.
 
 ### 5 ago 2026 — Tráfego inteligente: SIM, dentro do AnuncIA, faseado
 
@@ -66,7 +81,7 @@ Oferta full travada (R$ 9.997 ou 12× R$ 997 + R$ 497/mês) · Cliente-Fundador 
 
 ## 📍 Ponto de retomada (atualizado sempre que pausamos)
 
-**9 ago 2026** — 🏁 Era v2.0 FECHADA (app no ar + papelada assinada). Próxima ação natural: abrir a **Sprint 016 — "Verdade total + Celular"** com "les go" (escopo: Dashboard com agregação real · modo celular · foto de perfil · varredura de cenográficos). Bônus pendente: dono mandar print da tela no celular.
+**12 ago 2026** — 🏆 Sprint 016 NO AR + papelada fechada (CHANGELOG v1.7 / GPS v2.7 / esta Memória). **AGORA É DOGFOODING**: até 26 ago, a operação real roda dentro do AnuncIA (Cliente Zero). Ciclo diário: usar de verdade → anotar atrito no diário de bordo → chamar o copiloto quando doer. Dia 26 ago: reunião de balanço → "les go" na Sprint 017 "PODER TOTAL".
 
 ---
 
@@ -83,6 +98,10 @@ Oferta full travada (R$ 9.997 ou 12× R$ 997 + R$ 497/mês) · Cliente-Fundador 
 9. Coluna fóssil `results` em `campaigns` (morta, sem dono — apagar em qualquer blindagem futura)
 10. Conceito de logo "Saturno" (anel) — variante mostrada, não escolhida; vidro gelo venceu
 11. Claude/OpenAI direto na Mesa de Motores — só se um dia houver orçamento pago (sem tier grátis de API)
+12. **Agente de vendas WhatsApp — candidata #1 pós-lançamento** (arquitetura travada na decisão de 12 ago acima)
+13. **Offline real 100% — descartado definitivamente** (a nuvem É o produto; degradação digna já no ar cobre o caso)
+14. Faxina do warning `Badge` ocioso em `dashboard-view.tsx` (resolve em qualquer toque futuro no arquivo)
+15. Retorno REAL do sininho (central de novidades lendo clientes/campanhas/negócios recentes) e do seletor de workspace (quando existirem planos de verdade) — pós-lançamento
 
 ---
 

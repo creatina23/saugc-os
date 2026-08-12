@@ -2408,6 +2408,40 @@ Sempre:
 
 SAUGC OS — Histórico de Alterações
 
+## [v1.7] — 12 ago 2026 — Sprint 016 FINAL: 🏆 "Verdade total + Celular" NO AR
+
+### Adicionado
+- **Dashboard 100% real (016a)**: `src/app/dashboard-view.tsx` novo — KPIs calculados do banco (Receita do mês = soma do MRR dos clientes · Conversões = soma das campanhas · Campanhas ativas = contagem real · ROI médio = receita ÷ investido, com "—" quando não há investido) · "Receita do mês por cliente" (barras reais, top 6) aposentando a "Trajetória de Receita" cenográfica · canais agrupados por plataforma real, cor por rede · funil real (negócios fora de "Contrato Fechado" + ticket médio) · atividades recentes = clientes + campanhas recém-criados do banco · `page.tsx` virou casca magra · modo demonstração com banner warning visível
+- **Modo celular (016b)**: `viewport` oficial do Next no layout (device-width, viewportFit cover, themeColor #0B0D12) · régua tipográfica 17px em telas ≤640px (ajuste fino num lugar só, no globals.css) · Kanban do CRM vira trilho com ímã (snap) no celular e volta ao grid a partir do tablet · tabela de Clientes rola pro lado sem espremer (min-w 600px)
+- **Foto de perfil real (016c)**: bucket `avatars` no Storage (leitura pública, escrita só pelo dono) · upload em Configurações → Perfil (PNG/JPG/WebP até 2 MB, upsert, `?v=` anti-cache) · `avatar_url` gravado no crachá do usuário · aparece nos 3 pontos (lateral aberta, lateral recolhida, topo) · troca sozinha em todas as telas via USER_UPDATED
+
+### Corrigido
+- **Varredura de cenográficos (016d)**: seletor de workspace "Plano Pro/Enterprise" REMOVIDO (não existia plano por trás — volta real no lançamento) · sininho de notificações inventadas REMOVIDO (volta real como central de novidades lendo o banco, em sprint futura) · selo "Operacional" agora honesto (🟢 pulsa só com sessão real / 🟠 "Modo demonstração" sem banco)
+- **CRM reerguido**: `crm-view.tsx` estava truncado na linha 384 no disco (fissura de colagem da 016b — a metade de baixo nunca existiu) → metade inferior reconstruída (fim do esqueleto + kanban completo + modal Novo Negócio) · imports `EmptyState`/`Tooltip` retirados (API não confirmada na reconstrução às cegas) — dica dos KPIs virou `title` nativo e o estado vazio virou Card simples
+- `AvatarUsuario` declarado FORA do AppShell — lei nova do ESLint (`react-hooks/static-components`): componente criado dentro de outro renasce a cada render e perde estado
+- Metadata do app sem "UGC" (Lei da Língua)
+
+### Lições operacionais
+- Componente NUNCA dentro de componente (`react-hooks/static-components`) — declarar no nível do módulo e passar dados por props (caso AvatarUsuario)
+- Cola longa pode chegar CORTADA: depois de colar, conferir se a ÚLTIMA linha entregue existe no arquivo (o lint pega, mas a prova de fim-de-arquivo pega na hora) — caso crm-view/384
+- `Remove-Item .next` respondendo "caminho não existe" = galpão já estava limpo, não é erro
+- Warning amarelo isolado passa nos porteiros — faxina do `Badge` ocioso (dashboard-view) agendada
+
+### Marcos
+- 🏁 **Sprint 016 NO AR (12 ago 2026)** — verdade total na tela: **zero controle cenográfico** no app
+- 🐕 **Dogfooding aberto**: Cliente Zero rodando a operação real por 2 semanas (12 → 26 ago)
+- Reunião relâmpago (12 ago): offline real 100% descartado pra sempre (a nuvem É o produto; degradação digna já no ar) · Agente de vendas WhatsApp aprovado como candidata #1 pós-lançamento (Meta Cloud API + webhook Vercel + Gemini + Supabase, R$ 0/mês + chip; Evolution/Baileys proibido) — decisões completas na Memória
+
+### Varredura 016d — tabela de sentenças
+| Suspeito | Sentença |
+|---|---|
+| Seletor de workspace "Plano Pro" | ✂️ saiu de cena (volta real com os planos, no lançamento) |
+| Sininho de notificações fake | ✂️ saiu de cena (volta real lendo o banco, sprint futura) |
+| Selo "Operacional" que mentia | 🔧 honesto agora (🟢 real / 🟠 demo) |
+| Mídias "Arquivos seguros" | 🏆 verdade provada (bucket privado + links assinados vencendo) |
+| IA Studio "Agentes / Motor de IA" | 🏆 verdade provada · 📌 pra 017: card "Custo de IA hoje R$ 0" é fixo (ligar medição real ou aposentar) · conferir o "35+ modelos" do OpenRouter ao conectar de verdade |
+
+
 
 ## [v1.6] — 9 ago 2026 — Sprint 015 FINAL: 🏁 v2.0 "100% UTILIZÁVEL" NO AR
 
@@ -2850,24 +2884,30 @@ Implementar
 
 # 🧭 GPS — MISSÃO ATUAL (v2.6)
 
+# 🧭 GPS — MISSÃO ATUAL (v2.7)
+
 > Memória viva do projeto. Este arquivo é SUBSTITUÍDO POR INTEIRO a cada fechamento de sprint.
-> Última atualização: 9 ago 2026 — fechamento da Sprint 015 FINAL.
+> Última atualização: 12 ago 2026 — fechamento da Sprint 016 "Verdade total + Celular".
 
 ## 1. ONDE ESTAMOS
 
-- Produto: **AnuncIA v2.0 — "100% UTILIZÁVEL"** · 🏁 NO AR desde 9 ago 2026
-- Sprint ativa: **nenhuma** (Sprint 015 ✅ FECHADA em 9 ago 2026)
-- Próxima: **Sprint 016 — "Verdade total + Celular"** → Dashboard com agregação real dos dados · modo celular (tipografia maior, tabelas virando cartões) · foto de perfil (Storage `avatars`) · varredura final de cenográficos (notificações, seletor de workspace, textos restantes de Mídias/IA Studio)
+- Produto: **AnuncIA v2.0 — "100% UTILIZÁVEL" + VERDADE TOTAL** · 🏁 NO AR (v2.0 em 9 ago · Sprint 016 em 12 ago 2026)
+- Sprint ativa: **nenhuma** (Sprint 016 ✅ FECHADA em 12 ago 2026)
+- 🐕 **DOGFOODING ABERTO: 12 → 26 ago** — Cliente Zero operando de verdade todo dia dentro do AnuncIA (regras na seção 7)
+- Próxima: **Sprint 017 — "PODER TOTAL"** (Mesa de Motores + Arquiteto de Páginas Fase A) — abre com "les go" só DEPOIS do dogfooding
 
 ## 2. ESTADO DO PRODUTO (o que já é real)
 
 - Login premium minimalista ✅ + `src/proxy.ts` porteiro BLINDADO (Supabase fora do ar = modo degradado, nunca tela 500) · Cadastro público TRANCADO (`CADASTRO_ABERTO = false`)
-- Banco por usuário: 13 tabelas com `user_id` + RLS "dono total" · Storage: bucket `midias` privado
-- Clientes ✅ (agora com **Excluir**: lixeira → confirmação "não tem volta" → delete real) · CRM ✅ · IA Studio ✅ · Mídias ✅ · Campanhas ✅ · Briefings ✅ · Comerciais ✅ · Biblioteca ✅ · Prompts ✅ · **Configurações ✅ (015a)**
-- **IA tecida no fluxo (015b/015c):** ✨ Roteirista IA no Briefing (lê o pedido real → roteiro editável → "Salvar como criativo no quadro" grava em `commercials`) · 🧠 Diretor de Tráfego IA nas Campanhas (lê métricas do formulário → relatório 🩺/🚦/🎯 → "Salvar relatório" grava em `library_items` com autor "Diretor de Tráfego IA")
-- **Marca oficial "vidro gelo"** 🧊: A 3D + olho de IA, degradê azul→violeta, em arquivo: `public/logo-anuncia.png` (lateral 47px · login 78px) + `src/app/icon.png` (aba do navegador, convenção Next) · SVG "A-com-raio" aposentado · conceito "Saturno" estacionado
-- **Voz da marca travada:** barra lateral "central de comando" · login minimalista (só marca + cartão) · subtítulo "Abra as portas do seu centro de comando."
-- Cenográficos conscientes (estacionados com dono): **números do Dashboard** (agregação real = prioridade 1 da Sprint 016) · seletor de workspace (Plano Pro/Enterprise) · sininho de notificações
+- Banco por usuário: 13 tabelas com `user_id` + RLS "dono total" · Storage: buckets `midias` (privado) + `avatars` (leitura pública, escrita do dono — Sprint 016c)
+- Clientes ✅ (com **Excluir**: lixeira → confirmação "não tem volta" → delete real) · CRM ✅ (kanban reerguido na 016d) · IA Studio ✅ · Mídias ✅ · Campanhas ✅ · Briefings ✅ · Comerciais ✅ · Biblioteca ✅ · Prompts ✅ · Configurações ✅
+- **Dashboard 100% real (016a)**: KPIs calculados do banco (Receita do mês, Conversões, Campanhas ativas, ROI médio) · receita por cliente em barras reais · canais por plataforma · funil real · atividades recentes do banco
+- **Modo celular (016b)**: viewport oficial + régua 17px ≤640px · kanban vira trilho com ímã · tabelas rolam pro lado
+- **Foto de perfil real (016c)**: upload em Configurações → Perfil → Storage `avatars` → `avatar_url` no crachá · reflete nos 3 pontos do app-shell via USER_UPDATED
+- **Verdade total (016d)**: workspace-selo e sininho cenográficos REMOVIDOS · selo de status honesto (🟢 Operacional com sessão real / 🟠 Modo demonstração) · Mídias e IA Studio auditadas e aprovadas · **cenográficos no app: ZERO** (tabela de sentenças no CHANGELOG v1.7)
+- **IA tecida no fluxo (015b/015c):** ✨ Roteirista IA no Briefing (→ grava em `commercials`) · 🧠 Diretor de Tráfego IA nas Campanhas (→ grava relatório em `library_items`)
+- **Marca oficial "vidro gelo"** 🧊: `public/logo-anuncia.png` (lateral 47px · login 78px) + `src/app/icon.png` · SVG "A-com-raio" aposentado · conceito "Saturno" estacionado
+- **Voz da marca travada:** barra lateral "central de comando" · login minimalista · subtítulo "Abra as portas do seu centro de comando."
 - IA REAL no ar: motor `/api/ia` + `iaService` + Laboratório `/laboratorio` · Modelo: `gemini-3.6-flash` (autodescoberto)
 - Docs vivos: `010_CHANGELOG` · `011_CURRENT_MISSION` (este) · `012_MEMORIA_ESTRATEGICA`
 
@@ -2876,20 +2916,23 @@ Implementar
 - Repo: `github.com/creatina23/saugc-os` (main) · Local: `C:\Projetos\BKp\saugc-os`
 - Produção: `anuncia-three.vercel.app` (push no main = deploy ~2 min; env var nova só vale no próximo deploy)
 - Supabase: projeto `ugaessoebkqfqezmuwhc` · sa-east-1 · Free (pingar 1×/semana)
-- **⚠️ Duas contas conhecidas no Supabase:** o app "mora" na conta PRINCIPAL (a que tem os 4 clientes). Confundiu qual está logada? Configurações → Perfil → olha o e-mail. Limpeza da conta secundária = estacionada.
+- **⚠️ Duas contas conhecidas no Supabase** (bug social, não técnico): o app "mora" na conta PRINCIPAL (a que tem os 4 clientes). Confundiu qual está logada? Configurações → Perfil → olha o e-mail. Limpeza da conta secundária = estacionada.
 - Env (`.env.local` + Vercel): `NEXT_PUBLIC_SUPABASE_URL` (SEM `/rest/v1`) · `NEXT_PUBLIC_SUPABASE_ANON_KEY` · `GEMINI_API_KEY` (**server-side: JAMAIS em NEXT_PUBLIC_, chat ou código**)
 - Regra de ouro de segredos: publishable pode circular · segredos = só `.env.local`/Vercel · **segredo no chat = revogar sem discutir**
+- Sem internet: app abre e degrada com dignidade (modo demonstração / proxy blindado) — offline real 100% = descartado pra sempre (a nuvem É o produto)
+- Mapa das rotas (prova de 12 ago, `Get-ChildItem src\app -Recurse -File -Name`): raiz (dashboard-view novo) · assets(=Mídias) · biblioteca · briefings · campanhas · clientes · comerciais · configuracoes · crm · ia-studio · laboratorio · login · prompts · api\ia\route.ts
 
-## 4. ARQUITETURA DE DADOS REAIS (padrão provado 9×)
+## 4. ARQUITETURA DE DADOS REAIS (padrão provado 9× + foto)
 
 - `getSupabaseBrowser()` null → **modo demonstração** sem quebrar (selo visível)
 - Carga: `coletarX()` module-level + `.then()` no `useEffect` com `let ativo` — setState SÓ em `.then()`
 - snake (banco) → camel (tela); `numeric` chega string → helper `numero()`
-- Insert `.select().single()` → prepend · update → troca no lugar · **delete: confirmação "não tem volta" → delete real → some da lista (provado em Clientes, 015)**
+- Insert `.select().single()` → prepend · update → troca no lugar · **delete: confirmação "não tem volta" → delete real → some da lista**
 - Kanban otimista com setas: muda na tela → grava → erro = desfaz + confessa
 - **Erros confessam "Detalhe técnico:"** — nunca falha silenciosa
 - Blindagem SQL padrão: create if not exists → add column if not exists → **drops not null dos opcionais** → RLS + policy conditionada → **grant authenticated** → `notify pgrst, 'reload schema'` → select de prova
 - Biblioteca = baú da IA: IA Studio e Diretor de Tráfego gravam em `library_items` com categoria sugerida pelo agente
+- **Padrão foto de perfil (016c)**: validar ext/tamanho → `storage.from("avatars").upload(userId/arquivo, { upsert: true })` → `getPublicUrl` + `?v=Date.now()` → `auth.updateUser({ data: { avatar_url } })` → `onAuthStateChange(USER_UPDATED)` reflete sozinho no shell
 
 ## 5. ARQUITETURA DE IA (provada na Sprint 011, tecida na 015)
 
@@ -2899,6 +2942,7 @@ Implementar
 - Agentes = persona (prefixo) + tarefa + "pt-BR direto, sem cercas de código"
 - **IA tecida lê o FORMULÁRIO real** (briefing/campanha) e grava o resultado no banco (commercials/library_items) — IA produtiva, não conversacional
 - **Plano Sprint 017 — Mesa de Motores (cadeia de reserva):** Gemini (titular) → GitHub Models (GPT-4o grátis) → Groq (velocidade) → OpenRouter (~28 modelos free) · chaves novas server-side · Claude/OpenAI direto NÃO têm tier grátis de API (fato 2026)
+- **📌 Dívidas da auditoria 016d pra 017:** card "Custo de IA hoje R$ 0" do IA Studio é FIXO — ligar medição real ou aposentar quando a Mesa entrar · conferir o texto "35+ modelos" do OpenRouter na hora de conectar de verdade
 
 ## 6. LEIS VIGENTES
 
@@ -2911,6 +2955,7 @@ Implementar
 ### 📜 Regra de Ouro v2 (9 ago 2026 — reescrita após o bug do "U" de UGC)
 
 - Entrega de código = **sempre arquivo COMPLETO** ("apague tudo e cole" + 📋 prova Ctrl+F)
+- **+ prova de fim-de-arquivo em cola longa** (a última linha entregue existe no disco?) — cicatriz do crm-view truncado na 384 (12 ago)
 - Troca via Ctrl+Shift+F = **SÓ TEXTO PURO de tela** ("0 resultados = pula e anota" · node_modules fora)
 - NUNCA trocar trecho de código por busca · NUNCA rodar "UGC" sozinho no Replace All (é chave do banco: "UGC Script Templates")
 - Rótulo que também é CHAVE de código passa por mim (chave com espaço precisa de aspas; case-sensível)
@@ -2931,17 +2976,16 @@ Implementar
 
 - Venda primeiro · Vendeu → construiu · 50% entrada · Escopo fechado
 - Oferta: R$ 9.997 ou 12× R$ 997 + R$ 497/mês · Cliente-Fundador = estacionada
-- Ordem: terminar ✅ → **usar todo dia** → ensinar e vender
+- Ordem: terminar ✅ → **usar todo dia (🐕 EM CURSO)** → ensinar e vender
 
-## 7. PRÓXIMOS MOVIMENTOS (fila travada em reunião de 9 ago 2026)
+## 7. PRÓXIMOS MOVIMENTOS
 
-1. **Sprint 016 — "Verdade total + Celular"** (aguardando "les go"): Dashboard real (agregação) · celular · foto de perfil · varredura de cenográficos
-2. **Dogfooding 2 semanas** — operação real rodando dentro do AnuncIA (Cliente Zero)
-3. **Sprint 017 — "PODER TOTAL"**: Mesa de Motores (cadeia de reserva de IAs grátis) + **Arquiteto de Páginas Fase A** (entregável DUPLO travado: Prompt Mestre + `index.html` pronto · fase "publicar" APOSENTADA → Guia de Subida Hostinger/Hostgator/LocalWeb em 3 passos · campos: objetivo, preço âncora+parcela, garantia, depoimentos, urgência, VSL, tom de voz · cota de páginas por plano) — antes do lançamento: demo matadora "anúncio + página em 5 minutos"
-4. **Lançamento** — oferta sai da gaveta (R$ 9.997 / 12× 997 + 497/mês)
-5. **v3.0 "Waze do tráfego"**: 🧠 Cérebro (✅ MVP já vivo como Diretor de Tráfego) → 👁️ Olho (APIs) → ✋ Mão (com confirmação)
-- Pós-v2.0 (⭐): Portal do Cliente · Link público de Briefing · Relatório 1-clique
-- Pendências pequenas: `iaService` no barrel · cravar NODE_OPTIONS no "build" do package.json · ping semanal Supabase · coluna fóssil `results` (campaigns) · domínio `useanuncia.com.br` (livre em 30/07, compra adiada)
+0. 🐕 **DOGFOODING (12 → 26 ago) — EM CURSO.** Regras: operação real roda AQUI dentro (clientes, campanhas, CRM, briefings, IA de verdade) · atrito/bug/estranheza = anota no **diário de bordo** (qualquer arquivo/papel) e me chama — nunca conserta sozinho · dia 26 ago = reunião de balanço → decide a 017 com dados reais
+1. **Sprint 017 — "PODER TOTAL"**: Mesa de Motores (cadeia de reserva de IAs grátis + dívidas 📌 da seção 5) + **Arquiteto de Páginas Fase A** (entregável DUPLO travado: Prompt Mestre + `index.html` pronto · fase "publicar" APOSENTADA → Guia de Subida Hostinger/Hostgator/LocalWeb em 3 passos · campos: objetivo, preço âncora+parcela, garantia, depoimentos, urgência, VSL, tom de voz · cota de páginas por plano) — antes do lançamento: demo matadora "anúncio + página em 5 minutos"
+2. **Lançamento** — oferta sai da gaveta (R$ 9.997 / 12× 997 + 497/mês)
+3. **v3.0 "Waze do tráfego"**: 🧠 Cérebro (✅ MVP já vivo como Diretor de Tráfego) → 👁️ Olho (APIs) → ✋ Mão (com confirmação)
+- Pós-lançamento (⭐): **Agente de vendas WhatsApp (candidata #1 — arquitetura travada em 12 ago: Meta Cloud API + webhook Vercel + Gemini + Supabase, R$ 0/mês + chip; Evolution/Baileys proibido)** · Portal do Cliente · Link público de Briefing · Relatório 1-clique · retorno real do sininho (central de novidades lendo o banco) e do seletor de workspace (quando houver planos)
+- Pendências pequenas: `iaService` no barrel · cravar NODE_OPTIONS no "build" do package.json · ping semanal Supabase · coluna fóssil `results` (campaigns) · domínio `useanuncia.com.br` (livre em 30/07, compra adiada) · faxina do warning `Badge` ocioso (dashboard-view)
 - Paralelo diário: **caça comercial 30 min/dia**
 
 ## 8. LIÇÕES OPERACIONAIS (cicatrizes que viraram regra)
@@ -2968,6 +3012,10 @@ Implementar
 20. **Chave com espaço precisa de aspas + case-sensível** (caso kpiConfig "Receita do mês" quebrou o build) (9 ago)
 21. **Aspas retas em texto JSX = erro de lint** (`react/no-unescaped-entities`) → usar aspas tipográficas “ ” (9 ago)
 22. **Imagem quebrada = caminho/nome errado**, nunca formato (clássico `logo.png.png` do Windows) — raio-X: `Test-Path` / `Get-ChildItem -Name` (9 ago)
+23. **Componente NUNCA dentro de componente** (`react-hooks/static-components`) → declarar no nível do módulo, dados por props (caso AvatarUsuario, 12 ago)
+24. **Cola longa pode chegar CORTADA** → prova de fim-de-arquivo: a última linha entregue existe no disco? (caso crm-view truncado na linha 384, 12 ago)
+25. **Reconstrução às cegas: nunca adivinhar API de componente** (EmptyState/Tooltip) → usar primitivos conhecidos e declarar o desvio (12 ago)
+26. `Remove-Item .next` "caminho não existe" = galpão já limpo, não é erro (12 ago)
 
 ## 9. GATILHOS DO DONO
 
@@ -2975,7 +3023,11 @@ Implementar
 - "reunião aberta" / "começar reunião" = pausa código → Modo Soberano · "re" = volta com recapitulação de 3 linhas
 
 
+
 ---
+
+
+
 012_PROMPT_MASTER.md
 SAUGC OS — Prompt Mestre Universal
 Versão 1.0
