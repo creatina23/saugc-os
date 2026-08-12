@@ -5,10 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Bell,
-  Building2,
-  Check,
-  ChevronsUpDown,
   LayoutDashboard,
   LogOut,
   Megaphone,
@@ -22,11 +18,11 @@ import {
   X,
 } from "lucide-react";
 import { iconMap } from "@/lib/icon-map";
-import { navItems, notifications, workspaces } from "@/lib/mock-data";
+import { navItems } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "./command-palette";
@@ -39,7 +35,7 @@ const quickActions = [
   { label: "Novo Prompt", href: "/prompts", icon: Sparkles },
 ];
 
-type MenuId = "workspace" | "notifications" | "quick" | "user" | null;
+type MenuId = "quick" | "user" | null;
 
 // Rotas "de fora": nada de painel, sidebar ou tour — só a página pura
 const ROTAS_SEM_SHELL = ["/login"];
@@ -63,6 +59,34 @@ function iniciaisDoUsuario(email: string | null): string {
   return (primeira + segunda).toUpperCase();
 }
 
+// 016c — lê o endereço da foto de perfil do crachá do usuário
+function avatarDoUsuario(metadata: unknown): string | null {
+  const meta = metadata as { avatar_url?: string } | undefined;
+  return meta?.avatar_url ?? null;
+}
+
+// Avatar com foto (ou iniciais como reserva).
+// 016d — mora FORA do AppShell por lei do ESLint (react-hooks/static-components):
+// componente declarado dentro de outro renasce a cada render e perde estado.
+function AvatarUsuario({
+  className,
+  avatarUrl,
+  nome,
+  iniciais,
+}: {
+  className?: string;
+  avatarUrl: string | null;
+  nome: string;
+  iniciais: string;
+}) {
+  return (
+    <Avatar className={className}>
+      {avatarUrl ? <AvatarImage src={avatarUrl} alt={nome} /> : null}
+      <AvatarFallback>{iniciais}</AvatarFallback>
+    </Avatar>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -70,9 +94,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [workspace, setWorkspace] = useState<string>(workspaces[0].id);
   const [prevPathname, setPrevPathname] = useState(pathname);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [supabaseAtivo, setSupabaseAtivo] = useState(false);
 
   if (prevPathname !== pathname) {
     setPrevPathname(pathname);
@@ -80,24 +105,27 @@ export function AppShell({ children }: { children: ReactNode }) {
     setOpenMenu(null);
   }
 
-  const currentWorkspace = workspaces.find((item) => item.id === workspace) ?? workspaces[0];
-  const unreadCount = notifications.filter((item) => item.unread).length;
   const currentItem =
     navItems.find((item) => item.href !== "/" && pathname.startsWith(item.href)) ?? navItems[0];
 
-  // Usuário real da sessão (quando Supabase está configurado)
+  // Usuário real da sessão (quando Supabase está configurado) — a foto
+  // atualiza sozinha: trocar no Perfil dispara USER_UPDATED aqui.
   useEffect(() => {
     const supabase = getSupabaseBrowser();
     if (!supabase) return;
 
     supabase.auth.getUser().then(({ data }) => {
+      setSupabaseAtivo(Boolean(data.user));
       setUserEmail(data.user?.email ?? null);
+      setAvatarUrl(avatarDoUsuario(data.user?.user_metadata));
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSupabaseAtivo(Boolean(session?.user));
       setUserEmail(session?.user?.email ?? null);
+      setAvatarUrl(avatarDoUsuario(session?.user?.user_metadata));
     });
 
     return () => subscription.unsubscribe();
@@ -216,79 +244,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </div>
 
-        <div className={cn("relative shrink-0 p-3", !showFull && "px-2")}>
-          <button
-            type="button"
-            onClick={() => toggleMenu("workspace")}
-            aria-label="Trocar workspace"
-            aria-expanded={openMenu === "workspace"}
-            className={cn(
-              "flex w-full cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-[rgba(255,255,255,0.03)] p-2.5 text-left transition-colors hover:border-[rgba(255,255,255,0.16)]",
-              !showFull && "justify-center",
-            )}
-          >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              <Building2 className="size-4" />
-            </div>
-            {showFull && (
-              <>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium">{currentWorkspace.name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">
-                    Plano {currentWorkspace.plan}
-                  </p>
-                </div>
-                <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
-              </>
-            )}
-          </button>
-
-          {openMenu === "workspace" && (
-            <>
-              <button
-                type="button"
-                aria-label="Fechar menu de workspace"
-                className="fixed inset-0 z-[45] cursor-default"
-                onClick={() => setOpenMenu(null)}
-              />
-              <div className="absolute inset-x-3 top-full z-50 mt-1 rounded-xl border border-border bg-surface p-1.5 shadow-2xl">
-                {workspaces.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setWorkspace(item.id);
-                      setOpenMenu(null);
-                      toast("Workspace alterado", {
-                        description: `Agora operando em ${item.name} · Plano ${item.plan}`,
-                        type: "success",
-                      });
-                    }}
-                    className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent"
-                  >
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-                      <Building2 className="size-3.5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium">{item.name}</p>
-                      <p className="text-[11px] text-muted-foreground">Plano {item.plan}</p>
-                    </div>
-                    {item.id === workspace && <Check className="size-4 shrink-0 text-primary" />}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        {/* 016d — varredura de cenográficos: o seletor de workspace saiu de
+            cena (não existe plano nem multi-workspace por trás dele — era
+            promessa falsa no topo do app). Volta REAL com o lançamento. */}
 
         {renderNav(isMobileDrawer)}
 
         <div className={cn("shrink-0 space-y-2 border-t border-border p-3", !showFull && "px-2")}>
           {showFull ? (
             <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
-              <Avatar className="size-8">
-                <AvatarFallback>{iniciaisUsuario}</AvatarFallback>
-              </Avatar>
+              <AvatarUsuario
+                className="size-8"
+                avatarUrl={avatarUrl}
+                nome={nomeUsuario}
+                iniciais={iniciaisUsuario}
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium">{nomeUsuario}</p>
                 <p className="truncate text-[11px] text-muted-foreground">
@@ -298,9 +268,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           ) : (
             <div className="flex justify-center py-1">
-              <Avatar className="size-8">
-                <AvatarFallback>{iniciaisUsuario}</AvatarFallback>
-              </Avatar>
+              <AvatarUsuario
+                className="size-8"
+                avatarUrl={avatarUrl}
+                nome={nomeUsuario}
+                iniciais={iniciaisUsuario}
+              />
             </div>
           )}
           {!isMobileDrawer && (
@@ -393,12 +366,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               </kbd>
             </button>
 
+            {/* 016d — selo de status honesto: o pulso verde só acende com a
+                sessão real ativa; sem Supabase, a tela admite "Modo
+                demonstração" (ponto âmbar, sem fingir que há banco vivo). */}
             <div className="hidden items-center gap-2 rounded-full border border-border px-3 py-1.5 xl:flex">
-              <span className="relative flex size-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
-                <span className="relative inline-flex size-2 rounded-full bg-success" />
-              </span>
-              <span className="text-xs text-muted-foreground">Operacional</span>
+              {supabaseAtivo ? (
+                <>
+                  <span className="relative flex size-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
+                    <span className="relative inline-flex size-2 rounded-full bg-success" />
+                  </span>
+                  <span className="text-xs text-muted-foreground">Operacional</span>
+                </>
+              ) : (
+                <>
+                  <span className="inline-flex size-2 rounded-full bg-amber-400" />
+                  <span className="text-xs text-muted-foreground">Modo demonstração</span>
+                </>
+              )}
             </div>
 
             <div className="relative">
@@ -437,63 +422,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               )}
             </div>
 
-            <div className="relative">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Notificações, ${unreadCount} não lidas`}
-                aria-expanded={openMenu === "notifications"}
-                onClick={() => toggleMenu("notifications")}
-                className="relative text-muted-foreground"
-              >
-                <Bell />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white">
-                    {unreadCount}
-                  </span>
-                )}
-              </Button>
-              {openMenu === "notifications" && (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Fechar notificações"
-                    className="fixed inset-0 z-[45] cursor-default"
-                    onClick={() => setOpenMenu(null)}
-                  />
-                  <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-border bg-surface shadow-2xl">
-                    <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                      <p className="text-sm font-semibold">Notificações</p>
-                      <Badge variant="violet">{unreadCount} novas</Badge>
-                    </div>
-                    <div className="max-h-80 overflow-y-auto p-1.5">
-                      {notifications.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex gap-3 rounded-lg px-2.5 py-2.5 transition-colors hover:bg-accent"
-                        >
-                          <span
-                            className={cn(
-                              "mt-1.5 size-2 shrink-0 rounded-full",
-                              item.unread ? "bg-primary" : "bg-border",
-                            )}
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{item.title}</p>
-                            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                              {item.description}
-                            </p>
-                            <p className="mt-1 text-[11px] text-muted-foreground/70">
-                              {item.timestamp}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            {/* 016d — sininho cenográfico aposentado: ele mostrava avisos
+                inventados. Notificações voltam REAIS numa sprint futura;
+                hoje o Dashboard já mostra "Atividades recentes" do banco. */}
 
             <div className="relative">
               <Button
@@ -504,9 +435,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 onClick={() => toggleMenu("user")}
                 className="rounded-full"
               >
-                <Avatar className="size-8">
-                  <AvatarFallback>{iniciaisUsuario}</AvatarFallback>
-                </Avatar>
+                <AvatarUsuario
+                  className="size-8"
+                  avatarUrl={avatarUrl}
+                  nome={nomeUsuario}
+                  iniciais={iniciaisUsuario}
+                />
               </Button>
               {openMenu === "user" && (
                 <>

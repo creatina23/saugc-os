@@ -3,6 +3,7 @@
 /* ============================================
    AnuncIA — Tokens oficiais (Sprint 001)
    Polish Sprint 007: foco AA · reduced-motion · mobile/scroll
+   Sprint 016b: régua tipográfica do celular
    ============================================ */
 
 :root {
@@ -92,6 +93,7 @@
     color-scheme: dark;
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
@@ -101,6 +103,16 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  /* 📱 Modo Celular (016b): em telas pequenas a régua base sobe de
+     16px → 17px. Como o design system inteiro usa "rem", TODAS as
+     letras, botões e respiros crescem juntos ~6% — só no celular.
+     Desktop fica intocado. Ajuste fino futuro: troque 17px aqui. */
+  @media (max-width: 640px) {
+    html {
+      font-size: 17px;
+    }
   }
 
   /* Foco visível (AA): quem navega pelo TAB sempre sabe onde está */

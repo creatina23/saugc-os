@@ -8,6 +8,10 @@
 // • Sem banco configurado (.env.local ausente) → modo demonstração,
 //   usando o mock da camada de serviços (nada quebra).
 // • Criar, mover de etapa e excluir já gravam no banco na hora.
+// • 016b (celular): o Kanban deixa de empilhar e vira trilho que
+//   desliza pro lado com imã (snap); a partir do tablet volta ao grid.
+// • 016d — metade inferior reconstruída após corte da colagem (a tela
+//   de carga parava na linha 384; kanban e modal nasceram de novo).
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -25,7 +29,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -33,9 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
-import { Tooltip } from "@/components/ui/tooltip";
 import { crmService, dealStageOrder } from "@/lib/services";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { formatBRL } from "@/lib/format";
@@ -390,274 +392,200 @@ export function CrmView() {
     );
   }
 
+  // ---------- Tela principal ----------
+
   return (
-    <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <>
+      {/* Cabeçalho da página */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              Funil de Vendas
-            </h1>
-            {modoDemo && <Badge variant="outline">Modo demonstração</Badge>}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight">Funil de Vendas</h1>
+            {modoDemo && <Badge variant="warning">Modo demonstração</Badge>}
           </div>
-          <p className="text-sm text-white/60">
-            Acompanhe cada etapa do funil, da qualificação ao contrato.
+          <p className="mt-1 text-sm text-muted-foreground">
+            No celular, deslize o funil para o lado — cada etapa trava na tela
+            com ímã.
           </p>
         </div>
         <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Novo Negócio
+          <Plus /> Novo Negócio
         </Button>
       </div>
 
-      {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* KPIs do funil — passe o mouse sobre o cartão para ver a conta */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((kpi) => (
-          <Card key={kpi.label}>
-            <CardContent className="flex items-start justify-between gap-3 p-5">
-              <div className="space-y-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-white/50">
+          <Card key={kpi.label} className="card-glow" title={kpi.tip}>
+            <CardContent className="flex items-start gap-3 p-5">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <kpi.icon className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs text-muted-foreground">
                   {kpi.label}
                 </p>
-                <p className="text-2xl font-bold text-white">{kpi.value}</p>
-                <p className="text-xs text-white/40">{kpi.sub}</p>
+                <p className="truncate text-xl font-bold">{kpi.value}</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {kpi.sub}
+                </p>
               </div>
-              <Tooltip label={kpi.tip}>
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10">
-                  <kpi.icon className="h-5 w-5 text-white/70" aria-hidden="true" />
-                </span>
-              </Tooltip>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Distribuição do funil */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">
-            Distribuição do funil por etapa
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div
-            className="flex h-3 w-full overflow-hidden rounded-full bg-white/10"
-            role="img"
-            aria-label="Distribuição do valor do funil por etapa"
-          >
-            {dealStageOrder.map((stage) => {
-              const stageTotal = allGroups[stage].reduce(
-                (total, deal) => total + deal.value,
-                0
-              );
-              if (stageTotal === 0 || totalPipeline === 0) return null;
-              return (
-                <div
-                  key={stage}
-                  className={`${stageBarClass[stage]} h-full transition-all duration-500`}
-                  style={{ width: `${(stageTotal / totalPipeline) * 100}%` }}
-                />
-              );
-            })}
-          </div>
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            {dealStageOrder.map((stage) => {
-              const stageTotal = allGroups[stage].reduce(
-                (total, deal) => total + deal.value,
-                0
-              );
-              const percent =
-                totalPipeline > 0
-                  ? ((stageTotal / totalPipeline) * 100)
-                      .toFixed(1)
-                      .replace(".", ",")
-                  : "0,0";
-              return (
-                <div key={stage} className="flex items-center gap-2 text-xs">
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${stageBarClass[stage]}`}
-                    aria-hidden="true"
-                  />
-                  <span className="text-white/70">{stage}</span>
-                  <span className="font-semibold text-white">
-                    {formatBRL(stageTotal)}
-                  </span>
-                  <span className="text-white/40">({percent}%)</span>
-                </div>
-              );
-            })}
+      {/* Busca */}
+      <Card className="mt-6">
+        <CardContent className="p-4">
+          <div className="relative">
+            <Search className="absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar por negócio ou empresa..."
+              aria-label="Buscar negócios"
+              className="pl-10"
+            />
           </div>
         </CardContent>
       </Card>
 
-      {/* Busca */}
-      <div className="relative max-w-md">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40"
-          aria-hidden="true"
-        />
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Buscar por título ou empresa…"
-          aria-label="Buscar negócios"
-          className="pl-9"
-        />
-      </div>
-
-      {/* Kanban do funil */}
+      {/* Kanban — 016b: trilho com ímã no celular; grade a partir do tablet */}
       {visibleDeals.length === 0 ? (
-        query.trim() ? (
-          <EmptyState
-            icon={Search}
-            title={`Nada encontrado para “${query}”`}
-            description="Tente outro termo, confira a grafia ou limpe a busca para ver todo o funil."
-            action={
-              <Button variant="outline" onClick={() => setQuery("")}>
-                Limpar busca
-              </Button>
-            }
-          />
-        ) : (
-          <EmptyState
-            icon={Handshake}
-            title="Seu funil está vazio"
-            description="Cadastre o primeiro negócio e acompanhe ele caminhando da qualificação até o contrato fechado."
-            action={
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="h-4 w-4" />
-                Cadastrar primeiro negócio
-              </Button>
-            }
-          />
-        )
+        <Card className="mt-6">
+          <CardContent className="flex flex-col items-center justify-center px-6 py-16 text-center">
+            <Target className="size-8 text-muted-foreground" />
+            {query.trim() !== "" ? (
+              <>
+                <p className="mt-3 font-medium">Nenhum negócio encontrado</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Nada bate com a busca “{query.trim()}”.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => setQuery("")}
+                >
+                  Limpar busca
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 font-medium">Seu funil está vazio</p>
+                <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+                  Cadastre o primeiro negócio e empurre-o de etapa até o
+                  contrato fechado.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => setDialogOpen(true)}
+                >
+                  <Plus /> Cadastrar primeiro negócio
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {dealStageOrder.map((stage) => {
-            const stageDeals = visibleGroups[stage];
-            const stageTotal = stageDeals.reduce(
-              (total, deal) => total + deal.value,
-              0
-            );
-            return (
-              <section
-                key={stage}
-                aria-label={`Etapa ${stage}`}
-                className="flex min-h-[16rem] flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"
-              >
-                <header className="flex items-center justify-between gap-2 px-1 pt-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={stageBadgeVariant[stage]}>{stage}</Badge>
-                    <span className="text-xs text-white/40">
-                      {stageDeals.length}{" "}
-                      {stageDeals.length === 1 ? "negócio" : "negócios"}
-                    </span>
-                  </div>
-                  <span className="text-xs font-semibold text-white/60">
-                    {formatBRL(stageTotal)}
-                  </span>
-                </header>
-
-                {stageDeals.length === 0 ? (
-                  <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-white/10 p-4 text-center text-xs text-white/35">
-                    Nenhum negócio nesta etapa
-                  </div>
+        <div className="mt-6 -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 md:mx-0 md:grid md:snap-none md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-4">
+          {dealStageOrder.map((etapa) => (
+            <section
+              key={etapa}
+              aria-label={`Etapa ${etapa}`}
+              className="flex w-[80vw] max-w-[320px] shrink-0 snap-center flex-col rounded-2xl border border-border bg-[rgba(255,255,255,0.02)] p-3 md:w-auto md:max-w-none md:snap-align-none"
+            >
+              <header className="flex items-center justify-between px-1 pb-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`size-2 rounded-full ${stageBarClass[etapa]}`}
+                  />
+                  <h2 className="text-sm font-semibold">{etapa}</h2>
+                </div>
+                <Badge variant="secondary">{allGroups[etapa].length}</Badge>
+              </header>
+              <div className="flex flex-1 flex-col gap-3">
+                {visibleGroups[etapa].length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                    Nada aqui por enquanto
+                  </p>
                 ) : (
-                  stageDeals.map((deal) => (
-                    <Card
-                      key={deal.id}
-                      className="card-glow transition-transform duration-200 hover:-translate-y-0.5"
-                    >
+                  visibleGroups[etapa].map((deal) => (
+                    <Card key={deal.id} className="card-glow">
                       <CardContent className="space-y-3 p-4">
-                        <div>
-                          <p className="text-sm font-semibold leading-tight text-white">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm leading-snug font-medium">
                             {deal.title}
                           </p>
-                          <p className="mt-1 flex items-center gap-1.5 text-xs text-white/50">
-                            <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
-                            {deal.company}
+                          <button
+                            type="button"
+                            aria-label={`Excluir ${deal.title}`}
+                            onClick={() => void excluirDeal(deal)}
+                            className="shrink-0 cursor-pointer text-muted-foreground transition-colors hover:text-red-400"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                        {deal.company && (
+                          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Building2 className="size-3.5 shrink-0" />
+                            <span className="truncate">{deal.company}</span>
                           </p>
-                        </div>
-                        <p className="text-lg font-bold text-white">
-                          {formatBRL(deal.value)}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold text-white/80">
-                            {initials(deal.owner)}
+                        )}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-bold">
+                            {formatBRL(deal.value)}
                           </span>
-                          <span className="text-xs text-white/60">
-                            {deal.owner}
-                          </span>
+                          <Badge variant={stageBadgeVariant[etapa]}>
+                            {deal.probability}% de chance
+                          </Badge>
                         </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[11px] text-white/45">
-                            <Tooltip label="Chance estimada de fechar este negócio">
-                              <span className="cursor-help underline decoration-dotted decoration-white/30 underline-offset-2">
-                                Probabilidade
-                              </span>
-                            </Tooltip>
-                            <span className="font-semibold text-white/70">
-                              {deal.probability}%
+                        <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[9px] font-bold text-primary">
+                              {initials(deal.owner)}
                             </span>
-                          </div>
-                          <div className="h-1.5 w-full rounded-full bg-white/10">
-                            <div
-                              className={`${stageBarClass[stage]} h-full rounded-full transition-all duration-500`}
-                              style={{ width: `${deal.probability}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Ações do card: mover de etapa e excluir */}
-                        <div className="flex items-center justify-between border-t border-white/5 pt-2">
-                          <Tooltip label="Voltar uma etapa">
-                            <button
-                              type="button"
-                              onClick={() => void moverDeEtapa(deal, -1)}
+                            <span className="truncate text-[11px] text-muted-foreground">
+                              {deal.owner}
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Voltar ${deal.title} uma etapa`}
                               disabled={
                                 dealStageOrder.indexOf(deal.stage) === 0
                               }
-                              aria-label={`Voltar ${deal.title} uma etapa`}
-                              className="flex h-7 w-7 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-25"
+                              onClick={() => void moverDeEtapa(deal, -1)}
+                              className="size-7 text-muted-foreground"
                             >
-                              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                          </Tooltip>
-                          <div className="flex items-center gap-1">
-                            <Tooltip label="Excluir negócio">
-                              <button
-                                type="button"
-                                onClick={() => void excluirDeal(deal)}
-                                aria-label={`Excluir ${deal.title}`}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
-                            </Tooltip>
-                            <Tooltip label="Avançar uma etapa">
-                              <button
-                                type="button"
-                                onClick={() => void moverDeEtapa(deal, 1)}
-                                disabled={
-                                  dealStageOrder.indexOf(deal.stage) ===
-                                  dealStageOrder.length - 1
-                                }
-                                aria-label={`Avançar ${deal.title} uma etapa`}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-25"
-                              >
-                                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
-                            </Tooltip>
-                          </div>
+                              <ArrowLeft />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Avançar ${deal.title} uma etapa`}
+                              disabled={
+                                dealStageOrder.indexOf(deal.stage) ===
+                                dealStageOrder.length - 1
+                              }
+                              onClick={() => void moverDeEtapa(deal, 1)}
+                              className="size-7 text-muted-foreground"
+                            >
+                              <ArrowRight />
+                            </Button>
+                          </span>
                         </div>
                       </CardContent>
                     </Card>
                   ))
                 )}
-              </section>
-            );
-          })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
@@ -665,119 +593,114 @@ export function CrmView() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Novo Negócio</DialogTitle>
+            <DialogTitle>Novo negócio</DialogTitle>
             <DialogDescription>
-              O negócio entra na coluna Qualificação e fica salvo na sua
-              conta — aparece em qualquer dispositivo.
+              Ele entra na primeira etapa do funil, “Qualificação”.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div>
               <label
                 htmlFor="deal-title"
-                className="text-xs font-medium text-white/70"
+                className="mb-1.5 block text-xs font-medium text-muted-foreground"
               >
-                Título do negócio
+                Nome do negócio
               </label>
               <Input
                 id="deal-title"
-                required
                 value={form.title}
                 onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    title: event.target.value,
-                  }))
+                  setForm((atual) => ({ ...atual, title: event.target.value }))
                 }
-                placeholder="Ex.: Pacote UGC 10 vídeos"
+                placeholder="Ex.: Gestão de tráfego — Clínica Vitta"
               />
             </div>
-            <div className="space-y-1.5">
+            <div>
               <label
                 htmlFor="deal-company"
-                className="text-xs font-medium text-white/70"
+                className="mb-1.5 block text-xs font-medium text-muted-foreground"
               >
-                Empresa
+                Empresa / cliente
               </label>
               <Input
                 id="deal-company"
-                required
                 value={form.company}
                 onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
+                  setForm((atual) => ({
+                    ...atual,
                     company: event.target.value,
                   }))
                 }
-                placeholder="Ex.: Loja Solar BR"
+                placeholder="Ex.: Clínica Vitta"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
                 <label
                   htmlFor="deal-value"
-                  className="text-xs font-medium text-white/70"
+                  className="mb-1.5 block text-xs font-medium text-muted-foreground"
                 >
                   Valor (R$)
                 </label>
                 <Input
                   id="deal-value"
-                  type="number"
-                  min="0"
+                  inputMode="decimal"
                   value={form.value}
                   onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
+                    setForm((atual) => ({
+                      ...atual,
                       value: event.target.value,
                     }))
                   }
-                  placeholder="15000"
+                  placeholder="2500"
                 />
               </div>
-              <div className="space-y-1.5">
+              <div>
                 <label
                   htmlFor="deal-probability"
-                  className="text-xs font-medium text-white/70"
+                  className="mb-1.5 block text-xs font-medium text-muted-foreground"
                 >
-                  Probabilidade (%)
+                  Chance (%)
                 </label>
                 <Input
                   id="deal-probability"
-                  type="number"
-                  min="0"
-                  max="100"
+                  inputMode="numeric"
                   value={form.probability}
                   onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
+                    setForm((atual) => ({
+                      ...atual,
                       probability: event.target.value,
                     }))
                   }
                   placeholder="50"
                 />
               </div>
+              <div>
+                <label
+                  htmlFor="deal-owner"
+                  className="mb-1.5 block text-xs font-medium text-muted-foreground"
+                >
+                  Responsável
+                </label>
+                <Input
+                  id="deal-owner"
+                  value={form.owner}
+                  onChange={(event) =>
+                    setForm((atual) => ({
+                      ...atual,
+                      owner: event.target.value,
+                    }))
+                  }
+                  placeholder="Você"
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <label
-                htmlFor="deal-owner"
-                className="text-xs font-medium text-white/70"
-              >
-                Responsável
-              </label>
-              <Input
-                id="deal-owner"
-                value={form.owner}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    owner: event.target.value,
-                  }))
-                }
-                placeholder="Seu nome"
-              />
-            </div>
-            {erroForm && <p className="text-sm text-red-400">{erroForm}</p>}
-            <div className="flex justify-end gap-2 pt-2">
+            {erroForm && (
+              <p role="alert" className="text-sm text-red-400">
+                {erroForm}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
               <Button
                 type="button"
                 variant="outline"
@@ -785,13 +708,13 @@ export function CrmView() {
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={salvando}>
+              <Button type="submit" disabled={salvando || !form.title.trim()}>
                 {salvando ? "Salvando…" : "Adicionar ao funil"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

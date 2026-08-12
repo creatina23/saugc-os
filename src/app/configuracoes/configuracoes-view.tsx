@@ -2,7 +2,9 @@
 
 // ------------------------------------------------------------------
 // Configurações — REAL (conta Supabase + user_metadata).
-// • Perfil: nome gravado na conta + e-mail real + troca de senha de verdade.
+// • Perfil: nome gravado na conta + e-mail real + troca de senha de
+//   verdade + FOTO DE PERFIL real (016c: bucket "avatars", pasta do
+//   dono, endereço no crachá user_metadata.avatar_url).
 // • Workspace: nome/descrição/fuso gravados na conta.
 // • Notificações: preferências com autosave (persistem de verdade).
 // • Equipe: mostra o dono real (multiusuário = em breve, honesto).
@@ -10,7 +12,7 @@
 // • Verdade na tela: nada de chave fake, plano fake ou botão de enfeite.
 // ------------------------------------------------------------------
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell,
   Bot,
@@ -19,6 +21,7 @@ import {
   Crown,
   Database,
   Eye,
+  ImagePlus,
   Loader2,
   Mail,
   Megaphone,
@@ -30,7 +33,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,6 +76,14 @@ const NOTIFS_PADRAO: Record<string, boolean> = {
   ia: false,
 };
 
+// 016c — regras da foto de perfil
+const MAX_FOTO_BYTES = 2 * 1024 * 1024; // 2 MB
+const EXTENSOES_FOTO: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
 type Feedback = { area: string; ok: boolean; texto: string } | null;
 
 function iniciaisDe(texto: string): string {
@@ -98,9 +109,12 @@ export function ConfiguracoesView() {
   const [tab, setTab] = useState<string>(ABAS[0]);
 
   // Sua conta
+  const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [perfilNome, setPerfilNome] = useState("");
   const [iniciais, setIniciais] = useState("AD");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const inputFotoRef = useRef<HTMLInputElement>(null);
 
   // Workspace (persistido na conta)
   const [wsNome, setWsNome] = useState("");
@@ -145,13 +159,16 @@ export function ConfiguracoesView() {
       }
       const meta = (user.user_metadata ?? {}) as {
         full_name?: string;
+        avatar_url?: string;
         workspace?: { nome?: string; descricao?: string; fuso?: string };
         notificacoes?: Record<string, boolean>;
       };
       const nome = meta.full_name?.trim() || user.email?.split("@")[0] || "Administrador";
+      setUserId(user.id);
       setEmail(user.email ?? "");
       setPerfilNome(meta.full_name ?? "");
       setIniciais(iniciaisDe(meta.full_name?.trim() || user.email || "admin"));
+      setAvatarUrl(meta.avatar_url ?? null);
       setWsNome(meta.workspace?.nome ?? "");
       setWsDesc(meta.workspace?.descricao ?? "");
       setWsFuso(meta.workspace?.fuso ?? "sp");
@@ -242,6 +259,51 @@ export function ConfiguracoesView() {
     }
     setIniciais(iniciaisDe(nomeLimpo || email));
     anunciar("perfil", true, "Perfil gravado ✓ — já vale na próxima tela");
+  }
+
+  // 016c — Foto de perfil: valida → sobe no bucket "avatars" (pasta do
+  // dono) → grava o endereço no crachá (user_metadata.avatar_url).
+  // A barra lateral e o topo escutam a troca sozinhos (USER_UPDATED).
+  async function handleTrocarFoto(arquivo: File | null) {
+    if (!arquivo) return;
+    const supabase = getSupabaseBrowser();
+    if (!supabase || !userId) {
+      anunciar("perfil", false, "Banco não configurado — a foto precisa dele.");
+      return;
+    }
+    const extensao = EXTENSOES_FOTO[arquivo.type];
+    if (!extensao) {
+      anunciar("perfil", false, "Formato não vale. Use PNG, JPG ou WebP.");
+      return;
+    }
+    if (arquivo.size > MAX_FOTO_BYTES) {
+      anunciar("perfil", false, "Foto acima de 2 MB. Escolha uma mais leve.");
+      return;
+    }
+
+    setSalvando("foto");
+    const caminho = `${userId}/avatar.${extensao}`;
+    const { error: erroUpload } = await supabase.storage
+      .from("avatars")
+      .upload(caminho, arquivo, { upsert: true, contentType: arquivo.type });
+    if (erroUpload) {
+      setSalvando(null);
+      anunciar("perfil", false, `Não consegui enviar a foto. Detalhe técnico: ${erroUpload.message}`);
+      return;
+    }
+
+    const { data } = supabase.storage.from("avatars").getPublicUrl(caminho);
+    const urlComVersao = `${data.publicUrl}?v=${Date.now()}`;
+    const { error: erroPerfil } = await supabase.auth.updateUser({
+      data: { avatar_url: urlComVersao },
+    });
+    setSalvando(null);
+    if (erroPerfil) {
+      anunciar("perfil", false, `A foto subiu mas não grudou no perfil. Detalhe técnico: ${erroPerfil.message}`);
+      return;
+    }
+    setAvatarUrl(urlComVersao);
+    anunciar("perfil", true, "Foto no ar ✓ — ela já aparece na barra lateral e no topo");
   }
 
   async function handleTrocarSenha() {
@@ -369,7 +431,7 @@ export function ConfiguracoesView() {
                   id="ws-desc"
                   value={wsDesc}
                   onChange={(event) => setWsDesc(event.target.value)}
-                  placeholder="Estúdio de produção de anúncios UGC com inteligência artificial."
+                  placeholder="Estúdio de produção de anúncios com inteligência artificial."
                   className="min-h-[88px]"
                 />
               </div>
@@ -408,12 +470,40 @@ export function ConfiguracoesView() {
             <CardContent className="space-y-6">
               <div className="flex items-center gap-4">
                 <Avatar className="size-16">
+                  {avatarUrl ? <AvatarImage src={avatarUrl} alt="Sua foto de perfil" /> : null}
                   <AvatarFallback className="text-lg">{iniciais}</AvatarFallback>
                 </Avatar>
                 <div>
                   <p className="font-semibold">{perfilNome.trim() || "Administrador"}</p>
                   <p className="text-sm text-muted-foreground">{email}</p>
-                  <Badge variant="violet" className="mt-2">Administrador do workspace</Badge>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Badge variant="violet">Administrador do workspace</Badge>
+                    {/* 016c — o seletor de arquivo é invisível; o botão aciona ele */}
+                    <input
+                      ref={inputFotoRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      aria-hidden="true"
+                      onChange={(event) => {
+                        void handleTrocarFoto(event.target.files?.[0] ?? null);
+                        event.target.value = "";
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => inputFotoRef.current?.click()}
+                      disabled={salvando === "foto"}
+                    >
+                      {salvando === "foto" ? <Loader2 className="animate-spin" /> : <ImagePlus />}
+                      {salvando === "foto" ? "Enviando…" : avatarUrl ? "Trocar foto" : "Enviar foto"}
+                    </Button>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    PNG, JPG ou WebP · até 2 MB
+                  </p>
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -549,6 +639,7 @@ export function ConfiguracoesView() {
               <div className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3">
                 <div className="flex items-center gap-3">
                   <Avatar>
+                    {avatarUrl ? <AvatarImage src={avatarUrl} alt="Sua foto de perfil" /> : null}
                     <AvatarFallback>{iniciais}</AvatarFallback>
                   </Avatar>
                   <div>

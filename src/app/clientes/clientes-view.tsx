@@ -474,7 +474,7 @@ export function ClientesView() {
           title={busca ? "Nenhum cliente encontrado" : "Nenhum cliente ainda"}
           description={
             busca
-              ? `Nada encontrado para "${busca}". Tente outro termo.`
+              ? `Nada encontrado para “${busca}”. Tente outro termo.`
               : "Cadastre seu primeiro cliente e ele fica salvo no banco pra sempre."
           }
           action={
@@ -486,8 +486,10 @@ export function ClientesView() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)]">
-          <table className="w-full text-left text-sm">
+        /* 016b: no celular a tabela desliza pro lado (overflow-x-auto)
+           em vez de esmagar os nomes — min-w garante o respiro mínimo */
+        <div className="overflow-x-auto rounded-2xl border border-[rgba(255,255,255,0.08)]">
+          <table className="w-full min-w-[600px] text-left text-sm">
             <thead>
               <tr className="border-b border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] text-xs text-muted-foreground">
                 <th className="px-4 py-3 font-medium">Cliente</th>

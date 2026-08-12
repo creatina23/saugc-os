@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/layout/app-shell";
@@ -21,7 +21,18 @@ export const metadata: Metadata = {
     default: "AnuncIA",
     template: "%s · AnuncIA",
   },
-  description: "Sistema Operacional de Anúncios UGC com Inteligência Artificial.",
+  description: "Sistema operacional de anúncios com inteligência artificial.",
+};
+
+// 📱 A "régua da tela" oficial (016b): diz ao celular para medir a página
+// pela largura real do aparelho — é o que impede o "zoom-out miúdo".
+// viewportFit cover = respeita a nota/recorte do iPhone; themeColor =
+// barra do navegador do celular na cor da marca (preto AnuncIA).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0B0D12",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
