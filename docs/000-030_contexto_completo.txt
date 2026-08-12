@@ -2404,7 +2404,38 @@ Sempre:
 
 ---
 010_CHANGELOG.md
+
+
 SAUGC OS — Histórico de Alterações
+
+
+## [v1.6] — 9 ago 2026 — Sprint 015 FINAL: 🏁 v2.0 "100% UTILIZÁVEL" NO AR
+
+### Adicionado
+- **Configurações reais (015a)**: perfil e conta gravam no banco de verdade — último mock "de ação" morto
+- **Roteirista IA tecido no Briefing (015b)**: lê o pedido inteiro (título, cliente, criador, tags, prazo, detalhes) → roteiro editável → "Salvar como criativo no quadro" grava em `commercials` (status Rascunho)
+- **Diretor de Tráfego IA nas Campanhas (015c)**: lê as métricas do formulário (investido, impressões, cliques, conversões, receita, meta de ROAS) → relatório 🩺 diagnóstico + 🚦 semáforo + 🎯 3 ações → "Salvar relatório na Biblioteca" grava em `library_items` (autor "Diretor de Tráfego IA")
+- **Excluir cliente (015)**: lixeira por linha → confirmação "não tem volta" → delete real → some da tela na hora · botão-raiz `<button>` com classes (sem variant não confirmada)
+- **Marca oficial "vidro gelo" 🧊**: logo nova (A 3D + olho de IA, degradê azul→violeta) EM ARQUIVO — `public/logo-anuncia.png` vive na barra lateral (47px) e no login (78px); `src/app/icon.png` = ícone da aba do navegador (convenção do Next, grátis) · SVG "A-com-raio" aposentado
+- **Login premium minimalista (015e)**: só marca + cartão de vidro · subtítulo "Abra as portas do seu centro de comando." · `traduzErro` ganhou "Invalid API key" → PT-BR
+- **Proxy blindado**: `getUser()` com try/catch — Supabase fora do ar = app segue em modo degradado (era tela 500 muda)
+- **Tagline da barra lateral: "central de comando"** — voz da marca travada
+
+### Corrigido
+- Coluna `name` de `campaigns` restaurada (dropada por engano no lote anti-fóssil da Sprint 014 — derrubava o select da página em silêncio e o insert com "schema cache") — `add column if not exists` + reload
+- Polimento da língua (015d): tela zero jargão — MRR→Receita do mês, "Pipeline Comercial"→Negociações em andamento, Providers→Motor de IA, creator→criador · botões do Dashboard ligados (Nova Campanha/Gerar com IA)
+- Dedo-duro confesso padronizado em Clientes/Campanhas/Briefings ("Detalhe técnico:" em todo erro de ação)
+- Aspas retas em texto JSX → tipográficas “ ” (lint `react/no-unescaped-entities`)
+
+### Lições operacionais
+- **Regra de Ouro v2**: entrega de código = arquivo COMPLETO; Ctrl+Shift+F só pra TEXTO PURO de tela ("0 resultados = pula e anota"; node_modules fora); NUNCA "UGC" sozinho no Replace All (é chave do banco) — nasceu do bug do "U" sumido
+- Rótulo que também é CHAVE de código não se troca por busca global (caso kpiConfig: `Receita do mês:` sem aspas quebrou o build — chave com espaço precisa de aspas, case-sensível)
+- Imagem quebrada = caminho/nome errado (clássico `logo.png.png` do Windows), nunca formato — raio-X: `Test-Path` / `Get-ChildItem -Name`
+- Logo em arquivo `public/` + `app/icon.png` troca a marca inteira sem componente SVG
+
+### Marcos
+- 🏁 **AnuncIA v2.0 "100% UTILIZÁVEL" publicada** (9 ago 2026) em `anuncia-three.vercel.app`
+- Verdade na tela registrada (não escondida): **números do Dashboard seguem cenográficos** → agregação real = prioridade 1 da Sprint 016
 
 
 ## [v1.5] — 5 ago 2026 — Sprint 014: Biblioteca + Prompts reais + baú da IA
@@ -2817,23 +2848,26 @@ Implementar
 ---
 011_CURRENT_MISSION.md
 
-# 🧭 GPS — MISSÃO ATUAL (v2.5)
+# 🧭 GPS — MISSÃO ATUAL (v2.6)
 
 > Memória viva do projeto. Este arquivo é SUBSTITUÍDO POR INTEIRO a cada fechamento de sprint.
-> Última atualização: 5 ago 2026 — fechamento da Sprint 014.
+> Última atualização: 9 ago 2026 — fechamento da Sprint 015 FINAL.
 
 ## 1. ONDE ESTAMOS
 
-- Produto: **AnuncIA v1.5** — Sistema Operacional de Anúncios UGC com IA
-- Sprint ativa: **nenhuma** (Sprint 014 ✅ FECHADA em 5 ago 2026)
-- Próxima: **Sprint 015 — IA tecida + Configurações** → 🏁 **v2.0 "100% UTILIZÁVEL"**
+- Produto: **AnuncIA v2.0 — "100% UTILIZÁVEL"** · 🏁 NO AR desde 9 ago 2026
+- Sprint ativa: **nenhuma** (Sprint 015 ✅ FECHADA em 9 ago 2026)
+- Próxima: **Sprint 016 — "Verdade total + Celular"** → Dashboard com agregação real dos dados · modo celular (tipografia maior, tabelas virando cartões) · foto de perfil (Storage `avatars`) · varredura final de cenográficos (notificações, seletor de workspace, textos restantes de Mídias/IA Studio)
 
 ## 2. ESTADO DO PRODUTO (o que já é real)
 
-- Login real + `src/proxy.ts` porteiro + `/login` premium · Cadastro público TRANCADO
+- Login premium minimalista ✅ + `src/proxy.ts` porteiro BLINDADO (Supabase fora do ar = modo degradado, nunca tela 500) · Cadastro público TRANCADO (`CADASTRO_ABERTO = false`)
 - Banco por usuário: 13 tabelas com `user_id` + RLS "dono total" · Storage: bucket `midias` privado
-- Clientes ✅ · CRM ✅ · **IA Studio ✅ (com baú — "Salvar na biblioteca" reconectado)** · Mídias ✅ · Campanhas ✅ · Briefings ✅ · Comerciais ✅ · **Biblioteca ✅** · **Prompts ✅**
-- Mocks restantes (1): **Configurações**
+- Clientes ✅ (agora com **Excluir**: lixeira → confirmação "não tem volta" → delete real) · CRM ✅ · IA Studio ✅ · Mídias ✅ · Campanhas ✅ · Briefings ✅ · Comerciais ✅ · Biblioteca ✅ · Prompts ✅ · **Configurações ✅ (015a)**
+- **IA tecida no fluxo (015b/015c):** ✨ Roteirista IA no Briefing (lê o pedido real → roteiro editável → "Salvar como criativo no quadro" grava em `commercials`) · 🧠 Diretor de Tráfego IA nas Campanhas (lê métricas do formulário → relatório 🩺/🚦/🎯 → "Salvar relatório" grava em `library_items` com autor "Diretor de Tráfego IA")
+- **Marca oficial "vidro gelo"** 🧊: A 3D + olho de IA, degradê azul→violeta, em arquivo: `public/logo-anuncia.png` (lateral 47px · login 78px) + `src/app/icon.png` (aba do navegador, convenção Next) · SVG "A-com-raio" aposentado · conceito "Saturno" estacionado
+- **Voz da marca travada:** barra lateral "central de comando" · login minimalista (só marca + cartão) · subtítulo "Abra as portas do seu centro de comando."
+- Cenográficos conscientes (estacionados com dono): **números do Dashboard** (agregação real = prioridade 1 da Sprint 016) · seletor de workspace (Plano Pro/Enterprise) · sininho de notificações
 - IA REAL no ar: motor `/api/ia` + `iaService` + Laboratório `/laboratorio` · Modelo: `gemini-3.6-flash` (autodescoberto)
 - Docs vivos: `010_CHANGELOG` · `011_CURRENT_MISSION` (este) · `012_MEMORIA_ESTRATEGICA`
 
@@ -2842,54 +2876,72 @@ Implementar
 - Repo: `github.com/creatina23/saugc-os` (main) · Local: `C:\Projetos\BKp\saugc-os`
 - Produção: `anuncia-three.vercel.app` (push no main = deploy ~2 min; env var nova só vale no próximo deploy)
 - Supabase: projeto `ugaessoebkqfqezmuwhc` · sa-east-1 · Free (pingar 1×/semana)
+- **⚠️ Duas contas conhecidas no Supabase:** o app "mora" na conta PRINCIPAL (a que tem os 4 clientes). Confundiu qual está logada? Configurações → Perfil → olha o e-mail. Limpeza da conta secundária = estacionada.
 - Env (`.env.local` + Vercel): `NEXT_PUBLIC_SUPABASE_URL` (SEM `/rest/v1`) · `NEXT_PUBLIC_SUPABASE_ANON_KEY` · `GEMINI_API_KEY` (**server-side: JAMAIS em NEXT_PUBLIC_, chat ou código**)
-- Regra de ouro: publishable pode circular · segredos = só `.env.local`/Vercel · **segredo no chat = revogar sem discutir**
+- Regra de ouro de segredos: publishable pode circular · segredos = só `.env.local`/Vercel · **segredo no chat = revogar sem discutir**
 
-## 4. ARQUITETURA DE DADOS REAIS (padrão provado 8×)
+## 4. ARQUITETURA DE DADOS REAIS (padrão provado 9×)
 
 - `getSupabaseBrowser()` null → **modo demonstração** sem quebrar (selo visível)
 - Carga: `coletarX()` module-level + `.then()` no `useEffect` com `let ativo` — setState SÓ em `.then()`
 - snake (banco) → camel (tela); `numeric` chega string → helper `numero()`
-- Insert `.select().single()` → prepend · update → troca no lugar · delete após confirmar
+- Insert `.select().single()` → prepend · update → troca no lugar · **delete: confirmação "não tem volta" → delete real → some da lista (provado em Clientes, 015)**
 - Kanban otimista com setas: muda na tela → grava → erro = desfaz + confessa
 - **Erros confessam "Detalhe técnico:"** — nunca falha silenciosa
 - Blindagem SQL padrão: create if not exists → add column if not exists → **drops not null dos opcionais** → RLS + policy conditionada → **grant authenticated** → `notify pgrst, 'reload schema'` → select de prova
-- Biblioteca = baú da IA: IA Studio grava em `library_items` com categoria sugerida pelo agente
+- Biblioteca = baú da IA: IA Studio e Diretor de Tráfego gravam em `library_items` com categoria sugerida pelo agente
 
-## 5. ARQUITETURA DE IA (provada na Sprint 011)
+## 5. ARQUITETURA DE IA (provada na Sprint 011, tecida na 015)
 
 - Telas → `iaService` → POST `/api/ia` · providers futuros entram SÓ no route handler
 - Autodescoberta de modelo: lista `/v1beta/models` → filtra especialidades → ordena por versão → **hall dos reprovados** → fixa o 1º 200 · reserva `gemini-2.0-flash`
 - `temperatura` (0–1) e `maxTokens` (256–4096) com clamp · logs `[motor-ia]` no terminal
 - Agentes = persona (prefixo) + tarefa + "pt-BR direto, sem cercas de código"
+- **IA tecida lê o FORMULÁRIO real** (briefing/campanha) e grava o resultado no banco (commercials/library_items) — IA produtiva, não conversacional
+- **Plano Sprint 017 — Mesa de Motores (cadeia de reserva):** Gemini (titular) → GitHub Models (GPT-4o grátis) → Groq (velocidade) → OpenRouter (~28 modelos free) · chaves novas server-side · Claude/OpenAI direto NÃO têm tier grátis de API (fato 2026)
 
 ## 6. LEIS VIGENTES
 
 ### Comando Mestre (produto/código)
+
 - Badges: default/secondary/destructive/outline/success/warning/info/violet (Button tb "ai") · Tailwind 4 CSS-first
 - Telas leem de services · CHANGELOG append-only · GPS substituição completa · Memória (012) a cada decisão
 - Sem backend sem pedido explícito
 
+### 📜 Regra de Ouro v2 (9 ago 2026 — reescrita após o bug do "U" de UGC)
+
+- Entrega de código = **sempre arquivo COMPLETO** ("apague tudo e cole" + 📋 prova Ctrl+F)
+- Troca via Ctrl+Shift+F = **SÓ TEXTO PURO de tela** ("0 resultados = pula e anota" · node_modules fora)
+- NUNCA trocar trecho de código por busca · NUNCA rodar "UGC" sozinho no Replace All (é chave do banco: "UGC Script Templates")
+- Rótulo que também é CHAVE de código passa por mim (chave com espaço precisa de aspas; case-sensível)
+
 ### Lei da Língua (2 ago 2026)
-- Tela: ZERO inglês · Motor: inglês padrão · **PT-BR entregue é CONTRATO — mudança só com aviso prévio**
+
+- Tela: ZERO inglês/jargão · Motor: inglês padrão · **PT-BR entregue é CONTRATO — mudança só com aviso prévio 🗣️**
 
 ### Modo Soberano Universal (2 ago 2026)
+
 - 🏆 recomendação · ⚠️ risco · 🚀 potencial · 📈 próximo movimento · 3 níveis · horizontes 30/90/1a/3a
 
 ### Leis ativas
-- **Verdade na tela** · **Segredo no chat = revogar sem discutir**
+
+- **Verdade na tela** · **Segredo no chat = revogar sem discutir** · **Dedo-duro confesso ("Detalhe técnico:")**
 
 ### Leis estratégicas (travadas)
+
 - Venda primeiro · Vendeu → construiu · 50% entrada · Escopo fechado
 - Oferta: R$ 9.997 ou 12× R$ 997 + R$ 497/mês · Cliente-Fundador = estacionada
-- Ordem: terminar → usar todo dia → ensinar e vender
+- Ordem: terminar ✅ → **usar todo dia** → ensinar e vender
 
-## 7. PRÓXIMOS MOVIMENTOS
+## 7. PRÓXIMOS MOVIMENTOS (fila travada em reunião de 9 ago 2026)
 
-- **Sprint 015 = IA tecida + Configurações** ("Gerar a partir do briefing", agente Diretor de Tráfego com cola de métricas — Cérebro do Waze v1) → 🏁 **v2.0 declarada**
-- v3.0 "Waze do tráfego": 🧠 Cérebro 1º → 👁️ Olho (APIs) → ✋ Mão (com confirmação)
-- Pós-v2.0 (⭐): **Portal do Cliente** · Link público de Briefing · Relatório 1-clique
-- Pendências pequenas: login `traduzErro` + "Invalid API key" · `proxy.ts` try/catch · `iaService` no barrel · NODE_OPTIONS no "build" · fiapo `erroAcao` em campanhas-view · providers IA sob demanda · cravar NODE_OPTIONS no build
+1. **Sprint 016 — "Verdade total + Celular"** (aguardando "les go"): Dashboard real (agregação) · celular · foto de perfil · varredura de cenográficos
+2. **Dogfooding 2 semanas** — operação real rodando dentro do AnuncIA (Cliente Zero)
+3. **Sprint 017 — "PODER TOTAL"**: Mesa de Motores (cadeia de reserva de IAs grátis) + **Arquiteto de Páginas Fase A** (entregável DUPLO travado: Prompt Mestre + `index.html` pronto · fase "publicar" APOSENTADA → Guia de Subida Hostinger/Hostgator/LocalWeb em 3 passos · campos: objetivo, preço âncora+parcela, garantia, depoimentos, urgência, VSL, tom de voz · cota de páginas por plano) — antes do lançamento: demo matadora "anúncio + página em 5 minutos"
+4. **Lançamento** — oferta sai da gaveta (R$ 9.997 / 12× 997 + 497/mês)
+5. **v3.0 "Waze do tráfego"**: 🧠 Cérebro (✅ MVP já vivo como Diretor de Tráfego) → 👁️ Olho (APIs) → ✋ Mão (com confirmação)
+- Pós-v2.0 (⭐): Portal do Cliente · Link público de Briefing · Relatório 1-clique
+- Pendências pequenas: `iaService` no barrel · cravar NODE_OPTIONS no "build" do package.json · ping semanal Supabase · coluna fóssil `results` (campaigns) · domínio `useanuncia.com.br` (livre em 30/07, compra adiada)
 - Paralelo diário: **caça comercial 30 min/dia**
 
 ## 8. LIÇÕES OPERACIONAIS (cicatrizes que viraram regra)
@@ -2911,13 +2963,16 @@ Implementar
 15. Fóssil de mock no banco → `information_schema.columns`
 16. **Jaula NOT NULL** → `alter column drop not null` (produto manda)
 17. **Build × dev = cozinha lotada** → parar dev + limpar cache
-18. **Gêmeo fóssil `name` × canônico `title`** (Sprint 014) → `drop column if exists` em lote nas tabelas novas
+18. **Gêmeo fóssil `name` × canônico `title`** (Sprint 014) → drop em lote · cuidado com o que é canônico (`campaigns.name` era vivo!)
+19. **Replace All só TEXTO PURO** — "0 resultados = pula e anota" · node_modules fora · "UGC" nunca sozinho (9 ago)
+20. **Chave com espaço precisa de aspas + case-sensível** (caso kpiConfig "Receita do mês" quebrou o build) (9 ago)
+21. **Aspas retas em texto JSX = erro de lint** (`react/no-unescaped-entities`) → usar aspas tipográficas “ ” (9 ago)
+22. **Imagem quebrada = caminho/nome errado**, nunca formato (clássico `logo.png.png` do Windows) — raio-X: `Test-Path` / `Get-ChildItem -Name` (9 ago)
 
 ## 9. GATILHOS DO DONO
 
 - "les go" = começar sprint · "deu certo" = confirmado · "segue o baile" = retoma · "só se for agora" = Modo Sexta-Feira · "abre o roadmap" = o que fazer hoje · "INICIAR FASE EDUCAÇÃO E LANÇAMENTO" = futura fase de curso
-- "reunião aberta" = pausa código → Modo Soberano · "re" = volta com recapitulação de 3 linhas
-
+- "reunião aberta" / "começar reunião" = pausa código → Modo Soberano · "re" = volta com recapitulação de 3 linhas
 
 
 ---
