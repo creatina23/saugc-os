@@ -54,7 +54,7 @@ gráfico de receita dos últimos 6 meses, performance por canal
 
 ### 4.2 Clientes (`/clientes`)
 Sua base de empresas atendidas. Busca por nome/e-mail, filtros por plano
-(Enterprise, Growth, Starter) e status (Ativo, Inativo, Em onboarding).
+(Enterprise, Growth, Starter) e status (Ativo, Inativo, Em onboarding). =========================================> x | 0 | x | 0
 Botão **"Novo Cliente"** abre o cadastro rápido.
 
 ### 4.3 Campanhas (`/campanhas`)

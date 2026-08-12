@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -60,24 +61,6 @@ function iniciaisDoUsuario(email: string | null): string {
   const primeira = partes[0]?.charAt(0) ?? "U";
   const segunda = partes[1]?.charAt(0) ?? partes[0]?.charAt(1) ?? "";
   return (primeira + segunda).toUpperCase();
-}
-
-// Marca AnuncIA — "A com corte de raio", raio grosso/centro (o MESMO
-// desenho do login; trocar um = trocar o outro)
-function LogoAnuncIA({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none">
-      <defs>
-        <clipPath id="anuncia-logo-corte">
-          <path d="M3 22 L11 2 H13 L21 22 H18.2 L12 8.2 L5.8 22 Z" />
-        </clipPath>
-      </defs>
-      <path d="M3 22 L11 2 H13 L21 22 H18.2 L12 8.2 L5.8 22 Z" fill="#FFFFFF" />
-      <g clipPath="url(#anuncia-logo-corte)">
-        <path d="M15.2 4.8 L7.9 14.5 H11.3 L8.6 21.8 L16.6 9.6 H13.2 Z" fill="#0B0D12" />
-      </g>
-    </svg>
-  );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -214,9 +197,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             !showFull && "justify-center px-2",
           )}
         >
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-ai shadow-lg">
-            <LogoAnuncIA className="size-5" />
-          </div>
+          {/* Marca AnuncIA — logo oficial "vidro gelo" (arquivo em
+              public/logo-anuncia.png; o desenho já traz o próprio vidro,
+              então não vai caixa atrás). Tamanho: 47px (36px + 30%). */}
+          <Image
+            src="/logo-anuncia.png"
+            alt="AnuncIA"
+            width={47}
+            height={47}
+            priority
+            className="size-[47px] shrink-0 rounded-xl shadow-lg"
+          />
           {showFull && (
             <div className="min-w-0">
               <p className="truncate text-sm font-bold tracking-tight">AnuncIA</p>
@@ -470,7 +461,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     className="fixed inset-0 z-[45] cursor-default"
                     onClick={() => setOpenMenu(null)}
                   />
-                  <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-border bg-surface shadow-2xl w-80">
+                  <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-border bg-surface shadow-2xl">
                     <div className="flex items-center justify-between border-b border-border px-4 py-3">
                       <p className="text-sm font-semibold">Notificações</p>
                       <Badge variant="violet">{unreadCount} novas</Badge>
