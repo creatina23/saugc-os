@@ -26,6 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommandPalette } from "./command-palette";
+import { GuiaAjuda } from "./guia"; // Guia Vivo — "Como usar esta tela"
 import { Onboarding } from "./onboarding"; // tour de boas-vindas
 import { Toaster } from "./toaster";
 
@@ -385,6 +386,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </>
               )}
             </div>
+
+            {/* Guia Vivo — "Como usar esta tela": painel de passo a passo da
+                página atual (textos em lib/guia-data.ts). Sempre visível,
+                inclusive no celular. */}
+            <GuiaAjuda />
 
             <div className="relative">
               <Button
