@@ -1,20 +1,26 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
-// Motor de IA da AnuncIA — Route Handler (roda SÓ no servidor).
+// MESA DE MOTORES — a IA da AnuncIA nunca morre.
 // ------------------------------------------------------------------
-// • A chave GEMINI_API_KEY vive apenas aqui: nunca vai para o navegador.
-// • AUTODESCOBERTA + MEMÓRIA DO ERRO: pergunta à API quais modelos a
-//   chave pode usar, ordena os "flash" do mais novo pro mais velho e
-//   testa em ordem. Modelo reprovado (404 / aposentado) entra na lista
-//   de reprovados e nunca mais é escolhido neste boot. O primeiro que
-//   responder 200 vira o modelo fixado até o próximo boot.
-// • v4: aceita "temperatura" (0–1) e "maxTokens" (256–4096) no pedido —
-//   os controles das telas passam a valer de verdade.
-// • Providers futuros (Groq, GitHub Models, OpenRouter) entram NESTE
-//   arquivo, sem mudar uma linha das telas — elas falam só com iaService.
-// • Só atende usuário logado: protege a cota gratuita de estranhos.
-// • Logs [motor-ia] aparecem só no TERMINAL do servidor (jamais no navegador).
+// Route Handler (roda SÓ no servidor). Chaves JAMAIS vão pro navegador.
+//
+// CADEIA DE RESERVAS (texto), na ordem — um falha, o próximo assume:
+//   1) Gemini (titular) — AUTODESCOBERTA + hall dos reprovados iguais
+//      ao motor original: lista os modelos da chave, ordena os "flash"
+//      do mais novo pro mais velho, fixa o primeiro que responde 200.
+//   2) GitHub Models (GPT-4o) — grátis com a conta GitHub
+//   3) Groq (Llama 3.3 70B) — velocidade, cota diária generosa
+//   4) OpenRouter (modelo :free) — rota de fuga completa
+//
+// • SKIP GRACIOSO: camada sem chave é pulada em silêncio (só log).
+//   Sem chave nova nenhuma, o app se comporta exatamente como antes.
+// • GET /api/ia = espelho da mesa: quais motores têm chave plantada
+//   booleanos, zero segredo) — alimenta os cartões do IA Studio.
+// • A resposta de sucesso carrega "motor": quem de fato respondeu.
+//   As telas de hoje ignoram esse campo com segurança.
+// • Só atende usuário logado: protege as cotas gratuitas de estranhos.
+// • Logs [motor-ia] aparecem só no TERMINAL do servidor.
 
 const MODELO_RESERVA = "gemini-2.0-flash";
 const MAX_TENTATIVAS = 4;
@@ -29,9 +35,48 @@ const MODELOS_BLOQUEADOS = [
   "aqa",
 ];
 
-// Memória deste boot do servidor
+// Memória deste boot do servidor (camada Gemini)
 let modeloAprovado: string | null = null; // já respondeu 200 → fica fixado
 const modelosReprovados = new Set<string>(); // recusados (404) pelo Google
+
+// ---------- Os motores de reserva (mesmo formato OpenAI-compatível) ----------
+
+type MotorReserva = {
+  id: string; // rótulo que viaja na resposta ("motor": ...)
+  nome: string; // pros logs do terminal
+  env: string; // variável de ambiente da chave (server-side)
+  url: string;
+  modelo: string; // se o provedor aposentar, troca SÓ esta linha
+  extraHeaders?: Record<string, string>;
+};
+
+const RESERVAS: MotorReserva[] = [
+  {
+    id: "GitHub Models · GPT-4o",
+    nome: "GitHub Models",
+    env: "GITHUB_MODELS_TOKEN",
+    url: "https://models.github.ai/inference/chat/completions",
+    modelo: "openai/gpt-4o",
+  },
+  {
+    id: "Groq · Llama 3.3 70B",
+    nome: "Groq",
+    env: "GROQ_API_KEY",
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    modelo: "llama-3.3-70b-versatile",
+  },
+  {
+    id: "OpenRouter · Llama 3.3 70B free",
+    nome: "OpenRouter",
+    env: "OPENROUTER_API_KEY",
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    modelo: "meta-llama/llama-3.3-70b-instruct:free",
+    extraHeaders: {
+      "HTTP-Referer": "https://anuncia-three.vercel.app",
+      "X-Title": "AnuncIA",
+    },
+  },
+];
 
 type PedidoIA = {
   acao?: string;
@@ -39,6 +84,11 @@ type PedidoIA = {
   temperatura?: number;
   maxTokens?: number;
 };
+
+// Resultado padronizado de qualquer tentativa de motor
+type Tentativa =
+  | { ok: true; texto: string; motor: string }
+  | { ok: false; status: number | null };
 
 type ParteGemini = { text?: string };
 type RespostaGemini = {
@@ -50,12 +100,19 @@ type ModeloGemini = {
   supportedGenerationMethods?: string[];
 };
 
+type RespostaOpenAI = { choices?: { message?: { content?: string } }[] };
+
 // Extrai a versão numérica do nome ("gemini-2.5-flash" → 250, "gemini-3-flash" → 300)
 // pra ordenar do mais novo pro mais velho.
 function versaoDoModelo(nome: string): number {
   const alvo = /gemini-(\d+)(?:\.(\d+))?/i.exec(nome);
   if (!alvo) return 0;
-  return Number(alvo[1]) * 100 + Number(alvo[2] ?? "0");
+  return Number(alvo[1]) * 100 + Number(algo2(alvo));
+}
+
+// pequena guarda contra grupo ausente
+function algo2(alvo: RegExpExecArray): string {
+  return alvo[2] ?? "0";
 }
 
 // Parâmetros da geração, com limites saudáveis (protege cota e bolso)
@@ -141,6 +198,11 @@ function textoDaRespostaGemini(dados: unknown): string {
     .trim();
 }
 
+function textoDeRespostaOpenAI(dados: unknown): string {
+  const r = dados as RespostaOpenAI | null;
+  return (r?.choices?.[0]?.message?.content ?? "").trim();
+}
+
 function traduzErroIA(status: number): string {
   if (status === 429)
     return "Limite gratuito da IA atingido agora. Aguarde 1 minuto e tente de novo.";
@@ -150,6 +212,182 @@ function traduzErroIA(status: number): string {
   if (status >= 500) return "A IA está instável agora. Tente de novo em instantes.";
   return "Falha ao falar com a IA. Tente de novo.";
 }
+
+// ---------- Camada 1: Gemini (titular) ----------
+
+async function gerarViaGemini(
+  chave: string,
+  prompt: string,
+  temperatura: number,
+  maxTokens: number
+): Promise<Tentativa> {
+  let ultimoStatus: number | null = null;
+
+  for (
+    let tentativa = 1;
+    tentativa <= MAX_TENTATIVAS;
+    tentativa += 1
+  ) {
+    const modelo =
+      modeloAprovado ?? (await descobrirModelo(chave)) ?? MODELO_RESERVA;
+
+    if (modelosReprovados.has(modelo)) {
+      console.log("[motor-ia] Gemini sem novos candidatos — passando pro reserva");
+      break;
+    }
+
+    try {
+      const resposta = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": chave,
+          },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: temperatura,
+              maxOutputTokens: maxTokens,
+            },
+          }),
+          signal: AbortSignal.timeout(45000),
+        }
+      );
+
+      const dados: unknown = await resposta.json().catch(() => null);
+
+      if (resposta.ok) {
+        const gerado = textoDaRespostaGemini(dados);
+        if (!gerado) {
+          console.error(
+            "[motor-ia] Gemini respondeu sem texto. detalhe:",
+            JSON.stringify(dados)?.slice(0, 600)
+          );
+          ultimoStatus = 502;
+          break;
+        }
+        modeloAprovado = modelo;
+        console.log(`[motor-ia] Gemini aprovado e fixado: ${modelo}`);
+        return { ok: true, texto: gerado, motor: `Gemini · ${modelo}` };
+      }
+
+      ultimoStatus = resposta.status;
+      console.error(
+        "[motor-ia] Gemini recusou. status:",
+        resposta.status,
+        "| detalhe:",
+        JSON.stringify(dados)?.slice(0, 600)
+      );
+
+      if (resposta.status === 404) {
+        modelosReprovados.add(modelo);
+        if (modeloAprovado === modelo) modeloAprovado = null;
+        console.log(
+          `[motor-ia] "${modelo}" foi pro hall dos reprovados (${modelosReprovados.size}) — próximo candidato…`
+        );
+        continue;
+      }
+      break; // demais erros: desfila pro reserva
+    } catch (excecao) {
+      console.error("[motor-ia] Exceção ao chamar o Gemini:", excecao);
+      ultimoStatus = null; // timeout/rede — tenta o próximo motor
+      break;
+    }
+  }
+
+  return { ok: false, status: ultimoStatus };
+}
+
+// ---------- Camadas 2–4: reservas OpenAI-compatíveis ----------
+
+async function gerarViaReserva(
+  reserva: MotorReserva,
+  prompt: string,
+  temperatura: number,
+  maxTokens: number
+): Promise<Tentativa> {
+  const chave = process.env[reserva.env];
+  if (!chave) {
+    console.log(`[motor-ia] ${reserva.nome}: sem chave (${reserva.env}) — pulando`);
+    return { ok: false, status: null };
+  }
+
+  try {
+    const resposta = await fetch(reserva.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${chave}`,
+        ...(reserva.extraHeaders ?? {}),
+      },
+      body: JSON.stringify({
+        model: reserva.modelo,
+        messages: [{ role: "user", content: prompt }],
+        temperature: temperatura,
+        max_tokens: maxTokens,
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+
+    const dados: unknown = await resposta.json().catch(() => null);
+
+    if (resposta.ok) {
+      const texto = textoDeRespostaOpenAI(dados);
+      if (texto) {
+        console.log(`[motor-ia] ${reserva.nome} respondeu (${reserva.modelo})`);
+        return { ok: true, texto, motor: reserva.id };
+      }
+      console.error(
+        `[motor-ia] ${reserva.nome} respondeu sem texto. detalhe:`,
+        JSON.stringify(dados)?.slice(0, 600)
+      );
+      return { ok: false, status: 502 };
+    }
+
+    console.error(
+      `[motor-ia] ${reserva.nome} recusou. status:`,
+      resposta.status,
+      "| detalhe:",
+      JSON.stringify(dados)?.slice(0, 600)
+    );
+    return { ok: false, status: resposta.status };
+  } catch (excecao) {
+    console.error(`[motor-ia] Exceção ao chamar ${reserva.nome}:`, excecao);
+    return { ok: false, status: null };
+  }
+}
+
+// ---------- GET: espelho da mesa (quais motores têm chave plantada) ----------
+
+export async function GET() {
+  // Mesma porta do POST: com Supabase configurado, só usuário logado espiа
+  const supabase = await getSupabaseServer();
+  if (supabase) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { erro: "Faça login para ver os motores." },
+        { status: 401 }
+      );
+    }
+  }
+
+  // Só booleanos — NUNCA as chaves
+  return NextResponse.json({
+    motores: [
+      { id: "gemini", armado: Boolean(process.env.GEMINI_API_KEY) },
+      { id: "github", armado: Boolean(process.env.GITHUB_MODELS_TOKEN) },
+      { id: "groq", armado: Boolean(process.env.GROQ_API_KEY) },
+      { id: "openrouter", armado: Boolean(process.env.OPENROUTER_API_KEY) },
+    ],
+  });
+}
+
+// ---------- POST: gerar texto, caindo pela cadeia ----------
 
 export async function POST(request: Request) {
   // 1) Porta: quando o Supabase está configurado, exige usuário logado
@@ -166,16 +404,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // 2) Chave: sem ela, erro amigável (sem expor detalhes)
-  const chave = process.env.GEMINI_API_KEY;
-  if (!chave) {
-    return NextResponse.json(
-      { erro: "IA não configurada neste ambiente (GEMINI_API_KEY ausente)." },
-      { status: 503 }
-    );
-  }
-
-  // 3) Pedido
+  // 2) Pedido
   let corpo: PedidoIA;
   try {
     corpo = (await request.json()) as PedidoIA;
@@ -206,98 +435,64 @@ export async function POST(request: Request) {
   const temperatura = pegarTemperatura(corpo.temperatura);
   const maxTokens = pegarMaxTokens(corpo.maxTokens);
 
-  // 4) Gemini — desfila candidatos até um responder 200
-  let texto = "";
-  let ultimoStatus = 0;
+  // 3) Monta a fila: Gemini (se tiver chave) + cada reserva com chave plantada
+  const fila: (() => Promise<Tentativa>)[] = [];
 
-  for (
-    let tentativa = 1;
-    tentativa <= MAX_TENTATIVAS && !texto;
-    tentativa += 1
-  ) {
-    const modelo =
-      modeloAprovado ?? (await descobrirModelo(chave)) ?? MODELO_RESERVA;
+  const chaveGemini = process.env.GEMINI_API_KEY;
+  if (chaveGemini) {
+    fila.push(() => gerarViaGemini(chaveGemini, prompt, temperatura, maxTokens));
+  } else {
+    console.log("[motor-ia] sem GEMINI_API_KEY — indo direto pros reservas");
+  }
 
-    if (modelosReprovados.has(modelo)) {
-      console.log("[motor-ia] sem novos candidatos — encerrando tentativas");
-      break;
-    }
-
-    try {
-      const resposta = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": chave,
-          },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: temperatura,
-              maxOutputTokens: maxTokens,
-            },
-          }),
-          signal: AbortSignal.timeout(45000),
-        }
-      );
-
-      const dados: unknown = await resposta.json().catch(() => null);
-
-      if (resposta.ok) {
-        const gerado = textoDaRespostaGemini(dados);
-        if (!gerado) {
-          console.error(
-            "[motor-ia] Resposta veio sem texto. detalhe:",
-            JSON.stringify(dados)?.slice(0, 600)
-          );
-          return NextResponse.json(
-            { erro: "A IA não respondeu desta vez. Tente de novo." },
-            { status: 502 }
-          );
-        }
-        texto = gerado;
-        modeloAprovado = modelo;
-        console.log(`[motor-ia] modelo aprovado e fixado: ${modelo}`);
-        break;
-      }
-
-      ultimoStatus = resposta.status;
-      console.error(
-        "[motor-ia] Gemini recusou. status:",
-        resposta.status,
-        "| detalhe:",
-        JSON.stringify(dados)?.slice(0, 600)
-      );
-
-      if (resposta.status === 404) {
-        modelosReprovados.add(modelo);
-        if (modeloAprovado === modelo) modeloAprovado = null;
-        console.log(
-          `[motor-ia] "${modelo}" foi pro hall dos reprovados (${modelosReprovados.size}) — próximo candidato…`
-        );
-        continue;
-      }
-      break; // demais erros não melhoram com nova tentativa
-    } catch (excecao) {
-      console.error("[motor-ia] Exceção ao chamar a IA:", excecao);
-      return NextResponse.json(
-        { erro: "A IA demorou demais para responder. Tente de novo." },
-        { status: 504 }
-      );
+  for (const reserva of RESERVAS) {
+    if (process.env[reserva.env]) {
+      fila.push(() => gerarViaReserva(reserva, prompt, temperatura, maxTokens));
+    } else {
+      console.log(`[motor-ia] ${reserva.nome}: sem chave (${reserva.env}) — fora da fila`);
     }
   }
 
-  if (texto) {
-    return NextResponse.json({ texto });
+  if (fila.length === 0) {
+    return NextResponse.json(
+      { erro: "IA não configurada neste ambiente (nenhuma chave plantada)." },
+      { status: 503 }
+    );
   }
 
-  if (ultimoStatus === 0) {
+  // 4) Desfila até um responder
+  let ultimoStatus: number | null = null;
+  let houveLimite = false;
+
+  for (const tentar of fila) {
+    const resultado = await tentar();
+    if (resultado.ok) {
+      return NextResponse.json({ texto: resultado.texto, motor: resultado.motor });
+    }
+    if (resultado.status !== null) {
+      ultimoStatus = resultado.status;
+      if (resultado.status === 429) houveLimite = true;
+    }
+  }
+
+  // 5) Todos falharam — confessa em PT-BR
+  console.error("[motor-ia] TODOS os motores falharam. último status:", ultimoStatus);
+
+  if (houveLimite) {
     return NextResponse.json(
       {
         erro:
-          "Nenhum modelo de IA disponível para sua chave agora. Tente mais tarde.",
+          "Todos os motores gratuitos bateram o limite agora. Aguarde 1 minuto e tente de novo — a cota volta sozinha.",
+      },
+      { status: 429 }
+    );
+  }
+
+  if (ultimoStatus === null) {
+    return NextResponse.json(
+      {
+        erro:
+          "Nenhum motor de IA conseguiu responder agora (rede ou tempo). Tente de novo em instantes.",
       },
       { status: 503 }
     );

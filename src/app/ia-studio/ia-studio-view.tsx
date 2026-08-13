@@ -1,23 +1,26 @@
 "use client";
 
-// IA Studio — playground de agentes ligado no MOTOR REAL (/api/ia).
+// IA Studio — playground de agentes ligado na MESA DE MOTORES (/api/ia).
 // ------------------------------------------------------------------
 // • Cada agente é uma persona de verdade (prefixo enviado junto com a tarefa).
 // • Temperatura e Máx. tokens são controles REAIS (chegam ao modelo).
-// • Providers: a verdade — Gemini conectado; demais "Em breve".
-// • Histórico: gerações reais DESTA sessão.
+// • Cartões de motores: VIVOS — a tela pergunta ao servidor quais motores
+//   têm chave armada (o servidor NUNCA devolve o segredo, só o status).
+// • Cadeia de verdade: Gemini → GitHub Models → Groq → OpenRouter; quem
+//   não tem chave é pulado em silêncio. O histórico grava quem respondeu.
 // • v3.1 — "Salvar na biblioteca" reconectado: qualquer saída vira item
 //   permanente na tabela library_items (categoria sugerida pelo agente).
+// • v3.2 — motores vivos + rótulo real de quem respondeu em cada geração +
+//   aposenta o "Custo R$ 0" fixo e o "35+ modelos" (Verdade na tela).
 // ------------------------------------------------------------------
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BookMarked,
   Bot,
   Brain,
   Check,
   Clapperboard,
-  Coins,
   Copy,
   FileText,
   Gauge,
@@ -104,45 +107,71 @@ const agents = [
 ];
 
 
-// ---------- Providers (a verdade, sem fingimento) ----------
+// ---------- Mesa de motores (selo vivo, sem segredo na tela) ----------
 
-const providers = [
+// undefined = ainda lendo · null = o espelho falhou (sem leitura) · lista = ok
+type LeituraMesa = { id: string; armado: boolean }[] | null | undefined;
+
+type MotorId = "gemini" | "github" | "groq" | "openrouter";
+
+const provedores: {
+  id: MotorId;
+  nome: string;
+  detalhe: string;
+  descricao: string;
+  icone: typeof FileText;
+}[] = [
   {
+    id: "gemini",
     nome: "Gemini Flash",
     detalhe: "Google · texto",
     descricao:
-      "Conectado e respondendo. O modelo exato é escolhido sozinho pelo motor — sempre o flash mais novo da sua chave.",
+      "Primeiro da fila. O modelo exato é descoberto sozinho pelo motor — sempre o flash mais novo da sua chave.",
     icone: FileText,
-    conectado: true,
   },
   {
-    nome: "Groq",
-    detalhe: "texto rápido · Whisper",
-    descricao:
-      "Reserva de velocidade — entra quando precisarmos de resposta quase instantânea.",
-    icone: Bot,
-    conectado: false,
-  },
-  {
+    id: "github",
     nome: "GitHub Models",
-    detalhe: "grátis com sua conta GitHub",
+    detalhe: "grátis com a sua conta GitHub",
     descricao:
-      "Cardápio de modelos sem custo, usando a conta que você já tem.",
+      "Primeira reserva. Entra em campo usando a conta que você já tem, sem custo.",
     icone: Terminal,
-    conectado: false,
   },
   {
-    nome: "OpenRouter",
-    detalhe: "35+ modelos gratuitos",
+    id: "groq",
+    nome: "Groq",
+    detalhe: "texto quase instantâneo",
     descricao:
-      "Rota de fuga completa, caso algum provider mude as regras do jogo.",
+      "Segunda reserva. Velocidade altíssima para o app continuar respondendo.",
+    icone: Bot,
+  },
+  {
+    id: "openrouter",
+    nome: "OpenRouter",
+    detalhe: "cota grátis diária",
+    descricao:
+      "Última linha de defesa. Garante resposta se os outros mudarem as regras do jogo.",
     icone: Sparkles,
-    conectado: false,
   },
 ];
 
+function armadoNaMesa(mesa: LeituraMesa, id: MotorId): boolean | null {
+  if (!mesa) return null;
+  const motor = mesa.find((m) => m.id === id);
+  return motor ? motor.armado : null;
+}
 
-const MODELO_ROTULO = "Gemini Flash (auto)";
+// Rótulo honesto de quem respondeu. A rota devolve "Gemini · modelo"
+// ou o apelido da reserva: github / groq / openrouter.
+function rotuloMotor(motor: string | null): string {
+  if (!motor) return "Gemini (auto)";
+  if (motor.startsWith("Gemini")) return motor;
+  if (motor === "github") return "GitHub Models (reserva)";
+  if (motor === "groq") return "Groq (reserva)";
+  if (motor === "openrouter") return "OpenRouter (reserva)";
+  return motor;
+}
+
 
 // ---------- Salvar na biblioteca (baú real) ----------
 
@@ -167,13 +196,14 @@ type AlvoSalvamento = {
   agente: string;
   prompt: string;
   output: string;
+  motor: string; // rótulo real de quem respondeu
 };
 
 
 type GeracaoReal = {
   id: string;
   agente: string;
-  modelo: string;
+  modelo: string; // rótulo do motor que respondeu de fato
   prompt: string;
   output: string;
   hora: string;
@@ -186,10 +216,12 @@ export function IaStudioView() {
   const [maxTokens, setMaxTokens] = useState(1200);
   const [promptText, setPromptText] = useState("");
   const [output, setOutput] = useState("");
+  const [motorSaida, setMotorSaida] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
   const [historico, setHistorico] = useState<GeracaoReal[]>([]);
+  const [mesa, setMesa] = useState<LeituraMesa>(undefined);
 
   // Salvar na biblioteca
   const [salvamentoAberto, setSalvamentoAberto] = useState(false);
@@ -201,10 +233,29 @@ export function IaStudioView() {
   const [erroSalvamento, setErroSalvamento] = useState<string | null>(null);
   const [salvoRecente, setSalvoRecente] = useState<string | null>(null);
 
+  // Lê o espelho da mesa uma vez por visita (só status, nunca segredo).
+  useEffect(() => {
+    let ativo = true;
+    iaService.statusMotores().then((lista) => {
+      if (ativo) setMesa(lista);
+    });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const motoresArmados = mesa ? mesa.filter((m) => m.armado).length : 0;
+  const leituraMesaRotulo =
+    mesa === undefined
+      ? "…"
+      : mesa === null
+        ? "—"
+        : `${motoresArmados} de ${mesa.length}`;
+
   const stats = [
     {
-      label: "Modelo em uso",
-      value: "Automático",
+      label: "Motores armados",
+      value: leituraMesaRotulo,
       icon: Bot,
       tone: "bg-primary/15 text-primary",
     },
@@ -221,9 +272,9 @@ export function IaStudioView() {
       tone: "bg-success/15 text-success",
     },
     {
-      label: "Custo de IA hoje",
-      value: "R$ 0",
-      icon: Coins,
+      label: "Último motor",
+      value: historico[0]?.modelo ?? "—",
+      icon: Sparkles,
       tone: "bg-warning/15 text-warning",
     },
   ];
@@ -256,12 +307,14 @@ export function IaStudioView() {
     setGenerating(false);
 
     if (resultado.ok) {
+      const motorReal = rotuloMotor(resultado.motor);
       setOutput(resultado.texto);
+      setMotorSaida(motorReal);
       setHistorico((atual) => [
         {
           id: `gen-${Date.now()}`,
           agente: agente.name,
-          modelo: MODELO_ROTULO,
+          modelo: motorReal,
           prompt: promptText.trim(),
           output: resultado.texto,
           hora: new Date().toLocaleTimeString("pt-BR", {
@@ -324,7 +377,7 @@ export function IaStudioView() {
       title: tituloSalvoF.trim() || "Geração do IA Studio",
       category: categoriaSalvaF,
       author: autorSalvoF.trim() || "Equipe AnuncIA",
-      description: `Gerado no IA Studio · agente ${alvoSalvamento.agente} · modelo ${MODELO_ROTULO}`,
+      description: `Gerado no IA Studio · agente ${alvoSalvamento.agente} · motor ${alvoSalvamento.motor}`,
       content: alvoSalvamento.output,
     });
 
@@ -462,38 +515,54 @@ export function IaStudioView() {
         ))}
       </div>
 
-      <h2 className="mt-8 mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-        Motor de IA
+      <h2 className="mt-8 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+        Mesa de motores
       </h2>
+      <p className="mt-1 mb-3 text-xs text-muted-foreground">
+        A cadeia tenta nesta ordem e pula em silêncio quem não tem chave
+        armada — você só fica sem resposta se TODOS falharem.
+      </p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {providers.map((provider) => (
-          <Card
-            key={provider.nome}
-            className={
-              provider.conectado
-                ? "h-full border-success/40 shadow-[0_0_0_1px_rgba(16,185,129,0.25),0_0_24px_rgba(16,185,129,0.08)]"
-                : "card-glow h-full opacity-70"
-            }
-          >
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex size-9 items-center justify-center rounded-lg bg-ai/15 text-ai">
-                  <provider.icone className="size-4" />
+        {provedores.map((provedor) => {
+          const armado = armadoNaMesa(mesa, provedor.id);
+          const conectado = armado === true;
+          const rotuloSelo =
+            mesa === undefined
+              ? "Lendo…"
+              : mesa === null
+                ? "Sem leitura"
+                : conectado
+                  ? "Conectado"
+                  : "Sem chave";
+          return (
+            <Card
+              key={provedor.id}
+              className={
+                conectado
+                  ? "h-full border-success/40 shadow-[0_0_0_1px_rgba(16,185,129,0.25),0_0_24px_rgba(16,185,129,0.08)]"
+                  : "card-glow h-full opacity-70"
+              }
+            >
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-ai/15 text-ai">
+                    <provedor.icone className="size-4" />
+                  </div>
+                  <Badge variant={conectado ? "success" : "secondary"}>
+                    {rotuloSelo}
+                  </Badge>
                 </div>
-                <Badge variant={provider.conectado ? "success" : "secondary"}>
-                  {provider.conectado ? "Conectado" : "Em breve"}
-                </Badge>
-              </div>
-              <p className="mt-3 text-sm font-semibold">{provider.nome}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {provider.detalhe}
-              </p>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                {provider.descricao}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+                <p className="mt-3 text-sm font-semibold">{provedor.nome}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {provedor.detalhe}
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {provedor.descricao}
+                </p>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <div className="mt-8 grid gap-4 xl:grid-cols-2">
@@ -554,11 +623,12 @@ export function IaStudioView() {
 
             <div className="rounded-xl border border-border p-3 text-xs leading-relaxed text-muted-foreground">
               <span className="font-medium text-foreground">
-                Modelo em uso:{" "}
+                Mesa em cadeia:{" "}
               </span>
-              automático — o motor escolhe o melhor Gemini disponível para a
-              sua chave e troca sozinho se o Google aposentar algum. Zero
-              manutenção pra você.
+              o app tenta o Gemini primeiro; se faltar chave ou a cota do dia
+              acabar, cai para o próximo motor armado (GitHub Models → Groq →
+              OpenRouter) sem te pedir nada. A seta só para quando alguém
+              responde.
             </div>
 
             <div>
@@ -662,7 +732,7 @@ export function IaStudioView() {
                     />
                   ))}
                   <p className="pt-2 text-xs text-muted-foreground">
-                    {selectedAgent} pensando com Gemini Flash…
+                    {selectedAgent} pensando…
                   </p>
                 </div>
               ) : erro ? (
@@ -690,41 +760,47 @@ export function IaStudioView() {
               )}
             </div>
             {output && !generating && (
-              <div className="mt-3 flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => copyText("output", output)}
-                >
-                  {copiedTarget === "output" ? (
-                    <Check className="text-success" />
-                  ) : (
-                    <Copy />
-                  )}
-                  {copiedTarget === "output" ? "Copiado" : "Copiar"}
-                </Button>
-                <Button
-                  variant="ai"
-                  size="sm"
-                  onClick={() =>
-                    abrirSalvamento({
-                      alvo: "saida-atual",
-                      agente: selectedAgent,
-                      prompt: promptText,
-                      output,
-                    })
-                  }
-                >
-                  {salvoRecente === "saida-atual" ? (
-                    <>
-                      <Check className="text-success" /> Salvo na biblioteca
-                    </>
-                  ) : (
-                    <>
-                      <BookMarked /> Salvar na biblioteca
-                    </>
-                  )}
-                </Button>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-muted-foreground">
+                  {motorSaida ? `Respondido por ${motorSaida}` : ""}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyText("output", output)}
+                  >
+                    {copiedTarget === "output" ? (
+                      <Check className="text-success" />
+                    ) : (
+                      <Copy />
+                    )}
+                    {copiedTarget === "output" ? "Copiado" : "Copiar"}
+                  </Button>
+                  <Button
+                    variant="ai"
+                    size="sm"
+                    onClick={() =>
+                      abrirSalvamento({
+                        alvo: "saida-atual",
+                        agente: selectedAgent,
+                        prompt: promptText,
+                        output,
+                        motor: motorSaida ?? rotuloMotor(null),
+                      })
+                    }
+                  >
+                    {salvoRecente === "saida-atual" ? (
+                      <>
+                        <Check className="text-success" /> Salvo na biblioteca
+                      </>
+                    ) : (
+                      <>
+                        <BookMarked /> Salvar na biblioteca
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -774,6 +850,7 @@ export function IaStudioView() {
                           agente: item.agente,
                           prompt: item.prompt,
                           output: item.output,
+                          motor: item.modelo,
                         })
                       }
                       className="size-8 text-muted-foreground"

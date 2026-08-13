@@ -8,6 +8,10 @@
 //   (título, cliente, creator, tags, prazo e detalhes) e escreve o
 //   roteiro; editável na hora; 1 clique vira criativo no quadro
 //   Comerciais (tabela commercials, status Rascunho, formato Reels).
+// • Sprint 017: nasce a Ponte do Vídeo — 1 clique transforma o
+//   roteiro em comandos prontos pro Flow (Google), cena a cena, 8s
+//   cada, já no estilo caseiro de celular. Caminho A: Flow → CapCut
+//   → Mídias.
 // • Erros confessam "Detalhe técnico:" — nunca falha em silêncio.
 // • Sem banco configurado → modo demonstração (mock, selo visível);
 //   a IA gera mesmo assim — só o "salvar no quadro" pede o banco.
@@ -21,7 +25,9 @@ import {
   ChevronRight,
   Clapperboard,
   Clock,
+  Copy,
   FileText,
+  Film,
   Loader2,
   PenLine,
   Plus,
@@ -217,6 +223,11 @@ export function BriefingsView() {
   const [sucessoIa, setSucessoIa] = useState(false);
   const [erroIa, setErroIa] = useState<string | null>(null);
 
+  // IA — roteiro vira comandos de vídeo pro Flow (Sprint 017)
+  const [comandosVideo, setComandosVideo] = useState("");
+  const [gerandoComandos, setGerandoComandos] = useState(false);
+  const [copiaComandosOk, setCopiaComandosOk] = useState(false);
+
   // Carga inicial — setState SÓ em .then() (lei do ESLint)
   useEffect(() => {
     let ativo = true;
@@ -282,6 +293,9 @@ export function BriefingsView() {
     setSalvandoCriativo(false);
     setSucessoIa(false);
     setErroIa(null);
+    setComandosVideo("");
+    setGerandoComandos(false);
+    setCopiaComandosOk(false);
   }
 
   function limparFormulario() {
@@ -465,7 +479,62 @@ Entregue o roteiro EXATAMENTE nesta estrutura, sem introdução nem conclusão:
       );
       return;
     }
+    // Roteiro novo = comandos velhos não valem mais; a Ponte zera junto
+    setComandosVideo("");
+    setCopiaComandosOk(false);
     setRoteiro(resposta.texto.trim());
+  }
+
+  // ---------- IA: roteiro vira comandos de vídeo (Ponte do Vídeo, 017) ----------
+
+  function montarPromptComandosVideo(): string {
+    return `Você é um engenheiro de comandos sênior para geradores de vídeo com IA, especialista no Flow/Veo do Google. Você transforma roteiros de anúncios UGC em comandos de vídeo prontos pra colar, um por cena.
+
+ROTEIRO DO ANÚNCIO:
+${roteiro.trim()}
+
+Regras dos comandos:
+- 1 comando por cena do roteiro (na mesma ordem), cada um pensado pra um clipe de 8 segundos.
+- Escreva em português do Brasil, descrevendo: quem aparece e faz o quê, onde está (cenário simples e real), iluminação natural, câmera na mão estilo caseiro gravado com celular, clima/emoção da cena.
+- Estilo UGC de verdade: pessoa comum, ambiente real (quarto, cozinha, rua), nada de estúdio ou perfeito demais.
+- Se a cena tem fala, termine o comando com a fala exata entre aspas duplas e a indicação de idioma: falando em português brasileiro: "...".
+- Mantenha o MESMO personagem em todos os comandos (aparência e roupa descritas iguais em cada cena).
+
+Formato EXATO de saída, sem introdução nem conclusão:
+
+CENA 1 (8s): <comando completo>
+CENA 2 (8s): <comando completo>
+(quantas cenas o roteiro tiver)
+
+💡 DICA FINAL: <1 orientação rápida pra manter o mesmo personagem em todos os clipes gerados no Flow>`;
+  }
+
+  async function handleGerarComandosVideo() {
+    setErroIa(null);
+    if (!roteiro.trim()) return;
+    setGerandoComandos(true);
+    const resposta = await iaService.gerarTexto(montarPromptComandosVideo(), {
+      temperatura: 0.6,
+      maxTokens: 1800,
+    });
+    setGerandoComandos(false);
+    if (!resposta.ok || !resposta.texto.trim()) {
+      setErroIa(
+        `A IA não conseguiu montar os comandos agora. Detalhe técnico: ${resposta.erro ?? "resposta vazia do modelo"}`
+      );
+      return;
+    }
+    setComandosVideo(resposta.texto.trim());
+  }
+
+  async function handleCopiarComandos() {
+    try {
+      await navigator.clipboard.writeText(comandosVideo);
+      setCopiaComandosOk(true);
+      setTimeout(() => setCopiaComandosOk(false), 1800);
+    } catch {
+      setCopiaComandosOk(false);
+    }
   }
 
   async function handleSalvarCriativo() {
@@ -533,7 +602,7 @@ Entregue o roteiro EXATAMENTE nesta estrutura, sem introdução nem conclusão:
       <PageHeader
         title="Briefings"
         badge={modoDemo ? "Modo demonstração" : undefined}
-        description="Pedidos que dá origem aos anúncio e campanhas."
+        description="Pedidos que dão origem aos anúncios e às campanhas."
       >
         <Dialog
           open={dialogOpen}
@@ -738,6 +807,95 @@ Entregue o roteiro EXATAMENTE nesta estrutura, sem introdução nem conclusão:
                       >
                         Descartar roteiro
                       </Button>
+                    </div>
+
+                    {/* ---------- Ponte do Vídeo: roteiro vira comandos pro Flow (017) ---------- */}
+                    <div className="space-y-3 rounded-xl border border-border bg-background/40 p-3.5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="flex items-center gap-1.5 text-sm font-medium">
+                            <Film className="size-4 text-ai" /> Ponte do Vídeo
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Transforma o roteiro acima em comandos prontos pra
+                            colar no Flow — 1 comando por cena, já no estilo
+                            caseiro de celular.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={gerandoComandos || gerando || !roteiro.trim()}
+                          onClick={() => void handleGerarComandosVideo()}
+                        >
+                          {gerandoComandos ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />{" "}
+                              Montando comandos…
+                            </>
+                          ) : comandosVideo ? (
+                            <>
+                              <RefreshCw /> Gerar novos comandos
+                            </>
+                          ) : (
+                            <>
+                              <Film /> Comandos de vídeo pro Flow
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {comandosVideo && (
+                        <>
+                          <Textarea
+                            id="comandos-video-ia"
+                            value={comandosVideo}
+                            onChange={(event) =>
+                              setComandosVideo(event.target.value)
+                            }
+                            rows={10}
+                            aria-label="Comandos de vídeo gerados pela IA — editáveis"
+                            className="bg-background/60 text-sm leading-relaxed"
+                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void handleCopiarComandos()}
+                            >
+                              {copiaComandosOk ? (
+                                <>
+                                  <CheckCircle2 className="text-success" />{" "}
+                                  Copiado!
+                                </>
+                              ) : (
+                                <>
+                                  <Copy /> Copiar tudo
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={gerandoComandos}
+                              onClick={() => {
+                                setComandosVideo("");
+                                setCopiaComandosOk(false);
+                              }}
+                            >
+                              Descartar comandos
+                            </Button>
+                          </div>
+                          <p className="text-[11px] leading-relaxed text-muted-foreground">
+                            Caminho A: cole cada comando no Flow (2 a 4 vídeos
+                            grátis por dia), baixe os trechos, monte no CapCut
+                            e suba o vídeo final na página Mídias.
+                          </p>
+                        </>
+                      )}
                     </div>
                   </>
                 )}
