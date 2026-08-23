@@ -80,6 +80,66 @@ function traduzErroImagem(status: number): string {
   return "Falha ao gerar a imagem. Tente de novo.";
 }
 
+// ---------- Enriquecimento de prompt: PT solto → EN denso (Sprint 019) ----------
+// A Mesa de TEXTO trabalha pra Mesa de IMAGEM: o Gemini (grátis, já
+// plantado) transforma a descrição em português num prompt curto e
+// denso em INGLÊS (os modelos de imagem entendem inglês muito melhor).
+// Se o tradutor falhar ou não tiver chave, segue o texto ORIGINAL —
+// o enriquecimento NUNCA derruba a geração.
+
+const MODELO_TRADUTOR = "gemini-2.0-flash"; // estável, rápido, cota grátis
+
+async function enriquecerPrompt(promptOriginal: string): Promise<string> {
+  const chave = process.env.GEMINI_API_KEY;
+  if (!chave) return promptOriginal;
+
+  try {
+    const instrucao =
+      "Turn this Brazilian Portuguese description into a short, dense English image-generation prompt. " +
+      "Include subject, scene, composition, visual style and lighting. " +
+      "Answer ONLY with the prompt itself, no quotes, maximum 60 words. Description: " +
+      JSON.stringify(promptOriginal);
+
+    const resposta = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODELO_TRADUTOR}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": chave,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: instrucao }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 200 },
+        }),
+        signal: AbortSignal.timeout(12000),
+      }
+    );
+
+    if (!resposta.ok) {
+      console.log("[motor-imagem] tradutor de prompt indisponível — usando original");
+      return promptOriginal;
+    }
+
+    const dados = (await resposta.json().catch(() => null)) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    } | null;
+
+    const enriquecido = (dados?.candidates?.[0]?.content?.parts ?? [])
+      .map((parte) => parte.text ?? "")
+      .join("")
+      .trim()
+      .replace(/^["']|["']$/g, "");
+
+    if (!enriquecido) return promptOriginal;
+    console.log(`[motor-imagem] prompt enriquecido p/ inglês (${enriquecido.length} caracteres)`);
+    return enriquecido;
+  } catch {
+    console.log("[motor-imagem] tradutor de prompt falhou — usando original");
+    return promptOriginal;
+  }
+}
+
 // ---------- Camada 1: Cloudflare Workers AI (titular klein + reserva schnell) ----------
 
 // Cada modelo tem schema PRÓPRIO no Workers AI — o corpo do pedido é
@@ -325,6 +385,8 @@ export async function POST(request: Request) {
     );
   }
 
+  // Enriquece UMA vez, antes da fila: PT solto → prompt EN denso.
+  const promptFinal = await enriquecerPrompt(prompt);
   const formato = pegarFormato(corpo.formato);
   // Nota (Sprint 019): os schemas FLUX do Cloudflare NÃO aceitam
   // negative_prompt — o campo chega aqui e fica reservado pro dia em
@@ -339,7 +401,7 @@ export async function POST(request: Request) {
   if (accountId && tokenCloudflare) {
     for (const motor of MOTORES_CLOUDFLARE) {
       fila.push(() =>
-        gerarViaCloudflare(accountId, tokenCloudflare, motor, prompt, formato)
+        gerarViaCloudflare(accountId, tokenCloudflare, motor, promptFinal, formato)
       );
     }
   } else {
@@ -350,7 +412,7 @@ export async function POST(request: Request) {
 
   const chaveGemini = process.env.GEMINI_API_KEY;
   if (process.env.GEMINI_IMAGEM_ATIVA === "true" && chaveGemini) {
-    fila.push(() => gerarViaGeminiImagem(chaveGemini, prompt));
+    fila.push(() => gerarViaGeminiImagem(chaveGemini, promptFinal));
   } else {
     console.log("[motor-imagem] reserva Gemini imagem: desligada (padrão — custo)");
   }
@@ -373,6 +435,7 @@ export async function POST(request: Request) {
         imagem: `data:image/png;base64,${resultado.imagemBase64}`,
         motor: resultado.motor,
         formato: `${formato.largura}x${formato.altura}`,
+        promptUsado: promptFinal,
       });
     }
     if (resultado.status !== null) {
