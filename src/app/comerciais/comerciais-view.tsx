@@ -7,6 +7,9 @@
 // • CRUD completo: criar, clicar no cartão pra editar, excluir.
 // • Erros confessam "Detalhe técnico:" — nunca falha em silêncio.
 // • Sem banco configurado → modo demonstração (mock, selo visível).
+// • (Sprint 019) Imagem do criativo por IA: descrição + formato →
+//   /api/imagem (Mesa de Imagens) → preview + baixar. Fase 4 (próxima)
+//   salvará direto em Mídias e Biblioteca.
 // ------------------------------------------------------------------
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -19,6 +22,7 @@ import {
   Clapperboard,
   Eye,
   Film,
+  Image as ImageIcon,
   Loader2,
   Play,
   Plus,
@@ -53,6 +57,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { clients, commercials } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { imagemService } from "@/lib/services";
 import { cn } from "@/lib/utils";
 import type { CommercialStatus, ThumbnailTone } from "@/types";
 
@@ -69,6 +74,14 @@ const columns: { status: CommercialStatus; dot: string }[] = [
 ];
 
 const formatoOptions = ["Reels", "TikTok", "Shorts", "Feed"] as const;
+
+// (Sprint 019) Formatos de imagem aceitos pela Mesa de Imagens (/api/imagem)
+const imagemFormatoOptions = [
+  { valor: "quadrado", rotulo: "Quadrado 1:1 (feed)" },
+  { valor: "retrato", rotulo: "Retrato 4:5 (feed)" },
+  { valor: "vertical", rotulo: "Vertical 9:16 (stories/reels)" },
+  { valor: "paisagem", rotulo: "Paisagem 5:4 (banner)" },
+] as const;
 
 const toneGradient: Record<ThumbnailTone, string> = {
   blue: "from-blue-500/60 to-blue-900/30",
@@ -229,6 +242,14 @@ export function ComerciaisView() {
   const [excluindo, setExcluindo] = useState(false);
   const [erroDialog, setErroDialog] = useState<string | null>(null);
 
+  // (Sprint 019) Imagem do criativo por IA — estado da Fase 3
+  const [imagemPrompt, setImagemPrompt] = useState("");
+  const [imagemFormato, setImagemFormato] = useState<string>("quadrado");
+  const [gerandoImagem, setGerandoImagem] = useState(false);
+  const [imagemGerada, setImagemGerada] = useState<string | null>(null);
+  const [imagemMotor, setImagemMotor] = useState<string | null>(null);
+  const [erroImagem, setErroImagem] = useState<string | null>(null);
+
   // Erros de ação (mover entre colunas) — banner confesso
   const [erroAcao, setErroAcao] = useState<string | null>(null);
 
@@ -296,6 +317,16 @@ export function ComerciaisView() {
     },
   ];
 
+  // (Sprint 019) limpa a seção de imagem (novo, edição ou fechar dialog)
+  function resetarImagem() {
+    setImagemPrompt("");
+    setImagemFormato("quadrado");
+    setGerandoImagem(false);
+    setImagemGerada(null);
+    setImagemMotor(null);
+    setErroImagem(null);
+  }
+
   function limparFormulario() {
     setEditingId(null);
     setTituloF("");
@@ -306,6 +337,7 @@ export function ComerciaisView() {
     setStatusSel("Rascunho");
     setRoteiroF("");
     setErroDialog(null);
+    resetarImagem(); // (Sprint 019)
   }
 
   function abrirNovo() {
@@ -323,6 +355,7 @@ export function ComerciaisView() {
     setStatusSel(c.status);
     setRoteiroF(c.roteiro);
     setErroDialog(null);
+    resetarImagem(); // (Sprint 019) cada comercial começa a seção de imagem limpa
     setDialogOpen(true);
   }
 
@@ -337,6 +370,33 @@ export function ComerciaisView() {
       deadline: prazoF || null,
       status: statusSel,
     };
+  }
+
+  // (Sprint 019) puxa o começo do roteiro pra descrição da imagem
+  function usarRoteiroImagem() {
+    setImagemPrompt(roteiroF.trim().slice(0, 280));
+  }
+
+  // (Sprint 019) chama a Mesa de Imagens pelo service (nunca direto na chave)
+  async function handleGerarImagem() {
+    const prompt = imagemPrompt.trim();
+    if (!prompt) {
+      setErroImagem("Descreva a imagem antes de gerar.");
+      return;
+    }
+    setErroImagem(null);
+    setGerandoImagem(true);
+    const formato = imagemFormato as "quadrado" | "retrato" | "vertical" | "paisagem";
+    const resposta = await imagemService.gerarImagem(prompt, { formato });
+    setGerandoImagem(false);
+    if (!resposta.ok) {
+      setImagemGerada(null);
+      setImagemMotor(null);
+      setErroImagem(resposta.erro ?? "Falha ao gerar a imagem.");
+      return;
+    }
+    setImagemGerada(resposta.imagem);
+    setImagemMotor(resposta.motor);
   }
 
   async function handleSalvar(event: FormEvent<HTMLFormElement>) {
@@ -603,6 +663,98 @@ export function ComerciaisView() {
                   placeholder="Hook de 3s, demonstração, prova social e CTA..."
                   className="min-h-[88px]"
                 />
+              </div>
+
+              {/* (Sprint 019) Imagem do criativo por IA — Fase 3 */}
+              <div className="space-y-3 rounded-xl border border-border bg-surface-2/40 p-4">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="size-4 text-primary" />
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    Imagem do criativo · IA
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={imagemPrompt}
+                    onChange={(event) => setImagemPrompt(event.target.value)}
+                    placeholder="Descreva a imagem: produto, cenário, clima…"
+                    aria-label="Descrição da imagem"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={usarRoteiroImagem}
+                    disabled={!roteiroF.trim() || gerandoImagem}
+                    className="shrink-0"
+                  >
+                    Usar roteiro
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Select value={imagemFormato} onValueChange={setImagemFormato}>
+                    <SelectTrigger aria-label="Formato da imagem" className="w-full sm:max-w-[240px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {imagemFormatoOptions.map((opcao) => (
+                        <SelectItem key={opcao.valor} value={opcao.valor}>
+                          {opcao.rotulo}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="ai"
+                    onClick={() => void handleGerarImagem()}
+                    disabled={gerandoImagem || !imagemPrompt.trim()}
+                    className="shrink-0"
+                  >
+                    {gerandoImagem ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Gerando…
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon /> Gerar imagem
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {erroImagem && (
+                  <p role="alert" className="text-sm text-red-400">
+                    {erroImagem}
+                  </p>
+                )}
+                {imagemGerada && (
+                  <div className="space-y-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imagemGerada}
+                      alt="Criativo gerado pela IA da AnuncIA"
+                      className="max-h-64 w-auto rounded-xl border border-border"
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      {imagemMotor && <Badge variant="violet">{imagemMotor}</Badge>}
+                      <a
+                        href={imagemGerada}
+                        download="anuncia-criativo.png"
+                        className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                      >
+                        Baixar PNG
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Ainda nesta sprint: salvar direto em Mídias e Biblioteca.
+                    </p>
+                  </div>
+                )}
+                {!imagemGerada && modoDemo && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Modo demonstração: a geração de imagem pede sessão real (login).
+                  </p>
+                )}
               </div>
 
               {erroDialog && (
