@@ -9,8 +9,10 @@ export interface RespostaImagem {
   ok: boolean;
   imagem: string; // "data:image/png;base64,..." — joga direto num <img>
   erro: string | null;
-  motor: string | null; // "Cloudflare · FLUX schnell", "Gemini imagem · ..."
+  motor: string | null; // "Cloudflare · FLUX.2 klein-9b", "Gemini imagem · ..."
   formato: string | null; // "768x960" por exemplo
+  promptUsado: string | null; // o prompt final (traduzido/enriquecido) — transparência
+  notas: string[] | null; // a jornada da geração (qual motor, quem falhou e por quê)
 }
 
 export interface OpcoesImagem {
@@ -47,6 +49,8 @@ export const imagemService = {
         erro?: string;
         motor?: string;
         formato?: string;
+        promptUsado?: string;
+        notas?: string[];
       } | null;
 
       if (!resposta.ok) {
@@ -56,6 +60,8 @@ export const imagemService = {
           erro: dados?.erro ?? "Falha ao gerar a imagem.",
           motor: null,
           formato: null,
+          promptUsado: null,
+          notas: dados?.notas ?? null,
         };
       }
 
@@ -65,6 +71,8 @@ export const imagemService = {
         erro: null,
         motor: dados?.motor ?? null,
         formato: dados?.formato ?? null,
+        promptUsado: dados?.promptUsado ?? null,
+        notas: dados?.notas ?? null,
       };
     } catch {
       return {
@@ -73,6 +81,8 @@ export const imagemService = {
         erro: "Sem conexão com o servidor de imagens. Confira a internet.",
         motor: null,
         formato: null,
+        promptUsado: null,
+        notas: null,
       };
     }
   },

@@ -248,6 +248,8 @@ export function ComerciaisView() {
   const [gerandoImagem, setGerandoImagem] = useState(false);
   const [imagemGerada, setImagemGerada] = useState<string | null>(null);
   const [imagemMotor, setImagemMotor] = useState<string | null>(null);
+  const [promptUsado, setPromptUsado] = useState<string | null>(null);
+  const [imagemNotas, setImagemNotas] = useState<string[] | null>(null);
   const [erroImagem, setErroImagem] = useState<string | null>(null);
 
   // Erros de ação (mover entre colunas) — banner confesso
@@ -324,6 +326,8 @@ export function ComerciaisView() {
     setGerandoImagem(false);
     setImagemGerada(null);
     setImagemMotor(null);
+    setPromptUsado(null);
+    setImagemNotas(null);
     setErroImagem(null);
   }
 
@@ -392,11 +396,15 @@ export function ComerciaisView() {
     if (!resposta.ok) {
       setImagemGerada(null);
       setImagemMotor(null);
+      setPromptUsado(null);
+      setImagemNotas(resposta.notas ?? null);
       setErroImagem(resposta.erro ?? "Falha ao gerar a imagem.");
       return;
     }
     setImagemGerada(resposta.imagem);
     setImagemMotor(resposta.motor);
+    setPromptUsado(resposta.promptUsado ?? null);
+    setImagemNotas(resposta.notas ?? null);
   }
 
   async function handleSalvar(event: FormEvent<HTMLFormElement>) {
@@ -745,6 +753,28 @@ export function ComerciaisView() {
                         Baixar PNG
                       </a>
                     </div>
+                    {promptUsado && (
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Prompt enviado: {promptUsado}
+                      </p>
+                    )}
+                    {imagemNotas && imagemNotas.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                          Diagnóstico da geração
+                        </p>
+                        <ul className="mt-0.5 space-y-0.5">
+                          {imagemNotas.map((nota, indice) => (
+                            <li
+                              key={`${indice}-${nota.slice(0, 12)}`}
+                              className="text-[10.5px] leading-relaxed text-muted-foreground/80"
+                            >
+                              • {nota}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <p className="text-[11px] text-muted-foreground">
                       Ainda nesta sprint: salvar direto em Mídias e Biblioteca.
                     </p>

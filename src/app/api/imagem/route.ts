@@ -157,6 +157,11 @@ const MOTORES_CLOUDFLARE: MotorCloudflare[] = [
     usaDimensoes: true,
   },
   {
+    id: "Cloudflare · FLUX.2 klein-4b",
+    modelo: "@cf/black-forest-labs/flux-2-klein-4b",
+    usaDimensoes: true,
+  },
+  {
     id: "Cloudflare · FLUX.1 schnell",
     modelo: "@cf/black-forest-labs/flux-1-schnell",
     usaDimensoes: false,
@@ -394,15 +399,25 @@ export async function POST(request: Request) {
   const _negativoReservado = corpo.negativo?.trim().slice(0, 500) ?? "";
 
   // 3) Monta a fila de geradores armados (skip gracioso, igual à Mesa de texto)
-  const fila: (() => Promise<Tentativa>)[] = [];
+  // Cada etapa carrega o rótulo — as "notas" contam a jornada na resposta
+  // (qual motor gerou, quem falhou e por quê). Verdade visível na tela.
+  const fila: { rotulo: string; rodar: () => Promise<Tentativa> }[] = [];
+  const notas: string[] = [];
+  notas.push(
+    promptFinal === prompt
+      ? "prompt: original em português (tradutor não atuou)"
+      : "prompt: traduzido e enriquecido p/ inglês pela Mesa de texto"
+  );
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const tokenCloudflare = process.env.CLOUDFLARE_API_TOKEN;
   if (accountId && tokenCloudflare) {
     for (const motor of MOTORES_CLOUDFLARE) {
-      fila.push(() =>
-        gerarViaCloudflare(accountId, tokenCloudflare, motor, promptFinal, formato)
-      );
+      fila.push({
+        rotulo: motor.id,
+        rodar: () =>
+          gerarViaCloudflare(accountId, tokenCloudflare, motor, promptFinal, formato),
+      });
     }
   } else {
     console.log(
@@ -412,14 +427,20 @@ export async function POST(request: Request) {
 
   const chaveGemini = process.env.GEMINI_API_KEY;
   if (process.env.GEMINI_IMAGEM_ATIVA === "true" && chaveGemini) {
-    fila.push(() => gerarViaGeminiImagem(chaveGemini, promptFinal));
+    fila.push({
+      rotulo: "Gemini imagem (reserva paga)",
+      rodar: () => gerarViaGeminiImagem(chaveGemini, promptFinal),
+    });
   } else {
     console.log("[motor-imagem] reserva Gemini imagem: desligada (padrão — custo)");
   }
 
   if (fila.length === 0) {
     return NextResponse.json(
-      { erro: "Gerador de imagens não configurado neste ambiente (chaves do Cloudflare pendentes)." },
+      {
+        erro: "Gerador de imagens não configurado neste ambiente (chaves do Cloudflare pendentes).",
+        notas,
+      },
       { status: 503 }
     );
   }
@@ -428,16 +449,22 @@ export async function POST(request: Request) {
   let ultimoStatus: number | null = null;
   let houveLimite = false;
 
-  for (const tentar of fila) {
-    const resultado = await tentar();
+  for (const etapa of fila) {
+    const resultado = await etapa.rodar();
     if (resultado.ok) {
+      notas.unshift(`gerado por: ${etapa.rotulo}`);
       return NextResponse.json({
         imagem: `data:image/png;base64,${resultado.imagemBase64}`,
         motor: resultado.motor,
         formato: `${formato.largura}x${formato.altura}`,
         promptUsado: promptFinal,
+        notas,
       });
     }
+    notas.push(
+      `${etapa.rotulo} falhou (status ${resultado.status ?? "rede/tempo"}${ultimoDetalheFornecedor ? ` — ${ultimoDetalheFornecedor}` : ""})`
+    );
+    ultimoDetalheFornecedor = null; // detalhe é da etapa que falhou
     if (resultado.status !== null) {
       ultimoStatus = resultado.status;
       if (resultado.status === 429) houveLimite = true;
@@ -452,6 +479,7 @@ export async function POST(request: Request) {
       {
         erro:
           "Os geradores gratuitos bateram o limite do dia. A cota renova à meia-noite (UTC) — ou fale com o suporte.",
+        notas,
       },
       { status: 429 }
     );
@@ -462,6 +490,7 @@ export async function POST(request: Request) {
       {
         erro:
           "Nenhum gerador conseguiu responder agora (rede ou tempo). Tente de novo em instantes.",
+        notas,
       },
       { status: 503 }
     );
