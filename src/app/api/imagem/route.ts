@@ -87,13 +87,61 @@ function traduzErroImagem(status: number): string {
 // Se o tradutor falhar ou não tiver chave, segue o texto ORIGINAL —
 // o enriquecimento NUNCA derruba a geração.
 
-const MODELO_TRADUTOR = "gemini-2.0-flash"; // estável, rápido, cota grátis
+// (Lição 9 da casa: modelo IA aposentado → autodescoberta; NUNCA nome fixo.
+// O v5 cravou "gemini-2.0-flash" e o tradutor morreu em silêncio — nunca mais.)
+const MODELO_TRADUTOR_RESERVA = "gemini-2.0-flash";
+let modeloTradutorAprovado: string | null = null;
+
+function versaoDoNomeGemini(nome: string): number {
+  const alvo = /gemini-(\d+)(?:\.(\d+))?/i.exec(nome);
+  if (!alvo) return 0;
+  return Number(alvo[1]) * 100 + Number(alvo[2] ?? "0");
+}
+
+async function descobrirModeloTradutor(chave: string): Promise<string> {
+  if (modeloTradutorAprovado) return modeloTradutorAprovado;
+  try {
+    const resposta = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models",
+      { headers: { "x-goog-api-key": chave }, signal: AbortSignal.timeout(15000) }
+    );
+    if (resposta.ok) {
+      const dados = (await resposta.json().catch(() => null)) as {
+        models?: { name?: string; supportedGenerationMethods?: string[] }[];
+      } | null;
+      const bloqueados = ["image", "imagen", "tts", "embedding", "computer-use", "aqa"];
+      const flashes = (dados?.models ?? [])
+        .map((modelo) => (modelo.name ?? "").replace(/^models\//, ""))
+        .filter(
+          (nome) =>
+            nome &&
+            nome.toLowerCase().includes("flash") &&
+            !bloqueados.some((bloqueio) => nome.toLowerCase().includes(bloqueio)) &&
+            (dados?.models ?? []).some(
+              (modelo) =>
+                modelo.name === `models/${nome}` &&
+                (modelo.supportedGenerationMethods ?? []).includes("generateContent")
+            )
+        )
+        .sort((a, b) => versaoDoNomeGemini(b) - versaoDoNomeGemini(a));
+      if (flashes[0]) {
+        modeloTradutorAprovado = flashes[0];
+        console.log(`[motor-imagem] tradutor fixado por autodescoberta: ${flashes[0]}`);
+        return flashes[0];
+      }
+    }
+  } catch {
+    console.log("[motor-imagem] autodescoberta do tradutor falhou — usando reserva");
+  }
+  return MODELO_TRADUTOR_RESERVA;
+}
 
 async function enriquecerPrompt(promptOriginal: string): Promise<string> {
   const chave = process.env.GEMINI_API_KEY;
   if (!chave) return promptOriginal;
 
   try {
+    const modeloTradutor = await descobrirModeloTradutor(chave);
     const instrucao =
       "Turn this Brazilian Portuguese description into a short, dense English image-generation prompt. " +
       "Include subject, scene, composition, visual style and lighting. " +
@@ -101,7 +149,7 @@ async function enriquecerPrompt(promptOriginal: string): Promise<string> {
       JSON.stringify(promptOriginal);
 
     const resposta = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODELO_TRADUTOR}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modeloTradutor}:generateContent`,
       {
         method: "POST",
         headers: {
@@ -148,6 +196,7 @@ type MotorCloudflare = {
   id: string; // rótulo que viaja na resposta ("motor": ...)
   modelo: string; // caminho do modelo na URL
   usaDimensoes: boolean; // klein aceita width/height; schnell NÃO aceita
+  multipart: boolean; // klein EXIGE formulário (multipart); schnell aceita JSON
 };
 
 const MOTORES_CLOUDFLARE: MotorCloudflare[] = [
@@ -155,16 +204,19 @@ const MOTORES_CLOUDFLARE: MotorCloudflare[] = [
     id: "Cloudflare · FLUX.2 klein-9b",
     modelo: "@cf/black-forest-labs/flux-2-klein-9b",
     usaDimensoes: true,
+    multipart: true,
   },
   {
     id: "Cloudflare · FLUX.2 klein-4b",
     modelo: "@cf/black-forest-labs/flux-2-klein-4b",
     usaDimensoes: true,
+    multipart: true,
   },
   {
     id: "Cloudflare · FLUX.1 schnell",
     modelo: "@cf/black-forest-labs/flux-1-schnell",
     usaDimensoes: false,
+    multipart: false,
   },
 ];
 
@@ -184,22 +236,28 @@ async function gerarViaCloudflare(
   formato: Formato
 ): Promise<Tentativa> {
   try {
-    const corpo: Record<string, unknown> = { prompt };
-    if (motor.usaDimensoes) {
-      corpo.width = formato.largura;
-      corpo.height = formato.altura;
+    let corpoPedido: BodyInit;
+    const cabecalhos: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (motor.multipart) {
+      // Fato caçado no diagnóstico (23 ago): os FLUX.2 klein EXIGEM
+      // multipart/form-data — JSON dá 400 ("required properties 'multipart'").
+      const form = new FormData();
+      form.append("prompt", prompt);
+      if (motor.usaDimensoes) {
+        form.append("width", String(formato.largura));
+        form.append("height", String(formato.altura));
+      }
+      corpoPedido = form; // o fetch gera o multipart com boundary certinho
     } else {
-      corpo.steps = 4; // schema do schnell: só prompt (1–2048) e steps (máx 8)
+      cabecalhos["Content-Type"] = "application/json";
+      corpoPedido = JSON.stringify({ prompt, steps: 4 }); // schema do schnell
     }
     const resposta = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${motor.modelo}`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(corpo),
+        headers: cabecalhos,
+        body: corpoPedido,
         signal: AbortSignal.timeout(55000),
       }
     );

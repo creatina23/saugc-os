@@ -57,7 +57,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { clients, commercials } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
-import { imagemService } from "@/lib/services";
+import { iaService, imagemService } from "@/lib/services";
 import { cn } from "@/lib/utils";
 import type { CommercialStatus, ThumbnailTone } from "@/types";
 
@@ -246,6 +246,7 @@ export function ComerciaisView() {
   const [imagemPrompt, setImagemPrompt] = useState("");
   const [imagemFormato, setImagemFormato] = useState<string>("quadrado");
   const [gerandoImagem, setGerandoImagem] = useState(false);
+  const [criandoPrompt, setCriandoPrompt] = useState(false); // (Sprint 019) engenheiro de prompts
   const [imagemGerada, setImagemGerada] = useState<string | null>(null);
   const [imagemMotor, setImagemMotor] = useState<string | null>(null);
   const [promptUsado, setPromptUsado] = useState<string | null>(null);
@@ -324,6 +325,7 @@ export function ComerciaisView() {
     setImagemPrompt("");
     setImagemFormato("quadrado");
     setGerandoImagem(false);
+    setCriandoPrompt(false);
     setImagemGerada(null);
     setImagemMotor(null);
     setPromptUsado(null);
@@ -376,9 +378,33 @@ export function ComerciaisView() {
     };
   }
 
-  // (Sprint 019) puxa o começo do roteiro pra descrição da imagem
-  function usarRoteiroImagem() {
-    setImagemPrompt(roteiroF.trim().slice(0, 280));
+  // (Sprint 019) ENGENHEIRO DE PROMPTS: a IA lê o comercial (título,
+  // cliente e roteiro) e escreve um prompt de IMAGEM editável — o dono
+  // revisa antes de gerar. Roteiro colado cru era "nada a ver" (feedback
+  // do dono em 23 ago) — agora a Mesa de texto faz o meio de campo.
+  async function handleCriarPromptImagem() {
+    setErroImagem(null);
+    setCriandoPrompt(true);
+    const contexto = [
+      `Título do comercial: ${tituloF.trim() || "(sem título)"}`,
+      `Cliente: ${clienteSel}`,
+      `Roteiro: ${roteiroF.trim() || "(sem roteiro)"}`,
+    ].join("\n");
+    const resposta = await iaService.gerarTexto(
+      "Você é o engenheiro de prompts de imagem do AnuncIA. Com base no comercial abaixo, " +
+        "escreva UM prompt de imagem em português do Brasil: concreto e visual, descrevendo " +
+        "sujeito, cena, composição, estilo e iluminação — pronto pra virar anúncio. " +
+        "Sem título, sem aspas, sem explicação: responda APENAS o prompt, máximo 60 palavras.\n\n" +
+        contexto
+    );
+    setCriandoPrompt(false);
+    if (!resposta.ok || !resposta.texto.trim()) {
+      setErroImagem(
+        (resposta.erro ?? "Não consegui criar o prompt.") + " Escreva manualmente e siga."
+      );
+      return;
+    }
+    setImagemPrompt(resposta.texto.trim().replace(/^["']|["']$/g, ""));
   }
 
   // (Sprint 019) chama a Mesa de Imagens pelo service (nunca direto na chave)
@@ -692,11 +718,17 @@ export function ComerciaisView() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={usarRoteiroImagem}
-                    disabled={!roteiroF.trim() || gerandoImagem}
+                    onClick={() => void handleCriarPromptImagem()}
+                    disabled={criandoPrompt || gerandoImagem || (!tituloF.trim() && !roteiroF.trim())}
                     className="shrink-0"
                   >
-                    Usar roteiro
+                    {criandoPrompt ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Criando…
+                      </>
+                    ) : (
+                      "Criar prompt (IA)"
+                    )}
                   </Button>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
