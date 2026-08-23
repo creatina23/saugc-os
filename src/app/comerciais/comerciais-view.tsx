@@ -394,6 +394,8 @@ export function ComerciaisView() {
       "Você é o engenheiro de prompts de imagem do AnuncIA. Com base no comercial abaixo, " +
         "escreva UM prompt de imagem em português do Brasil: concreto e visual, descrevendo " +
         "sujeito, cena, composição, estilo e iluminação — pronto pra virar anúncio. " +
+        "NÃO cite nomes de marcas nem termos químicos: descreva o produto visualmente " +
+        "(embalagem, cor, textura) — marcas e química acionam filtros dos geradores. " +
         "Sem título, sem aspas, sem explicação: responda APENAS o prompt, máximo 60 palavras.\n\n" +
         contexto
     );
@@ -711,7 +713,7 @@ export function ComerciaisView() {
                   <Input
                     value={imagemPrompt}
                     onChange={(event) => setImagemPrompt(event.target.value)}
-                    placeholder="Descreva a imagem: produto, cenário, clima…"
+                    placeholder="Descreva a imagem (ou clique em Criar prompt — IA). Você edita antes de gerar."
                     aria-label="Descrição da imagem"
                   />
                   <Button

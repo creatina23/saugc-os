@@ -136,9 +136,13 @@ async function descobrirModeloTradutor(chave: string): Promise<string> {
   return MODELO_TRADUTOR_RESERVA;
 }
 
-async function enriquecerPrompt(promptOriginal: string): Promise<string> {
+async function enriquecerPrompt(
+  promptOriginal: string
+): Promise<{ texto: string; nota: string }> {
   const chave = process.env.GEMINI_API_KEY;
-  if (!chave) return promptOriginal;
+  if (!chave) {
+    return { texto: promptOriginal, nota: "prompt: original (tradutor sem chave Gemini)" };
+  }
 
   try {
     const modeloTradutor = await descobrirModeloTradutor(chave);
@@ -166,7 +170,10 @@ async function enriquecerPrompt(promptOriginal: string): Promise<string> {
 
     if (!resposta.ok) {
       console.log("[motor-imagem] tradutor de prompt indisponível — usando original");
-      return promptOriginal;
+      return {
+        texto: promptOriginal,
+        nota: `prompt: original (tradutor recusou status ${resposta.status} no modelo ${modeloTradutor})`,
+      };
     }
 
     const dados = (await resposta.json().catch(() => null)) as {
@@ -179,12 +186,17 @@ async function enriquecerPrompt(promptOriginal: string): Promise<string> {
       .trim()
       .replace(/^["']|["']$/g, "");
 
-    if (!enriquecido) return promptOriginal;
+    if (!enriquecido) {
+      return { texto: promptOriginal, nota: "prompt: original (tradutor respondeu vazio)" };
+    }
     console.log(`[motor-imagem] prompt enriquecido p/ inglês (${enriquecido.length} caracteres)`);
-    return enriquecido;
+    return {
+      texto: enriquecido,
+      nota: `prompt: traduzido p/ inglês pelo ${modeloTradutor}`,
+    };
   } catch {
-    console.log("[motor-imagem] tradutor de prompt falhou — usando original");
-    return promptOriginal;
+    console.log("[motor-imagem] tradutor de prompt falhou (rede/tempo) — usando original");
+    return { texto: promptOriginal, nota: "prompt: original (tradutor caiu na rede/tempo)" };
   }
 }
 
@@ -449,7 +461,9 @@ export async function POST(request: Request) {
   }
 
   // Enriquece UMA vez, antes da fila: PT solto → prompt EN denso.
-  const promptFinal = await enriquecerPrompt(prompt);
+  // A "nota" carrega o MOTIVO (funcionou? recusou? por quê?) pro painel.
+  const enriquecido = await enriquecerPrompt(prompt);
+  const promptFinal = enriquecido.texto;
   const formato = pegarFormato(corpo.formato);
   // Nota (Sprint 019): os schemas FLUX do Cloudflare NÃO aceitam
   // negative_prompt — o campo chega aqui e fica reservado pro dia em
@@ -461,11 +475,7 @@ export async function POST(request: Request) {
   // (qual motor gerou, quem falhou e por quê). Verdade visível na tela.
   const fila: { rotulo: string; rodar: () => Promise<Tentativa> }[] = [];
   const notas: string[] = [];
-  notas.push(
-    promptFinal === prompt
-      ? "prompt: original em português (tradutor não atuou)"
-      : "prompt: traduzido e enriquecido p/ inglês pela Mesa de texto"
-  );
+  notas.push(enriquecido.nota);
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const tokenCloudflare = process.env.CLOUDFLARE_API_TOKEN;
