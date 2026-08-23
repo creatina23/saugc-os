@@ -6,11 +6,15 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 // Route Handler (roda SÓ no servidor). Chaves JAMAIS vão pro navegador.
 //
 // CADEIA (imagem), na ordem — um falha, o próximo assume:
-//   1) Cloudflare Workers AI · FLUX schnell (titular) — GRÁTIS:
-//      10.000 neurônios/dia ≈ 230 imagens/dia (reseta 00:00 UTC).
-//      Fato verificado em 20 ago 2026: Gemini/Imagen API free NÃO gera
-//      imagem (só pago) — por isso o titular é o Cloudflare.
-//   2) Gemini imagem (reserva PAGA) — DESLIGADA POR PADRÃO.
+//   1) Cloudflare Workers AI · FLUX.2 klein-9b (titular) — aceita
+//      largura/altura (256–1920) e, no futuro, imagens de referência.
+//      Neurônios grátis do plano free: 10.000/dia (reseta 00:00 UTC).
+//      Fatos verificados em 23 ago 2026 (docs Cloudflare): o
+//      flux-1-schnell SÓ aceita prompt+steps no schema — dimensões
+//      extras dão erro 400 (caçado e corrigido na prática).
+//   2) Cloudflare Workers AI · FLUX.1 schnell (reserva) — schema
+//      mínimo: só { prompt, steps }. Gera no tamanho padrão dele.
+//   3) Gemini imagem (reserva PAGA) — DESLIGADA POR PADRÃO.
 //      Só acorda se GEMINI_IMAGEM_ATIVA="true" E houver GEMINI_API_KEY.
 //      Ninguém liga sem cliente pagando a conta (decisão em ata, 20 ago).
 //
@@ -76,40 +80,70 @@ function traduzErroImagem(status: number): string {
   return "Falha ao gerar a imagem. Tente de novo.";
 }
 
-// ---------- Camada 1: Cloudflare Workers AI · FLUX schnell (titular) ----------
+// ---------- Camada 1: Cloudflare Workers AI (titular klein + reserva schnell) ----------
+
+// Cada modelo tem schema PRÓPRIO no Workers AI — o corpo do pedido é
+// montado exatamente como o schema manda (nada de campo extra: vira 400).
+type MotorCloudflare = {
+  id: string; // rótulo que viaja na resposta ("motor": ...)
+  modelo: string; // caminho do modelo na URL
+  usaDimensoes: boolean; // klein aceita width/height; schnell NÃO aceita
+};
+
+const MOTORES_CLOUDFLARE: MotorCloudflare[] = [
+  {
+    id: "Cloudflare · FLUX.2 klein-9b",
+    modelo: "@cf/black-forest-labs/flux-2-klein-9b",
+    usaDimensoes: true,
+  },
+  {
+    id: "Cloudflare · FLUX.1 schnell",
+    modelo: "@cf/black-forest-labs/flux-1-schnell",
+    usaDimensoes: false,
+  },
+];
+
+// O motivo REAL do último erro do fornecedor (sanitizado) — vai pro
+// "Detalhe técnico:" da resposta, dedo-duro da casa (nunca segredo).
+let ultimoDetalheFornecedor: string | null = null;
+
+function anotarDetalhe(texto: string) {
+  ultimoDetalheFornecedor = texto.replace(/\s+/g, " ").trim().slice(0, 180) || null;
+}
 
 async function gerarViaCloudflare(
   accountId: string,
   token: string,
+  motor: MotorCloudflare,
   prompt: string,
-  negativo: string,
   formato: Formato
 ): Promise<Tentativa> {
   try {
-    // FLUX schnell: rápido e barato em neurônios — 4 passos é o padrão dele.
+    const corpo: Record<string, unknown> = { prompt };
+    if (motor.usaDimensoes) {
+      corpo.width = formato.largura;
+      corpo.height = formato.altura;
+    } else {
+      corpo.steps = 4; // schema do schnell: só prompt (1–2048) e steps (máx 8)
+    }
     const resposta = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${motor.modelo}`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          prompt,
-          steps: 4,
-          width: formato.largura,
-          height: formato.altura,
-          ...(negativo ? { negative_prompt: negativo } : {}),
-        }),
+        body: JSON.stringify(corpo),
         signal: AbortSignal.timeout(55000),
       }
     );
 
     if (!resposta.ok) {
       const detalhe = await resposta.text().catch(() => "");
+      anotarDetalhe(detalhe);
       console.error(
-        "[motor-imagem] Cloudflare recusou. status:",
+        `[motor-imagem] ${motor.id} recusou. status:`,
         resposta.status,
         "| detalhe:",
         detalhe.slice(0, 600)
@@ -127,8 +161,8 @@ async function gerarViaCloudflare(
       } | null;
       const base64 = dados?.result?.image ?? dados?.image ?? "";
       if (base64) {
-        console.log("[motor-imagem] Cloudflare FLUX respondeu (json)");
-        return { ok: true, imagemBase64: base64, motor: "Cloudflare · FLUX schnell" };
+        console.log(`[motor-imagem] ${motor.id} respondeu (json)`);
+        return { ok: true, imagemBase64: base64, motor: motor.id };
       }
       console.error("[motor-imagem] Cloudflare devolveu JSON sem imagem");
       return { ok: false, status: 502 };
@@ -142,9 +176,9 @@ async function gerarViaCloudflare(
 
     const base64 = Buffer.from(bytes).toString("base64");
     console.log(
-      `[motor-imagem] Cloudflare FLUX respondeu (${Math.round(bytes.byteLength / 1024)} KB, ${formato.largura}x${formato.altura})`
+      `[motor-imagem] ${motor.id} respondeu (${Math.round(bytes.byteLength / 1024)} KB, ${motor.usaDimensoes ? `${formato.largura}x${formato.altura}` : "tamanho padrão do modelo"})`
     );
-    return { ok: true, imagemBase64: base64, motor: "Cloudflare · FLUX schnell" };
+    return { ok: true, imagemBase64: base64, motor: motor.id };
   } catch (excecao) {
     console.error("[motor-imagem] Exceção ao chamar o Cloudflare:", excecao);
     return { ok: false, status: null };
@@ -292,7 +326,10 @@ export async function POST(request: Request) {
   }
 
   const formato = pegarFormato(corpo.formato);
-  const negativo = corpo.negativo?.trim().slice(0, 500) ?? "";
+  // Nota (Sprint 019): os schemas FLUX do Cloudflare NÃO aceitam
+  // negative_prompt — o campo chega aqui e fica reservado pro dia em
+  // que um motor da mesa aceitar (ex.: SDXL). Não é enviado hoje.
+  const _negativoReservado = corpo.negativo?.trim().slice(0, 500) ?? "";
 
   // 3) Monta a fila de geradores armados (skip gracioso, igual à Mesa de texto)
   const fila: (() => Promise<Tentativa>)[] = [];
@@ -300,12 +337,14 @@ export async function POST(request: Request) {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const tokenCloudflare = process.env.CLOUDFLARE_API_TOKEN;
   if (accountId && tokenCloudflare) {
-    fila.push(() =>
-      gerarViaCloudflare(accountId, tokenCloudflare, prompt, negativo, formato)
-    );
+    for (const motor of MOTORES_CLOUDFLARE) {
+      fila.push(() =>
+        gerarViaCloudflare(accountId, tokenCloudflare, motor, prompt, formato)
+      );
+    }
   } else {
     console.log(
-      "[motor-imagem] sem chaves Cloudflare (CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN) — titular fora da fila"
+      "[motor-imagem] sem chaves Cloudflare (CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN) — motores fora da fila"
     );
   }
 
@@ -365,8 +404,12 @@ export async function POST(request: Request) {
     );
   }
 
+  const detalheFinal = ultimoDetalheFornecedor
+    ? ` Detalhe técnico: ${ultimoDetalheFornecedor}`
+    : "";
+
   return NextResponse.json(
-    { erro: traduzErroImagem(ultimoStatus) },
+    { erro: `${traduzErroImagem(ultimoStatus)}${detalheFinal}` },
     { status: 502 }
   );
 }
