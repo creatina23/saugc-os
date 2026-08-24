@@ -12,9 +12,12 @@
 //   permanente na tabela library_items (categoria sugerida pelo agente).
 // • v3.2 — motores vivos + rótulo real de quem respondeu em cada geração +
 //   aposenta o "Custo R$ 0" fixo e o "35+ modelos" (Verdade na tela).
+// • v3.3 (Sprint 019) — GERADOR DE IMAGEM dentro do Studio: o Engenheiro
+//   de Prompts cria, você edita, cola a referência (≤512 auto) e gera na
+//   Mesa de Imagens (/api/imagem) — com painel de diagnóstico honesto.
 // ------------------------------------------------------------------
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import {
   BookMarked,
   Bot,
@@ -25,6 +28,7 @@ import {
   FileText,
   Gauge,
   History,
+  Image as ImageIcon,
   Loader2,
   PenLine,
   Settings2,
@@ -61,6 +65,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { iaService } from "@/lib/services/ia-service";
+import { imagemService } from "@/lib/services/imagem-service";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { LibraryCategory } from "@/types";
@@ -210,6 +215,16 @@ type GeracaoReal = {
 };
 
 
+// ---------- Gerador de imagem (Sprint 019) ----------
+
+// Formatos aceitos pela Mesa de Imagens (/api/imagem)
+const imagemFormatoOptions = [
+  { valor: "quadrado", rotulo: "Quadrado 1:1 (feed)" },
+  { valor: "retrato", rotulo: "Retrato 4:5 (feed)" },
+  { valor: "vertical", rotulo: "Vertical 9:16 (stories/reels)" },
+  { valor: "paisagem", rotulo: "Paisagem 5:4 (banner)" },
+] as const;
+
 export function IaStudioView() {
   const [selectedAgent, setSelectedAgent] = useState(agents[0].name);
   const [temperature, setTemperature] = useState(0.7);
@@ -232,6 +247,17 @@ export function IaStudioView() {
   const [salvandoNaBiblioteca, setSalvandoNaBiblioteca] = useState(false);
   const [erroSalvamento, setErroSalvamento] = useState<string | null>(null);
   const [salvoRecente, setSalvoRecente] = useState<string | null>(null);
+
+  // Gerador de imagem (Sprint 019)
+  const [imagemPromptF, setImagemPromptF] = useState("");
+  const [imagemFormatoF, setImagemFormatoF] = useState<string>("quadrado");
+  const [imagemReferencia, setImagemReferencia] = useState<string | null>(null);
+  const [gerandoImagem, setGerandoImagem] = useState(false);
+  const [imagemGerada, setImagemGerada] = useState<string | null>(null);
+  const [imagemMotor, setImagemMotor] = useState<string | null>(null);
+  const [imagemNotas, setImagemNotas] = useState<string[] | null>(null);
+  const [promptImagemUsado, setPromptImagemUsado] = useState<string | null>(null);
+  const [erroImagem, setErroImagem] = useState<string | null>(null);
 
   // Lê o espelho da mesa uma vez por visita (só status, nunca segredo).
   useEffect(() => {
@@ -337,6 +363,73 @@ export function IaStudioView() {
     } catch {
       setCopiedTarget(null);
     }
+  }
+
+  // ---------- Gerador de imagem (Sprint 019) ----------
+
+  // Botão na saída do agente: manda o prompt criado pro gerador de imagem
+  function handleUsarNoGeradorImagem() {
+    const texto = output.trim();
+    if (!texto) return;
+    setImagemPromptF(texto);
+    document.getElementById("gerador-imagem-prompt")?.focus();
+  }
+
+  // Referência: o NAVEGADOR já reduz pra ≤512×512 (exigência do klein)
+  function handleReferenciaImagem(event: ChangeEvent<HTMLInputElement>) {
+    const arquivo = event.target.files?.[0];
+    event.target.value = ""; // permite reenviar o mesmo arquivo
+    if (!arquivo) return;
+    if (!arquivo.type.startsWith("image/")) {
+      setErroImagem("A referência precisa ser uma imagem.");
+      return;
+    }
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const dado = String(leitor.result ?? "");
+      const imagem = new Image();
+      imagem.onload = () => {
+        const escala = Math.min(1, 512 / Math.max(imagem.width, imagem.height));
+        const tela = document.createElement("canvas");
+        tela.width = Math.max(1, Math.round(imagem.width * escala));
+        tela.height = Math.max(1, Math.round(imagem.height * escala));
+        const contexto = tela.getContext("2d");
+        if (!contexto) {
+          setErroImagem("Não consegui preparar a referência. Tente outra imagem.");
+          return;
+        }
+        contexto.drawImage(imagem, 0, 0, tela.width, tela.height);
+        setImagemReferencia(tela.toDataURL("image/png"));
+      };
+      imagem.onerror = () => setErroImagem("Não consegui ler essa imagem.");
+      imagem.src = dado;
+    };
+    leitor.readAsDataURL(arquivo);
+  }
+
+  async function handleGerarImagem() {
+    const prompt = imagemPromptF.trim();
+    if (!prompt || gerandoImagem) return;
+    setErroImagem(null);
+    setGerandoImagem(true);
+    const formato = imagemFormatoF as "quadrado" | "retrato" | "vertical" | "paisagem";
+    const resposta = await imagemService.gerarImagem(prompt, {
+      formato,
+      referencia: imagemReferencia ?? undefined,
+    });
+    setGerandoImagem(false);
+    if (!resposta.ok) {
+      setImagemGerada(null);
+      setImagemMotor(null);
+      setPromptImagemUsado(null);
+      setImagemNotas(resposta.notas ?? null);
+      setErroImagem(resposta.erro ?? "Falha ao gerar a imagem.");
+      return;
+    }
+    setImagemGerada(resposta.imagem);
+    setImagemMotor(resposta.motor);
+    setPromptImagemUsado(resposta.promptUsado ?? null);
+    setImagemNotas(resposta.notas ?? null);
   }
 
   // ---------- Salvar na biblioteca ----------
@@ -764,7 +857,7 @@ export function IaStudioView() {
                 <p className="text-[11px] text-muted-foreground">
                   {motorSaida ? `Respondido por ${motorSaida}` : ""}
                 </p>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -776,6 +869,15 @@ export function IaStudioView() {
                       <Copy />
                     )}
                     {copiedTarget === "output" ? "Copiado" : "Copiar"}
+                  </Button>
+                  {/* (Sprint 019) o prompt criado vai direto pro gerador de imagem */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUsarNoGeradorImagem}
+                    disabled={gerandoImagem}
+                  >
+                    <ImageIcon /> Usar no gerador de imagem
                   </Button>
                   <Button
                     variant="ai"
@@ -801,6 +903,185 @@ export function IaStudioView() {
                     )}
                   </Button>
                 </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ---------- Gerador de imagem (Sprint 019) ---------- */}
+      <h2 className="mt-8 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+        Gerador de imagem
+      </h2>
+      <p className="mt-1 mb-3 text-xs text-muted-foreground">
+        Peça ao Engenheiro de Prompts, clique em “Usar no gerador de imagem”,
+        edite se quiser e gere. A referência (o produto/estilo) é opcional — a
+        gente já reduz pra 512 por você.
+      </p>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ImageIcon className="size-5 text-ai" />
+              Prompt da imagem
+            </CardTitle>
+            <CardDescription>
+              Em português — a Mesa traduz e enriquece sozinha na geração
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea
+              id="gerador-imagem-prompt"
+              value={imagemPromptF}
+              onChange={(event) => setImagemPromptF(event.target.value)}
+              placeholder="Cole aqui o prompt do Engenheiro (ou escreva o seu). Ex.:Retrato publicitário de uma mulher segurando um morango junto aos lábios, luz natural suave, fundo neutro claro, sem nenhum texto na imagem."
+              className="min-h-[120px]"
+            />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-[11px] text-muted-foreground">
+                Referência (o produto/estilo — opcional):
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleReferenciaImagem}
+                aria-label="Escolher imagem de referência"
+                className="max-w-[220px] text-[11px] text-muted-foreground file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-transparent file:px-2 file:py-1 file:text-[11px] file:text-muted-foreground"
+              />
+              {imagemReferencia && (
+                <span className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imagemReferencia}
+                    alt="Referência escolhida"
+                    className="size-10 rounded-md border border-border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setImagemReferencia(null)}
+                    className="cursor-pointer text-muted-foreground transition-colors hover:text-red-400"
+                    aria-label="Remover referência"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select value={imagemFormatoF} onValueChange={setImagemFormatoF}>
+                <SelectTrigger aria-label="Formato da imagem" className="w-full sm:max-w-[240px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {imagemFormatoOptions.map((opcao) => (
+                    <SelectItem key={opcao.valor} value={opcao.valor}>
+                      {opcao.rotulo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ai"
+                onClick={() => void handleGerarImagem()}
+                disabled={gerandoImagem || !imagemPromptF.trim()}
+                className="shrink-0"
+              >
+                {gerandoImagem ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Gerando…
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon /> Gerar imagem
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {erroImagem && (
+              <p role="alert" className="text-sm text-red-400">
+                {erroImagem}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wand2 className="size-5 text-primary" />
+              Prévia da imagem
+            </CardTitle>
+            <CardDescription>
+              Nasce aqui — baixe e use no seu criativo
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col">
+            <div className="flex flex-1 items-center justify-center rounded-xl border border-border bg-[rgba(255,255,255,0.02)] p-4">
+              {gerandoImagem ? (
+                <div className="flex flex-col items-center gap-3 py-10">
+                  <Loader2 className="size-8 animate-spin text-ai" />
+                  <p className="text-xs text-muted-foreground">
+                    A Mesa de Imagens está pintando… (cadeia klein → SDXL → schnell → rede pública)
+                  </p>
+                </div>
+              ) : imagemGerada ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={imagemGerada}
+                  alt="Imagem gerada pela IA da AnuncIA"
+                  className="max-h-[420px] w-auto rounded-xl border border-border"
+                />
+              ) : (
+                <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-center">
+                  <ImageIcon className="size-8 text-muted-foreground/40" />
+                  <p className="mt-3 text-sm font-medium">
+                    Nenhuma imagem ainda
+                  </p>
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                    Escreva (ou cole) o prompt ao lado e clique em Gerar
+                    imagem — a Mesa cuida do resto.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {imagemGerada && !gerandoImagem && (
+              <div className="mt-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {imagemMotor && <Badge variant="violet">{imagemMotor}</Badge>}
+                  <a
+                    href={imagemGerada}
+                    download="anuncia-criativo.png"
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    Baixar imagem
+                  </a>
+                </div>
+                {promptImagemUsado && (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Prompt enviado aos motores: {promptImagemUsado}
+                  </p>
+                )}
+                {imagemNotas && imagemNotas.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                      Diagnóstico da geração
+                    </p>
+                    <ul className="mt-0.5 space-y-0.5">
+                      {imagemNotas.map((nota, indice) => (
+                        <li
+                          key={`${indice}-${nota.slice(0, 12)}`}
+                          className="text-[10.5px] leading-relaxed text-muted-foreground/80"
+                        >
+                          • {nota}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

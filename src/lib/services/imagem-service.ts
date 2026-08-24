@@ -19,6 +19,7 @@ export interface OpcoesImagem {
   // "quadrado" (1:1) · "retrato" (4:5) · "vertical" (9:16) · "paisagem" (5:4)
   formato?: "quadrado" | "retrato" | "vertical" | "paisagem";
   negativo?: string; // o que NÃO deve aparecer na imagem
+  referencia?: string; // data URL da imagem de referência (produto/estilo) — já reduzida a ≤512
 }
 
 // Um gerador visto de fora: só o id e se tem chave (nunca a chave)
@@ -41,6 +42,7 @@ export const imagemService = {
           prompt,
           formato: opcoes.formato,
           negativo: opcoes.negativo,
+          referencia: opcoes.referencia,
         }),
       });
 
