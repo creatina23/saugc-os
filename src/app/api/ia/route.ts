@@ -21,6 +21,9 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 //   As telas de hoje ignoram esse campo com segurança.
 // • Só atende usuário logado: protege as cotas gratuitas de estranhos.
 // • Logs [motor-ia] aparecem só no TERMINAL do servidor.
+// • (Sprint 019) DETALHE TÉCNICO NA TELA: o motivo real do último erro
+//   (sanitizado, sem segredo) viaja na resposta final — a mesma verdade
+//   visível que curou a Mesa de Imagens. Erro mudo é coisa do passado.
 
 const MODELO_RESERVA = "gemini-2.0-flash";
 const MAX_TENTATIVAS = 4;
@@ -38,6 +41,14 @@ const MODELOS_BLOQUEADOS = [
 // Memória deste boot do servidor (camada Gemini)
 let modeloAprovado: string | null = null; // já respondeu 200 → fica fixado
 const modelosReprovados = new Set<string>(); // recusados (404) pelo Google
+
+// (Sprint 019) O motivo REAL do último erro — sanitizado, sem segredo.
+let ultimoDetalheMotorIA: string | null = null;
+
+function anotarDetalheIA(texto: unknown) {
+  const bruto = typeof texto === "string" ? texto : JSON.stringify(texto) ?? "";
+  ultimoDetalheMotorIA = bruto.replace(/\s+/g, " ").trim().slice(0, 180) || null;
+}
 
 // ---------- Os motores de reserva (mesmo formato OpenAI-compatível) ----------
 
@@ -265,6 +276,7 @@ async function gerarViaGemini(
             "[motor-ia] Gemini respondeu sem texto. detalhe:",
             JSON.stringify(dados)?.slice(0, 600)
           );
+          anotarDetalheIA(dados); // (Sprint 019)
           ultimoStatus = 502;
           break;
         }
@@ -274,6 +286,7 @@ async function gerarViaGemini(
       }
 
       ultimoStatus = resposta.status;
+      anotarDetalheIA(dados); // (Sprint 019) o motivo viaja pra tela
       console.error(
         "[motor-ia] Gemini recusou. status:",
         resposta.status,
@@ -343,9 +356,11 @@ async function gerarViaReserva(
         `[motor-ia] ${reserva.nome} respondeu sem texto. detalhe:`,
         JSON.stringify(dados)?.slice(0, 600)
       );
+      anotarDetalheIA(dados); // (Sprint 019)
       return { ok: false, status: 502 };
     }
 
+    anotarDetalheIA(dados); // (Sprint 019) o motivo viaja pra tela
     console.error(
       `[motor-ia] ${reserva.nome} recusou. status:`,
       resposta.status,
@@ -362,7 +377,7 @@ async function gerarViaReserva(
 // ---------- GET: espelho da mesa (quais motores têm chave plantada) ----------
 
 export async function GET() {
-  // Mesma porta do POST: com Supabase configurado, só usuário logado espiа
+  // Mesma porta do POST: com Supabase configurado, só usuário logado espia
   const supabase = await getSupabaseServer();
   if (supabase) {
     const {
@@ -475,7 +490,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // 5) Todos falharam — confessa em PT-BR
+  // 5) Todos falharam — confessa em PT-BR (com o detalhe REAL, Sprint 019)
   console.error("[motor-ia] TODOS os motores falharam. último status:", ultimoStatus);
 
   if (houveLimite) {
@@ -498,8 +513,12 @@ export async function POST(request: Request) {
     );
   }
 
+  const detalheFinal = ultimoDetalheMotorIA
+    ? ` Detalhe técnico: ${ultimoDetalheMotorIA}`
+    : "";
+
   return NextResponse.json(
-    { erro: traduzErroIA(ultimoStatus) },
+    { erro: `${traduzErroIA(ultimoStatus)}${detalheFinal}` },
     { status: 502 }
   );
 }
