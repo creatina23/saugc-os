@@ -7,9 +7,6 @@
 // • CRUD completo: criar, clicar no cartão pra editar, excluir.
 // • Erros confessam "Detalhe técnico:" — nunca falha em silêncio.
 // • Sem banco configurado → modo demonstração (mock, selo visível).
-// • (Sprint 019) Imagem do criativo por IA: descrição + formato →
-//   /api/imagem (Mesa de Imagens) → preview + baixar. Fase 4 (próxima)
-//   salvará direto em Mídias e Biblioteca.
 // ------------------------------------------------------------------
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -22,7 +19,6 @@ import {
   Clapperboard,
   Eye,
   Film,
-  Image as ImageIcon,
   Loader2,
   Play,
   Plus,
@@ -57,7 +53,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { clients, commercials } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
-import { iaService, imagemService } from "@/lib/services";
 import { cn } from "@/lib/utils";
 import type { CommercialStatus, ThumbnailTone } from "@/types";
 
@@ -74,14 +69,6 @@ const columns: { status: CommercialStatus; dot: string }[] = [
 ];
 
 const formatoOptions = ["Reels", "TikTok", "Shorts", "Feed"] as const;
-
-// (Sprint 019) Formatos de imagem aceitos pela Mesa de Imagens (/api/imagem)
-const imagemFormatoOptions = [
-  { valor: "quadrado", rotulo: "Quadrado 1:1 (feed)" },
-  { valor: "retrato", rotulo: "Retrato 4:5 (feed)" },
-  { valor: "vertical", rotulo: "Vertical 9:16 (stories/reels)" },
-  { valor: "paisagem", rotulo: "Paisagem 5:4 (banner)" },
-] as const;
 
 const toneGradient: Record<ThumbnailTone, string> = {
   blue: "from-blue-500/60 to-blue-900/30",
@@ -242,17 +229,6 @@ export function ComerciaisView() {
   const [excluindo, setExcluindo] = useState(false);
   const [erroDialog, setErroDialog] = useState<string | null>(null);
 
-  // (Sprint 019) Imagem do criativo por IA — estado da Fase 3
-  const [imagemPrompt, setImagemPrompt] = useState("");
-  const [imagemFormato, setImagemFormato] = useState<string>("quadrado");
-  const [gerandoImagem, setGerandoImagem] = useState(false);
-  const [criandoPrompt, setCriandoPrompt] = useState(false); // (Sprint 019) engenheiro de prompts
-  const [imagemGerada, setImagemGerada] = useState<string | null>(null);
-  const [imagemMotor, setImagemMotor] = useState<string | null>(null);
-  const [promptUsado, setPromptUsado] = useState<string | null>(null);
-  const [imagemNotas, setImagemNotas] = useState<string[] | null>(null);
-  const [erroImagem, setErroImagem] = useState<string | null>(null);
-
   // Erros de ação (mover entre colunas) — banner confesso
   const [erroAcao, setErroAcao] = useState<string | null>(null);
 
@@ -320,19 +296,6 @@ export function ComerciaisView() {
     },
   ];
 
-  // (Sprint 019) limpa a seção de imagem (novo, edição ou fechar dialog)
-  function resetarImagem() {
-    setImagemPrompt("");
-    setImagemFormato("quadrado");
-    setGerandoImagem(false);
-    setCriandoPrompt(false);
-    setImagemGerada(null);
-    setImagemMotor(null);
-    setPromptUsado(null);
-    setImagemNotas(null);
-    setErroImagem(null);
-  }
-
   function limparFormulario() {
     setEditingId(null);
     setTituloF("");
@@ -343,7 +306,6 @@ export function ComerciaisView() {
     setStatusSel("Rascunho");
     setRoteiroF("");
     setErroDialog(null);
-    resetarImagem(); // (Sprint 019)
   }
 
   function abrirNovo() {
@@ -361,7 +323,6 @@ export function ComerciaisView() {
     setStatusSel(c.status);
     setRoteiroF(c.roteiro);
     setErroDialog(null);
-    resetarImagem(); // (Sprint 019) cada comercial começa a seção de imagem limpa
     setDialogOpen(true);
   }
 
@@ -376,63 +337,6 @@ export function ComerciaisView() {
       deadline: prazoF || null,
       status: statusSel,
     };
-  }
-
-  // (Sprint 019) ENGENHEIRO DE PROMPTS: a IA lê o comercial (título,
-  // cliente e roteiro) e escreve um prompt de IMAGEM editável — o dono
-  // revisa antes de gerar. Roteiro colado cru era "nada a ver" (feedback
-  // do dono em 23 ago) — agora a Mesa de texto faz o meio de campo.
-  async function handleCriarPromptImagem() {
-    setErroImagem(null);
-    setCriandoPrompt(true);
-    const contexto = [
-      `Título do comercial: ${tituloF.trim() || "(sem título)"}`,
-      `Cliente: ${clienteSel}`,
-      `Roteiro: ${roteiroF.trim() || "(sem roteiro)"}`,
-    ].join("\n");
-    const resposta = await iaService.gerarTexto(
-      "Você é o engenheiro de prompts de imagem do AnuncIA. Com base no comercial abaixo, " +
-        "escreva UM prompt de imagem em português do Brasil: concreto e visual, descrevendo " +
-        "sujeito, cena, composição, estilo e iluminação — pronto pra virar anúncio. " +
-        "NÃO cite nomes de marcas nem termos químicos: descreva o produto visualmente " +
-        "(embalagem, cor, textura) — marcas e química acionam filtros dos geradores. " +
-        "Sem título, sem aspas, sem explicação: responda APENAS o prompt, máximo 60 palavras.\n\n" +
-        contexto
-    );
-    setCriandoPrompt(false);
-    if (!resposta.ok || !resposta.texto.trim()) {
-      setErroImagem(
-        (resposta.erro ?? "Não consegui criar o prompt.") + " Escreva manualmente e siga."
-      );
-      return;
-    }
-    setImagemPrompt(resposta.texto.trim().replace(/^["']|["']$/g, ""));
-  }
-
-  // (Sprint 019) chama a Mesa de Imagens pelo service (nunca direto na chave)
-  async function handleGerarImagem() {
-    const prompt = imagemPrompt.trim();
-    if (!prompt) {
-      setErroImagem("Descreva a imagem antes de gerar.");
-      return;
-    }
-    setErroImagem(null);
-    setGerandoImagem(true);
-    const formato = imagemFormato as "quadrado" | "retrato" | "vertical" | "paisagem";
-    const resposta = await imagemService.gerarImagem(prompt, { formato });
-    setGerandoImagem(false);
-    if (!resposta.ok) {
-      setImagemGerada(null);
-      setImagemMotor(null);
-      setPromptUsado(null);
-      setImagemNotas(resposta.notas ?? null);
-      setErroImagem(resposta.erro ?? "Falha ao gerar a imagem.");
-      return;
-    }
-    setImagemGerada(resposta.imagem);
-    setImagemMotor(resposta.motor);
-    setPromptUsado(resposta.promptUsado ?? null);
-    setImagemNotas(resposta.notas ?? null);
   }
 
   async function handleSalvar(event: FormEvent<HTMLFormElement>) {
@@ -699,126 +603,6 @@ export function ComerciaisView() {
                   placeholder="Hook de 3s, demonstração, prova social e CTA..."
                   className="min-h-[88px]"
                 />
-              </div>
-
-              {/* (Sprint 019) Imagem do criativo por IA — Fase 3 */}
-              <div className="space-y-3 rounded-xl border border-border bg-surface-2/40 p-4">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="size-4 text-primary" />
-                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    Imagem do criativo · IA
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    value={imagemPrompt}
-                    onChange={(event) => setImagemPrompt(event.target.value)}
-                    placeholder="Descreva a imagem (ou clique em Criar prompt — IA). Você edita antes de gerar."
-                    aria-label="Descrição da imagem"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void handleCriarPromptImagem()}
-                    disabled={criandoPrompt || gerandoImagem || (!tituloF.trim() && !roteiroF.trim())}
-                    className="shrink-0"
-                  >
-                    {criandoPrompt ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Criando…
-                      </>
-                    ) : (
-                      "Criar prompt (IA)"
-                    )}
-                  </Button>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Select value={imagemFormato} onValueChange={setImagemFormato}>
-                    <SelectTrigger aria-label="Formato da imagem" className="w-full sm:max-w-[240px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {imagemFormatoOptions.map((opcao) => (
-                        <SelectItem key={opcao.valor} value={opcao.valor}>
-                          {opcao.rotulo}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="ai"
-                    onClick={() => void handleGerarImagem()}
-                    disabled={gerandoImagem || !imagemPrompt.trim()}
-                    className="shrink-0"
-                  >
-                    {gerandoImagem ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Gerando…
-                      </>
-                    ) : (
-                      <>
-                        <ImageIcon /> Gerar imagem
-                      </>
-                    )}
-                  </Button>
-                </div>
-                {erroImagem && (
-                  <p role="alert" className="text-sm text-red-400">
-                    {erroImagem}
-                  </p>
-                )}
-                {imagemGerada && (
-                  <div className="space-y-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={imagemGerada}
-                      alt="Criativo gerado pela IA da AnuncIA"
-                      className="max-h-64 w-auto rounded-xl border border-border"
-                    />
-                    <div className="flex items-center justify-between gap-2">
-                      {imagemMotor && <Badge variant="violet">{imagemMotor}</Badge>}
-                      <a
-                        href={imagemGerada}
-                        download="anuncia-criativo.png"
-                        className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                      >
-                        Baixar PNG
-                      </a>
-                    </div>
-                    {promptUsado && (
-                      <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Prompt enviado: {promptUsado}
-                      </p>
-                    )}
-                    {imagemNotas && imagemNotas.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
-                          Diagnóstico da geração
-                        </p>
-                        <ul className="mt-0.5 space-y-0.5">
-                          {imagemNotas.map((nota, indice) => (
-                            <li
-                              key={`${indice}-${nota.slice(0, 12)}`}
-                              className="text-[10.5px] leading-relaxed text-muted-foreground/80"
-                            >
-                              • {nota}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <p className="text-[11px] text-muted-foreground">
-                      Ainda nesta sprint: salvar direto em Mídias e Biblioteca.
-                    </p>
-                  </div>
-                )}
-                {!imagemGerada && modoDemo && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Modo demonstração: a geração de imagem pede sessão real (login).
-                  </p>
-                )}
               </div>
 
               {erroDialog && (
