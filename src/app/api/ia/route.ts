@@ -5,25 +5,25 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 // ------------------------------------------------------------------
 // Route Handler (roda SÓ no servidor). Chaves JAMAIS vão pro navegador.
 //
-// CADEIA DE RESERVAS (texto), na ordem — um falha, o próximo assume:
-//   1) Gemini (titular) — AUTODESCOBERTA + hall dos reprovados iguais
-//      ao motor original: lista os modelos da chave, ordena os "flash"
-//      do mais novo pro mais velho, fixa o primeiro que responde 200.
-//   2) GitHub Models (GPT-4o) — grátis com a conta GitHub
-//   3) Groq (Llama 3.3 70B) — velocidade, cota diária generosa
-//   4) OpenRouter (modelo :free) — rota de fuga completa
+// CADEIA (texto), na ordem — um falha, o próximo assume:
+//   1) Gemini (titular) — AUTODESCOBERTA + hall dos reprovados.
+//   2) Groq — AUTO-DESCOBERTA (slug cravado morreu: 404 real em 23 ago).
+//   3) OpenRouter — modelos :free com AUTO-DESCOBERTA (slugs morrem
+//      sem aviso; 2 funerais reais caçados em 23 ago).
+//   4) Cerebras (opcional) — ultra-rápido, cota grátis (CEREBRAS_API_KEY).
+//   ⚰️ GitHub Models: FALECIDO em 30 jul 2026 (aposentado pra TODOS —
+//      anúncio oficial de 1º jul). Removido da Mesa com honras: serviu
+//      desde a Sprint 017. NENHUM modelo é cravado nesta rota: cada
+//      camada pergunta à própria API quem tá vivo HOJE (lição 9).
 //
 // • SKIP GRACIOSO: camada sem chave é pulada em silêncio (só log).
-//   Sem chave nova nenhuma, o app se comporta exatamente como antes.
-// • GET /api/ia = espelho da mesa: quais motores têm chave plantada
-//   booleanos, zero segredo) — alimenta os cartões do IA Studio.
-// • A resposta de sucesso carrega "motor": quem de fato respondeu.
-//   As telas de hoje ignoram esse campo com segurança.
+// • GET /api/ia = espelho da mesa: quais motores têm chave (booleanos,
+//   zero segredo) — alimenta os cartões do IA Studio.
+// • Resposta de sucesso carrega "motor": quem de fato respondeu.
 // • Só atende usuário logado: protege as cotas gratuitas de estranhos.
 // • Logs [motor-ia] aparecem só no TERMINAL do servidor.
-// • (Sprint 019) DETALHE TÉCNICO NA TELA: o motivo real do último erro
-//   (sanitizado, sem segredo) viaja na resposta final — a mesma verdade
-//   visível que curou a Mesa de Imagens. Erro mudo é coisa do passado.
+// • (v5/v6) VERDADE NA TELA: todo erro final carrega o resumo da fila
+//   inteira ("Gemini→429 | Groq→404 | …") — erro mudo é coisa do passado.
 
 const MODELO_RESERVA = "gemini-2.0-flash";
 const MAX_TENTATIVAS = 4;
@@ -42,7 +42,7 @@ const MODELOS_BLOQUEADOS = [
 let modeloAprovado: string | null = null; // já respondeu 200 → fica fixado
 const modelosReprovados = new Set<string>(); // recusados (404) pelo Google
 
-// (Sprint 019) O motivo REAL do último erro — sanitizado, sem segredo.
+// O motivo REAL do último erro — sanitizado, sem segredo.
 let ultimoDetalheMotorIA: string | null = null;
 
 function anotarDetalheIA(texto: unknown) {
@@ -50,48 +50,11 @@ function anotarDetalheIA(texto: unknown) {
   ultimoDetalheMotorIA = bruto.replace(/\s+/g, " ").trim().slice(0, 180) || null;
 }
 
-// ---------- Os motores de reserva (mesmo formato OpenAI-compatível) ----------
+// ---------- Tipos e helpers ----------
 
-type MotorReserva = {
-  id: string; // rótulo que viaja na resposta ("motor": ...)
-  nome: string; // pros logs do terminal
-  env: string; // variável de ambiente da chave (server-side)
-  url: string;
-  modelo: string; // se o provedor aposentar, troca SÓ esta linha
-  extraHeaders?: Record<string, string>;
-};
-
-const RESERVAS: MotorReserva[] = [
-  {
-    id: "GitHub Models · GPT-4o",
-    nome: "GitHub Models",
-    env: "GITHUB_MODELS_TOKEN",
-    url: "https://models.github.ai/inference/chat/completions",
-    modelo: "openai/gpt-4o",
-  },
-  {
-    id: "Groq · Llama 3.3 70B",
-    nome: "Groq",
-    env: "GROQ_API_KEY",
-    url: "https://api.groq.com/openai/v1/chat/completions",
-    modelo: "llama-3.3-70b-versatile",
-  },
-  // (Sprint 019, 23 ago — v4) AUTO-DESCOBERTA FREE: slugs :free do
-  // OpenRouter morrem sem aviso (dois 404 reais caçados hoje). A rota
-  // pergunta ao PRÓPRIO OpenRouter quais modelos free estão vivos
-  // AGORA, cacheia por boot e mantém hall dos reprovados (lição 9).
-  {
-    id: "OpenRouter · free (auto-descoberta)",
-    nome: "OpenRouter",
-    env: "OPENROUTER_API_KEY",
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    modelo: ":auto-free",
-    extraHeaders: {
-      "HTTP-Referer": "https://anuncia-three.vercel.app",
-      "X-Title": "AnuncIA",
-    },
-  },
-];
+type Tentativa =
+  | { ok: true; texto: string; motor: string }
+  | { ok: false; status: number | null };
 
 type PedidoIA = {
   acao?: string;
@@ -99,11 +62,6 @@ type PedidoIA = {
   temperatura?: number;
   maxTokens?: number;
 };
-
-// Resultado padronizado de qualquer tentativa de motor
-type Tentativa =
-  | { ok: true; texto: string; motor: string }
-  | { ok: false; status: number | null };
 
 type ParteGemini = { text?: string };
 type RespostaGemini = {
@@ -117,17 +75,11 @@ type ModeloGemini = {
 
 type RespostaOpenAI = { choices?: { message?: { content?: string } }[] };
 
-// Extrai a versão numérica do nome ("gemini-2.5-flash" → 250, "gemini-3-flash" → 300)
-// pra ordenar do mais novo pro mais velho.
+// Extrai a versão numérica do nome ("gemini-2.5-flash" → 250)
 function versaoDoModelo(nome: string): number {
   const alvo = /gemini-(\d+)(?:\.(\d+))?/i.exec(nome);
   if (!alvo) return 0;
-  return Number(alvo[1]) * 100 + Number(algo2(alvo));
-}
-
-// pequena guarda contra grupo ausente
-function algo2(alvo: RegExpExecArray): string {
-  return alvo[2] ?? "0";
+  return Number(alvo[1]) * 100 + Number(alvo[2] ?? "0");
 }
 
 // Parâmetros da geração, com limites saudáveis (protege cota e bolso)
@@ -143,8 +95,32 @@ function pegarMaxTokens(valor: unknown): number {
   return Math.min(4096, Math.max(256, Math.round(numero)));
 }
 
-// Pergunta ao Google os modelos da chave e escolhe o melhor candidato,
-// ignorando especialidades e reprovados anteriores.
+function textoDaRespostaGemini(dados: unknown): string {
+  const gemini = dados as RespostaGemini | null;
+  const partes = gemini?.candidates?.[0]?.content?.parts ?? [];
+  return partes
+    .map((parte) => parte.text ?? "")
+    .join("")
+    .trim();
+}
+
+function textoDeRespostaOpenAI(dados: unknown): string {
+  const r = dados as RespostaOpenAI | null;
+  return (r?.choices?.[0]?.message?.content ?? "").trim();
+}
+
+function traduzErroIA(status: number): string {
+  if (status === 429)
+    return "Limite gratuito da IA atingido agora. Aguarde 1 minuto e tente de novo.";
+  if (status === 401 || status === 403)
+    return "Chave de IA inválida ou sem permissão. Confira o .env.local.";
+  if (status === 400) return "O pedido foi recusado pela IA. Reformule o texto.";
+  if (status >= 500) return "A IA está instável agora. Tente de novo em instantes.";
+  return "Falha ao falar com a IA. Tente de novo.";
+}
+
+// ---------- Camada 1: Gemini (titular, autodescoberta) ----------
+
 async function descobrirModelo(chave: string): Promise<string | null> {
   try {
     const resposta = await fetch(
@@ -204,32 +180,6 @@ async function descobrirModelo(chave: string): Promise<string | null> {
   }
 }
 
-function textoDaRespostaGemini(dados: unknown): string {
-  const gemini = dados as RespostaGemini | null;
-  const partes = gemini?.candidates?.[0]?.content?.parts ?? [];
-  return partes
-    .map((parte) => parte.text ?? "")
-    .join("")
-    .trim();
-}
-
-function textoDeRespostaOpenAI(dados: unknown): string {
-  const r = dados as RespostaOpenAI | null;
-  return (r?.choices?.[0]?.message?.content ?? "").trim();
-}
-
-function traduzErroIA(status: number): string {
-  if (status === 429)
-    return "Limite gratuito da IA atingido agora. Aguarde 1 minuto e tente de novo.";
-  if (status === 401 || status === 403)
-    return "Chave de IA inválida ou sem permissão. Confira o .env.local.";
-  if (status === 400) return "O pedido foi recusado pela IA. Reformule o texto.";
-  if (status >= 500) return "A IA está instável agora. Tente de novo em instantes.";
-  return "Falha ao falar com a IA. Tente de novo.";
-}
-
-// ---------- Camada 1: Gemini (titular) ----------
-
 async function gerarViaGemini(
   chave: string,
   prompt: string,
@@ -280,7 +230,7 @@ async function gerarViaGemini(
             "[motor-ia] Gemini respondeu sem texto. detalhe:",
             JSON.stringify(dados)?.slice(0, 600)
           );
-          anotarDetalheIA(dados); // (Sprint 019)
+          anotarDetalheIA(dados);
           ultimoStatus = 502;
           break;
         }
@@ -290,7 +240,7 @@ async function gerarViaGemini(
       }
 
       ultimoStatus = resposta.status;
-      anotarDetalheIA(dados); // (Sprint 019) o motivo viaja pra tela
+      anotarDetalheIA(dados);
       console.error(
         "[motor-ia] Gemini recusou. status:",
         resposta.status,
@@ -306,7 +256,7 @@ async function gerarViaGemini(
         );
         continue;
       }
-      break; // demais erros: desfila pro reserva
+      break; // demais erros: desfila pra reserva
     } catch (excecao) {
       console.error("[motor-ia] Exceção ao chamar o Gemini:", excecao);
       ultimoStatus = null; // timeout/rede — tenta o próximo motor
@@ -315,6 +265,110 @@ async function gerarViaGemini(
   }
 
   return { ok: false, status: ultimoStatus };
+}
+
+// ---------- Camadas compatíveis (Groq · Cerebras): auto-descoberta ----------
+// Formato OpenAI, mas NENHUM modelo cravado: a rota lista os modelos da
+// própria API, prefere as famílias de confiança e mantém hall dos mortos.
+
+const cacheModelosCompativeis = new Map<string, string[]>(); // env → slugs vivos
+const reprovadosCompativeis = new Set<string>(); // "ENV:slug"
+
+async function descobrirModeloCompativel(
+  env: string,
+  urlLista: string,
+  chave: string,
+  preferencias: string[]
+): Promise<string | null> {
+  const emCache = cacheModelosCompativeis.get(env);
+  if (emCache && emCache.length) return emCache[0];
+  try {
+    const resposta = await fetch(urlLista, {
+      headers: { Authorization: `Bearer ${chave}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resposta.ok) {
+      console.log(`[motor-ia] listagem de modelos falhou (${env}):`, resposta.status);
+      return null;
+    }
+    const dados = (await resposta.json().catch(() => null)) as {
+      data?: { id?: string }[];
+    } | null;
+    const ids = (dados?.data ?? [])
+      .map((modelo) => modelo.id ?? "")
+      .filter((id) => id && !reprovadosCompativeis.has(`${env}:${id}`));
+    if (!ids.length) return null;
+    const ranque = (id: string) => {
+      const indice = preferencias.findIndex((pref) =>
+        id.toLowerCase().includes(pref)
+      );
+      return indice === -1 ? preferencias.length : indice;
+    };
+    ids.sort((a, b) => ranque(a) - ranque(b));
+    cacheModelosCompativeis.set(env, ids);
+    console.log(`[motor-ia] ${env} vivos: ${ids.slice(0, 3).join(", ")}`);
+    return ids[0];
+  } catch {
+    return null;
+  }
+}
+
+async function gerarViaCompativel(
+  env: string,
+  urlChat: string,
+  urlLista: string,
+  chave: string,
+  prompt: string,
+  temperatura: number,
+  maxTokens: number,
+  preferencias: string[],
+  rotulo: string
+): Promise<Tentativa> {
+  for (let tentativa = 0; tentativa < 2; tentativa += 1) {
+    const modelo = await descobrirModeloCompativel(env, urlLista, chave, preferencias);
+    if (!modelo) return { ok: false, status: null };
+
+    try {
+      const resposta = await fetch(urlChat, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${chave}`,
+        },
+        body: JSON.stringify({
+          model: modelo,
+          messages: [{ role: "user", content: prompt }],
+          temperature: temperatura,
+          max_tokens: maxTokens,
+        }),
+        signal: AbortSignal.timeout(45000),
+      });
+      const dados: unknown = await resposta.json().catch(() => null);
+      if (resposta.ok) {
+        const texto = textoDeRespostaOpenAI(dados);
+        if (texto) {
+          console.log(`[motor-ia] ${rotulo} respondeu (${modelo})`);
+          return { ok: true, texto, motor: `${rotulo} · ${modelo}` };
+        }
+        anotarDetalheIA(dados);
+        return { ok: false, status: 502 };
+      }
+      anotarDetalheIA(dados);
+      console.error(`[motor-ia] ${rotulo} (${modelo}) recusou:`, resposta.status);
+      if (resposta.status === 404 || resposta.status === 410) {
+        // slug morto: hall dos reprovados e tenta o próximo vivo
+        reprovadosCompativeis.add(`${env}:${modelo}`);
+        const cache = cacheModelosCompativeis.get(env) ?? [];
+        cacheModelosCompativeis.set(env, cache.filter((m) => m !== modelo));
+        continue;
+      }
+      return { ok: false, status: resposta.status };
+    } catch (excecao) {
+      console.error(`[motor-ia] Exceção no ${rotulo}:`, excecao);
+      return { ok: false, status: null };
+    }
+  }
+  return { ok: false, status: 404 };
 }
 
 // ---------- OpenRouter: auto-descoberta dos modelos FREE vivos ----------
@@ -335,7 +389,6 @@ const openRouterFreeReprovados = new Set<string>(); // 404/429 na prática
 
 type ModeloOpenRouter = {
   id?: string;
-  pricing?: { prompt?: string };
 };
 
 async function descobrirFreeOpenRouter(chave: string): Promise<string[]> {
@@ -355,14 +408,8 @@ async function descobrirFreeOpenRouter(chave: string): Promise<string[]> {
     const livres = (dados?.data ?? [])
       .map((modelo) => modelo.id ?? "")
       .filter(
-        (id) =>
-          id &&
-          (id.endsWith(":free") ||
-            // alguns free vêm com preço "0" sem o sufixo
-            false) &&
-          !openRouterFreeReprovados.has(id)
+        (id) => id && id.endsWith(":free") && !openRouterFreeReprovados.has(id)
       );
-    // ranqueia pelas famílias de confiança da casa
     const ranque = (id: string) => {
       const indice = FAMILIAS_FREE.findIndex((familia) => id.includes(familia));
       return indice === -1 ? FAMILIAS_FREE.length : indice;
@@ -422,7 +469,7 @@ async function chamarOpenRouter(
   }
 }
 
-// A reserva OpenRouter em ação: descobre os free vivos e desfila até 3
+// A camada OpenRouter em ação: descobre os free vivos e desfila até 3
 async function gerarViaOpenRouterFree(
   chave: string,
   prompt: string,
@@ -440,7 +487,7 @@ async function gerarViaOpenRouterFree(
       return { ok: true, texto: resultado.texto, motor: `OpenRouter · ${modelo}` };
     }
     if (resultado.status === 404 || resultado.status === 400) {
-      // slug morto: hall dos reprovados e re-descobre na próxima
+      // slug morto: hall dos reprovados e re-descobre
       openRouterFreeReprovados.add(modelo);
       if (openRouterFreeAprovados) {
         openRouterFreeAprovados = openRouterFreeAprovados.filter((m) => m !== modelo);
@@ -453,67 +500,6 @@ async function gerarViaOpenRouterFree(
     }
   }
   return { ok: false, status: 404 };
-}
-
-// ---------- Camadas 2–4: reservas OpenAI-compatíveis ----------
-
-async function gerarViaReserva(
-  reserva: MotorReserva,
-  prompt: string,
-  temperatura: number,
-  maxTokens: number
-): Promise<Tentativa> {
-  const chave = process.env[reserva.env];
-  if (!chave) {
-    console.log(`[motor-ia] ${reserva.nome}: sem chave (${reserva.env}) — pulando`);
-    return { ok: false, status: null };
-  }
-
-  try {
-    const resposta = await fetch(reserva.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${chave}`,
-        ...(reserva.extraHeaders ?? {}),
-      },
-      body: JSON.stringify({
-        model: reserva.modelo,
-        messages: [{ role: "user", content: prompt }],
-        temperature: temperatura,
-        max_tokens: maxTokens,
-      }),
-      signal: AbortSignal.timeout(45000),
-    });
-
-    const dados: unknown = await resposta.json().catch(() => null);
-
-    if (resposta.ok) {
-      const texto = textoDeRespostaOpenAI(dados);
-      if (texto) {
-        console.log(`[motor-ia] ${reserva.nome} respondeu (${reserva.modelo})`);
-        return { ok: true, texto, motor: reserva.id };
-      }
-      console.error(
-        `[motor-ia] ${reserva.nome} respondeu sem texto. detalhe:`,
-        JSON.stringify(dados)?.slice(0, 600)
-      );
-      anotarDetalheIA(dados); // (Sprint 019)
-      return { ok: false, status: 502 };
-    }
-
-    anotarDetalheIA(dados); // (Sprint 019) o motivo viaja pra tela
-    console.error(
-      `[motor-ia] ${reserva.nome} recusou. status:`,
-      resposta.status,
-      "| detalhe:",
-      JSON.stringify(dados)?.slice(0, 600)
-    );
-    return { ok: false, status: resposta.status };
-  } catch (excecao) {
-    console.error(`[motor-ia] Exceção ao chamar ${reserva.nome}:`, excecao);
-    return { ok: false, status: null };
-  }
 }
 
 // ---------- GET: espelho da mesa (quais motores têm chave plantada) ----------
@@ -533,13 +519,13 @@ export async function GET() {
     }
   }
 
-  // Só booleanos — NUNCA as chaves
+  // Só booleanos — NUNCA as chaves (GitHub Models descansa em paz)
   return NextResponse.json({
     motores: [
       { id: "gemini", armado: Boolean(process.env.GEMINI_API_KEY) },
-      { id: "github", armado: Boolean(process.env.GITHUB_MODELS_TOKEN) },
       { id: "groq", armado: Boolean(process.env.GROQ_API_KEY) },
       { id: "openrouter", armado: Boolean(process.env.OPENROUTER_API_KEY) },
+      { id: "cerebras", armado: Boolean(process.env.CEREBRAS_API_KEY) },
     ],
   });
 }
@@ -592,9 +578,7 @@ export async function POST(request: Request) {
   const temperatura = pegarTemperatura(corpo.temperatura);
   const maxTokens = pegarMaxTokens(corpo.maxTokens);
 
-  // 3) Monta a fila: Gemini (se tiver chave) + cada reserva com chave plantada
-  // Cada etapa carrega rótulo — o resumo final mostra a fila INTEIRA
-  // de falhas (não só a última). Verdade completa na tela. (v4)
+  // 3) Monta a fila — cada etapa carrega rótulo pro resumo da verdade
   const fila: { rotulo: string; rodar: () => Promise<Tentativa> }[] = [];
 
   const chaveGemini = process.env.GEMINI_API_KEY;
@@ -607,23 +591,56 @@ export async function POST(request: Request) {
     console.log("[motor-ia] sem GEMINI_API_KEY — indo direto pros reservas");
   }
 
-  for (const reserva of RESERVAS) {
-    const chaveReserva = process.env[reserva.env];
-    if (!chaveReserva) {
-      console.log(`[motor-ia] ${reserva.nome}: sem chave (${reserva.env}) — fora da fila`);
-      continue;
-    }
-    if (reserva.modelo === ":auto-free") {
-      fila.push({
-        rotulo: "OpenRouter (free auto)",
-        rodar: () => gerarViaOpenRouterFree(chaveReserva, prompt, temperatura, maxTokens),
-      });
-    } else {
-      fila.push({
-        rotulo: reserva.nome,
-        rodar: () => gerarViaReserva(reserva, prompt, temperatura, maxTokens),
-      });
-    }
+  const chaveGroq = process.env.GROQ_API_KEY;
+  if (chaveGroq) {
+    fila.push({
+      rotulo: "Groq (auto)",
+      rodar: () =>
+        gerarViaCompativel(
+          "GROQ_API_KEY",
+          "https://api.groq.com/openai/v1/chat/completions",
+          "https://api.groq.com/openai/v1/models",
+          chaveGroq,
+          prompt,
+          temperatura,
+          maxTokens,
+          ["llama-4", "gpt-oss", "llama-3.3", "qwen", "mistral"],
+          "Groq"
+        ),
+    });
+  } else {
+    console.log("[motor-ia] Groq: sem GROQ_API_KEY — fora da fila");
+  }
+
+  const chaveOpenRouter = process.env.OPENROUTER_API_KEY;
+  if (chaveOpenRouter) {
+    fila.push({
+      rotulo: "OpenRouter (free auto)",
+      rodar: () => gerarViaOpenRouterFree(chaveOpenRouter, prompt, temperatura, maxTokens),
+    });
+  } else {
+    console.log("[motor-ia] OpenRouter: sem OPENROUTER_API_KEY — fora da fila");
+  }
+
+  const chaveCerebras = process.env.CEREBRAS_API_KEY;
+  if (chaveCerebras) {
+    fila.push({
+      rotulo: "Cerebras (auto)",
+      rodar: () =>
+        gerarViaCompativel(
+          "CEREBRAS_API_KEY",
+          "https://api.cerebras.ai/v1/chat/completions",
+          "https://api.cerebras.ai/v1/models",
+          chaveCerebras,
+          prompt,
+          temperatura,
+          maxTokens,
+          ["llama-3.3", "llama-4", "gpt-oss", "qwen"],
+          "Cerebras"
+        ),
+    });
+  } else {
+    console.log("[motor-ia] Cerebras: sem CEREBRAS_API_KEY — fora da fila (opcional)");
   }
 
   if (fila.length === 0) {
@@ -650,10 +667,10 @@ export async function POST(request: Request) {
     }
   }
 
-  // 5) Todos falharam — confessa em PT-BR (com o detalhe REAL, Sprint 019)
+  // 5) Todos falharam — confessa em PT-BR com a fila INTEIRA na tela
   console.error("[motor-ia] TODOS os motores falharam. último status:", ultimoStatus);
 
-  // (v5) o resumo da fila viaja em TODOS os erros — 429 incluso
+  // (v5) o resumo da fila viaja em TODOS os erros
   const resumoFalhas = falhas.length ? ` (fila: ${falhas.join(" | ")})` : "";
 
   if (houveLimite) {
