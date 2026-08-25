@@ -76,38 +76,16 @@ const RESERVAS: MotorReserva[] = [
     url: "https://api.groq.com/openai/v1/chat/completions",
     modelo: "llama-3.3-70b-versatile",
   },
-  // (Sprint 019, 23 ago) ROTACAO FREE: o slug antigo
-  // meta-llama/llama-3.3-70b-instruct:free morreu ("unavailable for
-  // free" — erro 404 real do provedor). Cada modelo :free tem pool
-  // PRÓPRIO (~50 req/dia) — 3 slots na fila = 3 cotas somadas.
+  // (Sprint 019, 23 ago — v4) AUTO-DESCOBERTA FREE: slugs :free do
+  // OpenRouter morrem sem aviso (dois 404 reais caçados hoje). A rota
+  // pergunta ao PRÓPRIO OpenRouter quais modelos free estão vivos
+  // AGORA, cacheia por boot e mantém hall dos reprovados (lição 9).
   {
-    id: "OpenRouter · DeepSeek V3 (free)",
+    id: "OpenRouter · free (auto-descoberta)",
     nome: "OpenRouter",
     env: "OPENROUTER_API_KEY",
     url: "https://openrouter.ai/api/v1/chat/completions",
-    modelo: "deepseek/deepseek-chat-v3-0324:free",
-    extraHeaders: {
-      "HTTP-Referer": "https://anuncia-three.vercel.app",
-      "X-Title": "AnuncIA",
-    },
-  },
-  {
-    id: "OpenRouter · Llama 4 Scout (free)",
-    nome: "OpenRouter",
-    env: "OPENROUTER_API_KEY",
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    modelo: "meta-llama/llama-4-scout:free",
-    extraHeaders: {
-      "HTTP-Referer": "https://anuncia-three.vercel.app",
-      "X-Title": "AnuncIA",
-    },
-  },
-  {
-    id: "OpenRouter · GPT-OSS 20B (free)",
-    nome: "OpenRouter",
-    env: "OPENROUTER_API_KEY",
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    modelo: "openai/gpt-oss-20b:free",
+    modelo: ":auto-free",
     extraHeaders: {
       "HTTP-Referer": "https://anuncia-three.vercel.app",
       "X-Title": "AnuncIA",
@@ -339,6 +317,144 @@ async function gerarViaGemini(
   return { ok: false, status: ultimoStatus };
 }
 
+// ---------- OpenRouter: auto-descoberta dos modelos FREE vivos ----------
+
+// Preferência por famílias que já deram certo na casa (ordem de rank)
+const FAMILIAS_FREE = [
+  "deepseek",
+  "llama",
+  "gemma",
+  "qwen",
+  "gpt-oss",
+  "mistral",
+  "nemotron",
+];
+
+let openRouterFreeAprovados: string[] | null = null; // cache deste boot
+const openRouterFreeReprovados = new Set<string>(); // 404/429 na prática
+
+type ModeloOpenRouter = {
+  id?: string;
+  pricing?: { prompt?: string };
+};
+
+async function descobrirFreeOpenRouter(chave: string): Promise<string[]> {
+  if (openRouterFreeAprovados) return openRouterFreeAprovados;
+  try {
+    const resposta = await fetch("https://openrouter.ai/api/v1/models", {
+      headers: { Authorization: `Bearer ${chave}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resposta.ok) {
+      console.log("[motor-ia] listagem OpenRouter falhou:", resposta.status);
+      return [];
+    }
+    const dados = (await resposta.json().catch(() => null)) as {
+      data?: ModeloOpenRouter[];
+    } | null;
+    const livres = (dados?.data ?? [])
+      .map((modelo) => modelo.id ?? "")
+      .filter(
+        (id) =>
+          id &&
+          (id.endsWith(":free") ||
+            // alguns free vêm com preço "0" sem o sufixo
+            false) &&
+          !openRouterFreeReprovados.has(id)
+      );
+    // ranqueia pelas famílias de confiança da casa
+    const ranque = (id: string) => {
+      const indice = FAMILIAS_FREE.findIndex((familia) => id.includes(familia));
+      return indice === -1 ? FAMILIAS_FREE.length : indice;
+    };
+    const escolhidos = livres.sort((a, b) => ranque(a) - ranque(b)).slice(0, 3);
+    if (escolhidos.length) {
+      openRouterFreeAprovados = escolhidos;
+      console.log(`[motor-ia] OpenRouter free vivos: ${escolhidos.join(", ")}`);
+    }
+    return escolhidos;
+  } catch {
+    console.log("[motor-ia] erro ao listar modelos do OpenRouter");
+    return [];
+  }
+}
+
+// Tentativa única num slug específico do OpenRouter
+async function chamarOpenRouter(
+  chave: string,
+  modelo: string,
+  prompt: string,
+  temperatura: number,
+  maxTokens: number
+): Promise<{ ok: true; texto: string } | { ok: false; status: number }> {
+  try {
+    const resposta = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${chave}`,
+        "HTTP-Referer": "https://anuncia-three.vercel.app",
+        "X-Title": "AnuncIA",
+      },
+      body: JSON.stringify({
+        model: modelo,
+        messages: [{ role: "user", content: prompt }],
+        temperature: temperatura,
+        max_tokens: maxTokens,
+      }),
+      signal: AbortSignal.timeout(45000),
+    });
+    const dados: unknown = await resposta.json().catch(() => null);
+    if (!resposta.ok) {
+      anotarDetalheIA(dados);
+      console.error(`[motor-ia] OpenRouter ${modelo} recusou. status:`, resposta.status);
+      return { ok: false, status: resposta.status };
+    }
+    const texto = textoDeRespostaOpenAI(dados);
+    if (!texto) {
+      anotarDetalheIA(dados);
+      return { ok: false, status: 502 };
+    }
+    return { ok: true, texto };
+  } catch {
+    console.error(`[motor-ia] Exceção no OpenRouter ${modelo}`);
+    return { ok: false, status: 0 };
+  }
+}
+
+// A reserva OpenRouter em ação: descobre os free vivos e desfila até 3
+async function gerarViaOpenRouterFree(
+  chave: string,
+  prompt: string,
+  temperatura: number,
+  maxTokens: number
+): Promise<Tentativa> {
+  let candidatos = await descobrirFreeOpenRouter(chave);
+  if (!candidatos.length) return { ok: false, status: null };
+
+  for (let tentativa = 0; tentativa < 3 && tentativa < candidatos.length; tentativa += 1) {
+    const modelo = candidatos[tentativa];
+    const resultado = await chamarOpenRouter(chave, modelo, prompt, temperatura, maxTokens);
+    if (resultado.ok) {
+      console.log(`[motor-ia] OpenRouter free respondeu: ${modelo}`);
+      return { ok: true, texto: resultado.texto, motor: `OpenRouter · ${modelo}` };
+    }
+    if (resultado.status === 404 || resultado.status === 400) {
+      // slug morto: hall dos reprovados e re-descobre na próxima
+      openRouterFreeReprovados.add(modelo);
+      if (openRouterFreeAprovados) {
+        openRouterFreeAprovados = openRouterFreeAprovados.filter((m) => m !== modelo);
+      }
+      candidatos = (await descobrirFreeOpenRouter(chave)).filter((m) => m !== modelo);
+      if (!candidatos.length) break;
+      tentativa -= 1; // reposiciona pro próximo vivo
+    } else {
+      return { ok: false, status: resultado.status };
+    }
+  }
+  return { ok: false, status: 404 };
+}
+
 // ---------- Camadas 2–4: reservas OpenAI-compatíveis ----------
 
 async function gerarViaReserva(
@@ -477,20 +593,36 @@ export async function POST(request: Request) {
   const maxTokens = pegarMaxTokens(corpo.maxTokens);
 
   // 3) Monta a fila: Gemini (se tiver chave) + cada reserva com chave plantada
-  const fila: (() => Promise<Tentativa>)[] = [];
+  // Cada etapa carrega rótulo — o resumo final mostra a fila INTEIRA
+  // de falhas (não só a última). Verdade completa na tela. (v4)
+  const fila: { rotulo: string; rodar: () => Promise<Tentativa> }[] = [];
 
   const chaveGemini = process.env.GEMINI_API_KEY;
   if (chaveGemini) {
-    fila.push(() => gerarViaGemini(chaveGemini, prompt, temperatura, maxTokens));
+    fila.push({
+      rotulo: "Gemini",
+      rodar: () => gerarViaGemini(chaveGemini, prompt, temperatura, maxTokens),
+    });
   } else {
     console.log("[motor-ia] sem GEMINI_API_KEY — indo direto pros reservas");
   }
 
   for (const reserva of RESERVAS) {
-    if (process.env[reserva.env]) {
-      fila.push(() => gerarViaReserva(reserva, prompt, temperatura, maxTokens));
-    } else {
+    const chaveReserva = process.env[reserva.env];
+    if (!chaveReserva) {
       console.log(`[motor-ia] ${reserva.nome}: sem chave (${reserva.env}) — fora da fila`);
+      continue;
+    }
+    if (reserva.modelo === ":auto-free") {
+      fila.push({
+        rotulo: "OpenRouter (free auto)",
+        rodar: () => gerarViaOpenRouterFree(chaveReserva, prompt, temperatura, maxTokens),
+      });
+    } else {
+      fila.push({
+        rotulo: reserva.nome,
+        rodar: () => gerarViaReserva(reserva, prompt, temperatura, maxTokens),
+      });
     }
   }
 
@@ -501,15 +633,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // 4) Desfila até um responder
+  // 4) Desfila até um responder (anotando QUEM caiu e por quê)
   let ultimoStatus: number | null = null;
   let houveLimite = false;
+  const falhas: string[] = [];
 
-  for (const tentar of fila) {
-    const resultado = await tentar();
+  for (const etapa of fila) {
+    const resultado = await etapa.rodar();
     if (resultado.ok) {
       return NextResponse.json({ texto: resultado.texto, motor: resultado.motor });
     }
+    falhas.push(`${etapa.rotulo}→${resultado.status ?? "rede"}`);
     if (resultado.status !== null) {
       ultimoStatus = resultado.status;
       if (resultado.status === 429) houveLimite = true;
@@ -519,11 +653,15 @@ export async function POST(request: Request) {
   // 5) Todos falharam — confessa em PT-BR (com o detalhe REAL, Sprint 019)
   console.error("[motor-ia] TODOS os motores falharam. último status:", ultimoStatus);
 
+  // (v5) o resumo da fila viaja em TODOS os erros — 429 incluso
+  const resumoFalhas = falhas.length ? ` (fila: ${falhas.join(" | ")})` : "";
+
   if (houveLimite) {
     return NextResponse.json(
       {
         erro:
-          "Todos os motores gratuitos bateram o limite agora. Aguarde 1 minuto e tente de novo — a cota volta sozinha.",
+          "Todos os motores gratuitos bateram o limite agora. Aguarde 1 minuto e tente de novo — a cota volta sozinha." +
+          resumoFalhas,
       },
       { status: 429 }
     );
@@ -533,14 +671,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         erro:
-          "Nenhum motor de IA conseguiu responder agora (rede ou tempo). Tente de novo em instantes.",
+          "Nenhum motor de IA conseguiu responder agora (rede ou tempo). Tente de novo em instantes." +
+          resumoFalhas,
       },
       { status: 503 }
     );
   }
 
-  const detalheFinal = ultimoDetalheMotorIA
-    ? ` Detalhe técnico: ${ultimoDetalheMotorIA}`
+  const detalheFinal = falhas.length
+    ? ` Detalhe técnico: ${falhas.join(" | ")} — último motivo: ${ultimoDetalheMotorIA ?? "sem detalhe"}`
     : "";
 
   return NextResponse.json(
