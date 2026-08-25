@@ -148,17 +148,19 @@ async function listarFlashes(chave: string): Promise<string[]> {
   }
 }
 
-// Uma tentativa de tradução num modelo específico.
+// Uma tentativa de tradução num modelo específico — ELITE v2 (120w + qualidade).
 async function chamarTradutor(
   chave: string,
   modelo: string,
   promptOriginal: string
 ): Promise<{ ok: true; texto: string } | { ok: false; status: number }> {
   const instrucao =
-    "Turn this Brazilian Portuguese description into a short, dense English image-generation prompt. " +
-    "Include subject, scene, composition, visual style and lighting. " +
-    "The image must NOT contain any readable text, letters or words — text is added later in design. " +
-    "Answer ONLY with the prompt itself, no quotes, maximum 60 words. Description: " +
+    "You are an expert image prompt translator for FLUX and SDXL. " +
+    "Turn this description (PT-BR or EN) into a highly detailed, dense English image prompt. " +
+    "Structure: subject + action + environment + lighting (soft natural window light) + camera (35mm lens, shallow depth of field, eye-level) + style (photorealistic, highly detailed, natural skin texture, 8k, UGC style if needed) + composition + mood. " +
+    "Add quality boosters: highly detailed, photorealistic, natural lighting, clean, sharp focus. " +
+    "NEVER include text, letters, words in image. " +
+    "Output ONLY the final prompt, one paragraph, 80-120 words, ready to paste. Description: " +
     JSON.stringify(promptOriginal);
 
   try {
@@ -169,7 +171,7 @@ async function chamarTradutor(
         headers: { "Content-Type": "application/json", "x-goog-api-key": chave },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: instrucao }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 200 },
+          generationConfig: { temperature: 0.4, maxOutputTokens: 300 },
         }),
         signal: AbortSignal.timeout(12000),
       }

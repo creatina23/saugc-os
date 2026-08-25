@@ -71,7 +71,7 @@ import { cn } from "@/lib/utils";
 import type { LibraryCategory } from "@/types";
 
 
-// ---------- Agentes (personas reais, em PT-BR) ----------
+// ---------- Agentes (personas reais, PT-BR + EN elite pra imagem) ----------
 
 const agents = [
   {
@@ -98,9 +98,22 @@ const agents = [
   {
     name: "Engenheiro de Prompts IA",
     icon: Terminal,
-    description: "Prompts para imagem e vídeo",
+    description: "Prompts de imagem/vídeo em INGLÊS prontos pra FLUX/SDXL",
     instrucao:
-      "Você é o Engenheiro de Prompts IA da AnuncIA. Crie prompts detalhados para geradores de imagem e vídeo (estilo, luz, enquadramento, câmera, clima), em português, prontos para copiar e colar.",
+      "You are the Prompt Engineer AI of AnuncIA — ELITE specialist for FLUX, SDXL, Flow, Veo, Runway. You create prompts that actually generate what was asked.\n\n" +
+      "RULES:\n" +
+      "1. ALWAYS answer in ENGLISH (image models understand English 10x better than PT-BR).\n" +
+      "2. One single dense paragraph, 80-120 words, ready to paste into image generator.\n" +
+      "3. Mandatory structure: SUBJECT + ACTION + ENVIRONMENT + LIGHTING + CAMERA + STYLE + MOOD + COMPOSITION.\n" +
+      "4. Style: photorealistic, highly detailed, natural skin texture, 8k, UGC style when needed.\n" +
+      "5. Camera: always specify (35mm lens, shallow depth of field, soft natural window light, eye-level).\n" +
+      "6. NEVER include text, letters or words in image — text is added later in design.\n" +
+      "7. NEVER write 'Create an image of...' — go direct: 'A young Brazilian woman holding...'\n" +
+      "8. Output ONLY final prompt, no quotes, no explanation.\n\n" +
+      "Good example:\n" +
+      "'A young Brazilian woman in her 20s holding a strawberry close to her lips, soft natural window light, neutral beige background, 35mm lens, shallow depth of field, photorealistic, highly detailed skin texture, natural makeup, subtle smile, UGC style, vertical 4:5 composition, clean aesthetic, no text'\n\n" +
+      "Bad example (NEVER do):\n" +
+      "'Crie uma imagem bonita de uma mulher com morango, bem iluminada, estilo publicitario'",
   },
   {
     name: "Analista Criativo IA",
@@ -258,6 +271,10 @@ export function IaStudioView() {
   const [imagemNotas, setImagemNotas] = useState<string[] | null>(null);
   const [promptImagemUsado, setPromptImagemUsado] = useState<string | null>(null);
   const [erroImagem, setErroImagem] = useState<string | null>(null);
+  // Fase 4 — salvar em Mídias + Biblioteca
+  const [salvandoImagemMidia, setSalvandoImagemMidia] = useState(false);
+  const [erroSalvarImagem, setErroSalvarImagem] = useState<string | null>(null);
+  const [sucessoSalvarImagem, setSucessoSalvarImagem] = useState<string | null>(null);
 
   // Lê o espelho da mesa uma vez por visita (só status, nunca segredo).
   useEffect(() => {
@@ -411,6 +428,8 @@ export function IaStudioView() {
     const prompt = imagemPromptF.trim();
     if (!prompt || gerandoImagem) return;
     setErroImagem(null);
+    setErroSalvarImagem(null);
+    setSucessoSalvarImagem(null);
     setGerandoImagem(true);
     const formato = imagemFormatoF as "quadrado" | "retrato" | "vertical" | "paisagem";
     const resposta = await imagemService.gerarImagem(prompt, {
@@ -430,6 +449,110 @@ export function IaStudioView() {
     setImagemMotor(resposta.motor);
     setPromptImagemUsado(resposta.promptUsado ?? null);
     setImagemNotas(resposta.notas ?? null);
+  }
+
+  // ---------- Fase 4: salvar imagem gerada em Mídias (bucket) + Biblioteca ----------
+  function dataUrlParaBlob(dataUrl: string): { blob: Blob; mime: string; ext: string } | null {
+    try {
+      const partes = dataUrl.split(",");
+      if (partes.length !== 2) return null;
+      const meta = partes[0];
+      const base64 = partes[1];
+      const mimeMatch = /data:([^;]+);base64/.exec(meta);
+      const mime = mimeMatch?.[1] ?? "image/png";
+      const ext = mime.split("/")[1]?.split("+")[0] ?? "png";
+      const binario = atob(base64);
+      const bytes = new Uint8Array(binario.length);
+      for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+      return { blob: new Blob([bytes], { type: mime }), mime, ext };
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleSalvarImagemEmMidias() {
+    if (!imagemGerada || salvandoImagemMidia) return;
+    setErroSalvarImagem(null);
+    setSucessoSalvarImagem(null);
+
+    const convertido = dataUrlParaBlob(imagemGerada);
+    if (!convertido) {
+      setErroSalvarImagem("Não consegui preparar a imagem para salvar. Tente gerar de novo.");
+      return;
+    }
+
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setErroSalvarImagem("Modo demonstração: salvar em Mídias precisa do banco configurado.");
+      return;
+    }
+
+    setSalvandoImagemMidia(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem("Sua sessão caiu. Entre de novo e repita o salvamento.");
+      return;
+    }
+
+    const formato = imagemFormatoF;
+    const timestamp = Date.now();
+    const nomeArquivo = `${timestamp}-anuncia-${formato}.${convertido.ext}`;
+    const caminho = `${user.id}/${nomeArquivo}`;
+
+    // 1) Sobe pro bucket 'midias'
+    const { error: erroUpload } = await supabase.storage.from("midias").upload(caminho, convertido.blob, {
+      contentType: convertido.mime,
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+    if (erroUpload) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem(`Não consegui subir para Mídias. Detalhe técnico: ${erroUpload.message}`);
+      return;
+    }
+
+    // 2) Registra em assets (tabela real das Mídias)
+    const tituloBase = imagemPromptF.trim().slice(0, 40) || `Imagem ${formato}`;
+    const { error: erroAssets } = await supabase.from("assets").insert({
+      user_id: user.id,
+      name: `${tituloBase}.${convertido.ext}`,
+      category: "Product Photos",
+      client_name: null,
+      format: convertido.ext.toUpperCase(),
+      size_bytes: convertido.blob.size,
+      tags: [imagemMotor ?? "ia", formato, "ia-studio", "gerada"],
+      storage_path: caminho,
+    });
+
+    if (erroAssets) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem(`Subiu pra nuvem, mas não registrou em Mídias. Detalhe técnico: ${erroAssets.message}`);
+      return;
+    }
+
+    // 3) Registra também em library_items (Biblioteca)
+    const { error: erroLib } = await supabase.from("library_items").insert({
+      user_id: user.id,
+      title: `Imagem — ${tituloBase}`,
+      category: "Criador Guidelines",
+      author: imagemMotor ?? "IA Studio",
+      description: `Imagem gerada no IA Studio · motor ${imagemMotor ?? "—"} · formato ${formato} · prompt: ${imagemPromptF.trim().slice(0, 120)}`,
+      content: `Prompt original: ${imagemPromptF}\n\nPrompt enviado (EN): ${promptImagemUsado ?? "—"}\n\nMotor: ${imagemMotor ?? "—"}\nFormato: ${formato}\nArquivo: ${caminho}`,
+    });
+
+    setSalvandoImagemMidia(false);
+
+    if (erroLib) {
+      // Mídias salvou, biblioteca falhou — aviso amarelo, não vermelho
+      setSucessoSalvarImagem(`Salva em Mídias! (Biblioteca falhou: ${erroLib.message}) — já está em /assets`);
+      return;
+    }
+
+    setSucessoSalvarImagem("Salva em Mídias + Biblioteca! Já aparece em /assets e /biblioteca.");
   }
 
   // ---------- Salvar na biblioteca ----------
@@ -1049,17 +1172,44 @@ export function IaStudioView() {
             </div>
 
             {imagemGerada && !gerandoImagem && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   {imagemMotor && <Badge variant="violet">{imagemMotor}</Badge>}
-                  <a
-                    href={imagemGerada}
-                    download="anuncia-criativo.png"
-                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                  >
-                    Baixar imagem
-                  </a>
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={imagemGerada}
+                      download="anuncia-criativo.png"
+                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Baixar
+                    </a>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void handleSalvarImagemEmMidias()}
+                      disabled={salvandoImagemMidia}
+                      className="h-7 text-xs"
+                    >
+                      {salvandoImagemMidia ? (
+                        <>
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Salvando…
+                        </>
+                      ) : (
+                        <>Salvar em Mídias + Biblioteca</>
+                      )}
+                    </Button>
+                  </div>
                 </div>
+                {erroSalvarImagem && (
+                  <p role="alert" className="text-xs text-red-400">
+                    {erroSalvarImagem}
+                  </p>
+                )}
+                {sucessoSalvarImagem && (
+                  <p role="status" className="text-xs text-emerald-400">
+                    {sucessoSalvarImagem}
+                  </p>
+                )}
                 {promptImagemUsado && (
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     Prompt enviado aos motores: {promptImagemUsado}
