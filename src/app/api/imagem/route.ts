@@ -150,23 +150,18 @@ async function chamarTradutor(
 }
 
 function ehPromptEliteJaBom(prompt: string): boolean {
-  const temPhotorealistic = /photorealistic/i.test(prompt);
-  const temLens = /(35mm|85mm|50mm|lens)/i.test(prompt);
-  const tem8k = /(8k|highly detailed|ultra-detailed)/i.test(prompt);
-  const longo = prompt.split(/\s+/).length >= 40;
-  return temPhotorealistic && temLens && tem8k && longo;
+  // Se já é elite completo (como morango premium 120 palavras), NÃO mexe — usa direto, sem suffix confuso
+  const temPhoto = /photorealistic/i.test(prompt);
+  const longo = prompt.split(/\s+/).length >= 30;
+  return temPhoto && longo;
 }
 
 async function enriquecerPrompt(
   promptOriginal: string
 ): Promise<{ texto: string; nota: string }> {
-  // SE JÁ É ELITE (como o morango premium que gerou), NÃO traduz do zero — só adiciona suffix anti-pintura
+  // SE JÁ É ELITE COMPLETO (120 palavras, photorealistic, 85mm), USA DIRETO SEM MEXER — quanto mais completo melhor
   if (ehPromptEliteJaBom(promptOriginal)) {
-    const suffix = ", photorealistic photo, not painting, not illustration, not yellow fruit, red strawberry if strawberry, highly detailed, 8k, sharp focus, natural";
-    const textoFinal = promptOriginal.toLowerCase().includes("no text")
-      ? `${promptOriginal}${suffix}`
-      : `${promptOriginal}, no text${suffix}`;
-    return { texto: textoFinal, nota: "prompt: elite já bom (EN) — mantido + suffix anti-pintura/amarelo" };
+    return { texto: promptOriginal, nota: "prompt: elite completo já bom (EN) — mantido 100% original, sem diminuir caracteres" };
   }
 
   const chave = process.env.GEMINI_API_KEY;
