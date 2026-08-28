@@ -1,0 +1,498 @@
+# ANUNCIA — PROTOCOLO OFICIAL DE RENASCIMENTO
+# Comando: RECRIAR
+
+Quando o usuário disser:
+
+RECRIAR
+
+você deve interromper a execução de novas alterações e iniciar o PROTOCOLO DE RENASCIMENTO DA ANUNCIA.
+
+OBJETIVO:
+
+Produzir um pacote de transferência completo para que outro agente de IA, outro modelo ou outra ferramenta consiga assumir o desenvolvimento da AnuncIA sem depender desta conversa.
+
+IMPORTANTE:
+
+O objetivo não é apenas transmitir instruções.
+
+É transmitir:
+
+CONTEXTO + ESTADO + ARQUITETURA + DECISÕES + VISÃO + REGRAS + PRÓXIMOS PASSOS.
+
+==================================================
+FASE 1 — CONGELAR O ESTADO
+==================================================
+
+NÃO faça novas alterações no código durante o processo de recriação.
+
+Primeiro registre o estado atual.
+
+==================================================
+FASE 2 — AUDITORIA DO PROJETO
+==================================================
+
+Inspecione o projeto atual.
+
+Mapeie:
+
+- estrutura de diretórios;
+- páginas;
+- componentes;
+- serviços;
+- APIs;
+- rotas;
+- banco;
+- tabelas;
+- relacionamentos;
+- autenticação;
+- storage;
+- integrações;
+- agentes;
+- prompts;
+- orquestração;
+- geração de texto;
+- geração de imagem;
+- geração de vídeo;
+- biblioteca;
+- mídias;
+- clientes;
+- campanhas;
+- criativos;
+- tráfego;
+- cobrança;
+- assinatura;
+- deploy;
+- configurações;
+- dependências.
+
+Não invente informações.
+
+Se não conseguir verificar alguma coisa:
+
+marque como:
+
+[NAO VERIFICADO]
+
+==================================================
+FASE 3 — SEPARAR REALIDADE DE PLANEJAMENTO
+==================================================
+
+Classifique cada funcionalidade como:
+
+[FUNCIONANDO]
+
+[PARCIAL]
+
+[EM DESENVOLVIMENTO]
+
+[PLANEJADA]
+
+[QUEBRADA]
+
+[NAO VERIFICADA]
+
+Nunca trate uma funcionalidade planejada como existente.
+
+Nunca trate mock como funcionalidade real.
+
+==================================================
+FASE 4 — MAPA DOS AGENTES
+==================================================
+
+Registrar:
+
+AGENTES EXISTENTES:
+
+- Estrategista
+- Copywriter
+- Roteirista UGC
+- Engenheiro de Prompts/Inteligência Visual
+- Analista Criativo
+
+AGENTES FUTUROS:
+
+- Diretor de Tráfego/Performance
+- Orquestrador
+
+Registrar para cada agente:
+
+- nome;
+- função;
+- personalidade;
+- especialidades;
+- prompt/persona atual;
+- entradas;
+- saídas;
+- serviços utilizados;
+- status;
+- limitações;
+- dependências.
+
+==================================================
+FASE 5 — INTELIGÊNCIA TRANSVERSAL
+==================================================
+
+Registrar como princípio global da AnuncIA:
+
+Todos os agentes devem combinar sua especialidade principal com conhecimentos pertinentes de:
+
+- psicologia comportamental;
+- psicologia cognitiva;
+- comportamento humano;
+- comportamento do consumidor;
+- neurociência;
+- neuromarketing;
+- persuasão;
+- ciência da decisão;
+- economia comportamental;
+- antropologia;
+- sociologia;
+- comunicação;
+- semiótica;
+- arquétipos;
+- storytelling;
+- atenção;
+- memória;
+- emoção;
+- motivação;
+- desejo;
+- percepção de valor;
+- objeções;
+- identidade;
+- influência;
+- linguagem;
+- cultura;
+- comportamento digital.
+
+O objetivo é aumentar a qualidade das decisões e da comunicação.
+
+Não utilizar essas disciplinas para fraude, manipulação abusiva ou exploração de vulnerabilidades.
+
+==================================================
+FASE 6 — VISÃO DA ANUNCIA
+==================================================
+
+Registrar:
+
+ANUNCIA
+
+Sistema operacional de crescimento com IA.
+
+Conceito:
+
+COMANDO EM EXPANSÃO.
+
+A AnuncIA deve evoluir para um centro de comando onde:
+
+estratégia
++
+criativos
++
+campanhas
++
+clientes
++
+tráfego
++
+dados
++
+IA
++
+automação
+
+funcionam de maneira integrada.
+
+==================================================
+FASE 7 — ARQUITETURA
+==================================================
+
+Registrar exatamente:
+
+- stack;
+- framework;
+- banco;
+- autenticação;
+- storage;
+- hospedagem;
+- repositório;
+- APIs;
+- serviços;
+- modelos;
+- fallback;
+- integrações;
+- variáveis necessárias.
+
+NUNCA registrar:
+
+- senhas;
+- API keys;
+- tokens;
+- secrets;
+- credenciais privadas.
+
+Apenas registrar que existem e onde são configuradas.
+
+==================================================
+FASE 8 — DECISÕES ARQUITETURAIS
+==================================================
+
+Registrar todas as decisões importantes.
+
+Para cada decisão:
+
+DECISÃO:
+MOTIVO:
+IMPACTO:
+DEPENDÊNCIAS:
+NÃO ALTERAR SEM AUTORIZAÇÃO: SIM/NÃO
+
+==================================================
+FASE 9 — REGRAS DE PRESERVAÇÃO
+==================================================
+
+Registrar:
+
+NÃO recriar banco sem necessidade.
+
+NÃO criar mock quando existe infraestrutura real.
+
+NÃO substituir Supabase.
+
+NÃO substituir GitHub.
+
+NÃO substituir Vercel.
+
+NÃO destruir funcionalidades existentes.
+
+NÃO reescrever o sistema inteiro para corrigir um problema localizado.
+
+NÃO alterar arquitetura sem justificativa.
+
+NÃO implementar grandes mudanças sem autorização.
+
+PRESERVAR → CORRIGIR → APRIMORAR → EXPANDIR.
+
+==================================================
+FASE 10 — ESTADO DE PRODUÇÃO
+==================================================
+
+Registrar:
+
+- URL de produção, se disponível;
+- branch principal;
+- último deploy conhecido;
+- status do build;
+- problemas conhecidos;
+- erros conhecidos;
+- pendências;
+- migrations;
+- estado do banco.
+
+==================================================
+FASE 11 — ROADMAP
+==================================================
+
+Separar:
+
+JÁ CONCLUÍDO
+
+EM ANDAMENTO
+
+PRÓXIMO
+
+FUTURO
+
+VISÃO DE LONGO PRAZO
+
+==================================================
+FASE 12 — PRÓXIMO AGENTE
+==================================================
+
+Criar instruções explícitas para o sucessor:
+
+"Você está assumindo um projeto existente.
+
+Não reconstrua a AnuncIA do zero.
+
+Primeiro leia este documento.
+
+Depois valide o estado real do projeto.
+
+Compare documentação com código.
+
+Se houver divergência:
+
+priorize o código real para determinar o estado atual e registre a divergência.
+
+Não altere nada estrutural sem compreender as dependências."
+
+==================================================
+FASE 13 — PRIMEIRA AÇÃO DO SUCESSOR
+==================================================
+
+O próximo agente deve:
+
+1. ler o pacote;
+2. auditar o projeto;
+3. validar o estado;
+4. identificar divergências;
+5. apresentar diagnóstico;
+6. listar riscos;
+7. apresentar plano;
+8. pedir autorização;
+9. somente então implementar.
+
+==================================================
+FASE 14 — GERAR O PACOTE DE RENASCIMENTO
+==================================================
+
+Ao final, produzir:
+
+ARQUIVO 1:
+
+ANUNCIA_MASTER_CONTEXT
+
+Contém a visão, identidade, princípios e inteligência do projeto.
+
+ARQUIVO 2:
+
+ANUNCIA_PROJECT_STATE
+
+Contém o estado técnico atual.
+
+ARQUIVO 3:
+
+ANUNCIA_AGENT_ROSTER
+
+Contém agentes, personas, responsabilidades e status.
+
+ARQUIVO 4:
+
+ANUNCIA_DECISION_LOG
+
+Contém decisões arquiteturais e estratégicas importantes.
+
+ARQUIVO 5:
+
+ANUNCIA_ROADMAP
+
+Contém o futuro planejado.
+
+ARQUIVO 6:
+
+ANUNCIA_HANDOFF
+
+Contém instruções específicas para o próximo agente.
+
+==================================================
+FASE 15 — GERAR O PROMPT DE ASSUNÇÃO
+==================================================
+
+Depois de gerar os documentos, produzir:
+
+# ANUNCIA — COMMANDER HANDOFF
+
+Um único prompt que possa ser colado em:
+
+- ChatGPT;
+- Claude;
+- Gemini;
+- Cursor;
+- Lovable;
+- outro agente de programação;
+- outra IA capaz de trabalhar com o projeto.
+
+Esse prompt deve instruir o novo agente a:
+
+1. assumir o projeto;
+2. ler os documentos;
+3. entender o estado;
+4. preservar infraestrutura;
+5. validar tudo;
+6. identificar divergências;
+7. não inventar funcionalidades;
+8. não criar mocks;
+9. não quebrar o que existe;
+10. continuar exatamente de onde o projeto parou.
+
+==================================================
+FASE 16 — FORMATO DO COMMANDER HANDOFF
+==================================================
+
+O comando final deve começar com:
+
+"VOCÊ ESTÁ ASSUMINDO A ANUNCIA."
+
+Depois:
+
+IDENTIDADE
+VISÃO
+ESTADO
+ARQUITETURA
+AGENTES
+REGRAS
+DECISÕES
+ROADMAP
+PENDÊNCIAS
+PROTOCOLO DE EXECUÇÃO
+
+E terminar com:
+
+"ANTES DE ALTERAR QUALQUER COISA:
+
+AUDITE.
+
+COMPARE.
+
+IDENTIFIQUE RISCOS.
+
+EXPLIQUE.
+
+PEÇA AUTORIZAÇÃO QUANDO NECESSÁRIO.
+
+SOMENTE ENTÃO EXECUTE."
+
+==================================================
+FASE 17 — CHECKSUM HUMANO
+==================================================
+
+Antes de finalizar o pacote, responda:
+
+O novo agente conseguiria entender a AnuncIA sem esta conversa?
+
+Se NÃO:
+
+identifique o que está faltando e inclua.
+
+O novo agente conseguiria continuar o desenvolvimento sem reconstruir o projeto?
+
+Se NÃO:
+
+inclua as informações técnicas necessárias.
+
+O novo agente saberia diferenciar o que existe do que está planejado?
+
+Se NÃO:
+
+corrija a documentação.
+
+==================================================
+FASE 18 — SAÍDA FINAL
+==================================================
+
+Entregar ao usuário:
+
+1. RESUMO DO ESTADO ATUAL
+2. O QUE FOI CAPTURADO
+3. O QUE NÃO FOI POSSÍVEL VERIFICAR
+4. RISCOS
+5. DOCUMENTOS DE RENASCIMENTO
+6. COMMANDER HANDOFF
+7. PRIMEIRO PASSO RECOMENDADO PARA O NOVO AGENTE
+
+NÃO continuar o desenvolvimento depois disso.
+
+O objetivo do comando RECRIAR é:
+
+PRESERVAR A MEMÓRIA DO PROJETO
+E PERMITIR O RENASCIMENTO DA ANUNCIA EM QUALQUER OUTRO AGENTE.

@@ -1,0 +1,117 @@
+================================================================
+O QUE SALVAR — ANUNCIA — 25 ago 2026 noite — 27 arquivos + código
+================================================================
+
+PASTA /home/user/anuncia/ — baixa tudo da Arena (botão Download ou copia pra seu PC em C:\Projetos\BKp\AnuncIA-Memoria\)
+
+GRUPO 1 — ESSENCIAL PRA RENASCER (3 arquivos — se salvar só isso já renasce)
+1. COMANDO_RE_CRIACAO_v6.md (48KB, 414 linhas) — COMANDO MESTRE COMPLETO v6 — contém tudo: quem é você, leis, 6+7 barreiras, modo operacional, produto v3.9, arquitetura inteligência, estratégia, onde retomar, bancada, 14 erros com aprendizados, protocolo RECRIAR REBIRTH 1.0, o que fazer quando pedirem comando mestre
+2. MEMORIA_TRANSFERIVEL_COMPLETA_v4.md (5.3KB) — preferências críticas atualizadas: arquivo inteiro no chat Ctrl+A Ctrl+V, commit simples 6 linhas, passo a passo numerado sempre, roadmap após cada etapa, imagem EN elite sem limite, agentes elite, IA paga agora não, premium supremo, evolução contínua, 13 erros
+3. ANUNCIA_COMMANDER_HANDOFF.md (14KB, 88 linhas) — prompt único autocontido pra colar em qualquer IA (ChatGPT, Claude, Gemini, Cursor, Lovable) — começa com "VOCÊ ESTÁ ASSUMINDO A ANUNCIA."
+
+GRUPO 2 — PACOTE REBIRTH 1.0 COMPLETO (10 arquivos — protocolo oficial de renascimento)
+4. ANUNCIA_MASTER_CONTEXT.md (6.6KB) — identidade, visão, princípios, leis, inteligência transversal
+5. ANUNCIA_PROJECT_STATE.md (8.2KB) — estado técnico real congelado + classificação FUNCIONANDO/PARCIAL/EM DESENVOLVIMENTO/PLANEJADA/QUEBRADA/NAO VERIFICADA
+6. ANUNCIA_ARCHITECTURE.md (8.5KB) — arquitetura e dependências FRONTEND→SERVIÇOS→APIs→IA→BANCO→STORAGE→INTEGRAÇÕES + variáveis sem secrets
+7. ANUNCIA_AGENT_ROSTER.md (8.8KB) — 5 agentes existentes + 1 tecido + 6 futuros com nome, função, personalidade, especialidades, prompt atual, entradas, saídas, serviços, status, limitações, dependências + constituição 20 regras
+8. ANUNCIA_DECISION_LOG.md (8.6KB) — decisões com DECISÃO/MOTIVO/IMPACTO/DEPENDÊNCIAS/NÃO ALTERAR
+9. ANUNCIA_ROADMAP.md (8.3KB) — JÁ CONCLUÍDO, EM ANDAMENTO, PRÓXIMO, FUTURO, VISÃO LONGO PRAZO
+10. ANUNCIA_KNOWN_ISSUES.md (8.6KB) — problemas conhecidos com evidência: imagem amarela pintada, formato esticando, engenheiro listando perguntas, imagem feia, agentes isolados, entrega confusa
+11. ANUNCIA_INTEGRATIONS.md (14KB) — integrações existentes reais [FUNCIONANDO] Supabase, Vercel, GitHub, Mesa Texto v6, Mesa Imagens v12.3, IA Studio, Mídias, Biblioteca, Ponte Vídeo, Guia Vivo + planejadas [PLANEJADA]
+12. ANUNCIA_DATABASE_MAP.md (11KB) — mapa banco tabelas colunas relacionamentos + padrão provado 10× + foto + migrations pendentes
+13. ANUNCIA_HANDOFF.md (7.6KB) — instruções sucessor + preferências dono + checksum humano
+
+GRUPO 3 — CÓDIGO PREMIUM ATUAL (2 arquivos inteiros — build verde 9.0s)
+14. codigo/019_ia_studio_view_v3.9_FIX_ENGENHEIRO_SEM_PERGUNTAS_COMPLETO.tsx (62KB, 1492 linhas) — IA Studio v3.9 ELITE SEM LIMITE sem listar perguntas + sem limite excelência + todos 5 agentes PAPEL→CONTEXTO→MÉTODO→FORMATO→AUTO-REVISÃO→LEIS + handleFormatoChange limpa imagem + object-contain + Fase 4 Salvar Mídias
+15. codigo/019_api_imagem_route_v12.3_FIX_CONGRUENCIA_COMPLETO.ts — na verdade 019_api_imagem_route_v12.2_EN_ELITE_COMPLETO.ts (29KB, 607 linhas) + versão v12.3 morango vermelho SDXL primeiro elite já bom 100% anti-pintura/amarelo — rota /api/imagem
+16. codigo/VERSOES.md (1.2KB) — mapa sincronia v3.9 com provas Ctrl+F
+
+GRUPO 4 — PAPELADA ORGANIZADA (reconstruída)
+17. papelada/010_CHANGELOG.md (32KB, 488 linhas, v1.1→v1.8 reconstruído do contexto 000-030 + bloco v1.8)
+18. papelada/011_CURRENT_MISSION_v2.9.md (GPS)
+19. papelada/012_MEMORIA_ESTRATEGICA_v2.1.md
+20. papelada/013_MAPA_DE_CACA.md (contém seção 9 D+1→D+14 = 014 provisório)
+21. papelada/015_CONTRATO_IMPLANTACAO.md
+22. papelada/016_TRIAGEM_COMANDO_MESTRE.md
+23. papelada/017_TRIAGEM_PROTOCOLO_LINGUAGEM.md
+24. papelada/018_SISTEMA_DE_LINGUAGEM.md
+25. papelada/000-030_contexto_completo.txt (152KB backup histórico)
+
+GRUPO 5 — ARQUIVOS MESTRES E AUDITORIAS
+26. ARQUIVO_MESTRE_ORGANIZADO_v3.4.md (8.2KB) — 26 arquivos organizados em 5 grupos, verdade única
+27. AUDITORIA_DIRETOR_MESTRE_15_PONTOS.md (33KB, 334 linhas) — auditoria 15 pontos completa: o que entendi, o que existe, o que funciona, o que quebrado, o que regrediu, agentes existentes/faltantes, como se comunicam, como deveria Orquestrador, integrações existentes/planejadas, riscos, melhorias, o que não alterar, plano evolução
+28. PLANO_IMPLEMENTACAO_ORQUESTRADOR_020A.md (7.9KB) — 7 etapas pipeline fixa Produção Completa
+29. PRINCIPIO_PREMIUM_SUPREMO_v1.md (6.0KB) — lei suprema premium/top/disruptivo/diferente/atraente/hiper inteligente/cliente quer pagar filtro 7 perguntas
+30. EVOLUCAO_CONTINUA_v1.md (5.5KB) — sistema evolução + 7ª Barreira Previsão de Merda pre-mortem obrigatório
+31. ROADMAP_ATUAL_POS_ETAPA.md (7.3KB) — roadmap pós-etapa v3.8 com ETAPA/PROGRESSO/CONCLUÍDO/RESTANTE/PRÓXIMO/STATUS + FILA + ESTACIONAMENTO + FILTRO PREMIUM
+32. MEMORIA_TRANSFERIVEL_COMPLETA_v1.md (15KB), v2, v3, v4 — evolução da memória com erros
+
+GRUPO 6 — BANCATA-REPO (opcional, mas já tem tudo)
+33. bancata-repo/ — clone completo github.com/creatina23/saugc-os com build verde 9.0s — contém src/ completo + docs/ — pode ignorar se já tem no seu PC em C:\Projetos\BKp\saugc-os, mas é backup
+
+TOTAL: 33 arquivos essenciais + bancata-repo completo = tudo que precisa pra renascer
+
+================================================================
+TUTORIAL — COMO JOGAR EM OUTRA IA QUANDO QUISER
+================================================================
+
+OBJETIVO: trocar de copiloto (ex: sair da Arena e ir pro Claude, ChatGPT, Gemini, Cursor) sem perder memória, sem reconstruir projeto, com continuidade total.
+
+PASSO 1 — SALVAR (2 min)
+- Na Arena, vai em Files → pasta /home/user/anuncia/ → seleciona tudo → Download (ou copia manual pra C:\Projetos\BKp\AnuncIA-Memoria\)
+- Confere se tem os 3 essenciais: COMANDO_RE_CRIACAO_v6.md + MEMORIA_TRANSFERIVEL_COMPLETA_v4.md + ANUNCIA_COMMANDER_HANDOFF.md
+- Se quiser completo, baixa os 10 ANUNCIA_*.md + codigo/ com 2 arquivos inteiros v3.9 e v12.3
+
+PASSO 2 — ABRIR NOVA IA (1 min)
+- Abre nova conversa com outra IA: ChatGPT (chat.openai.com), Claude (claude.ai), Gemini (gemini.google.com), Cursor, Lovable, etc.
+- Cria conversa nova em branco
+
+PASSO 3 — COLAR COMANDO MESTRE (1 min) — PRIMEIRA MENSAGEM TEM QUE SER O COMANDO
+- Abre no seu PC o arquivo COMANDO_RE_CRIACAO_v6.md (48KB, 414 linhas)
+- Ctrl+A (seleciona tudo), Ctrl+C (copia)
+- Cola como PRIMEIRA MENSAGEM na nova IA (Ctrl+V)
+- Na linha seguinte, escreve: assumir posto
+- Aperta Enter
+
+PASSO 4 — AGUARDAR RENASCIMENTO (30s)
+- Nova IA tem que responder:
+  "Copiloto AnuncIA v6 a postos — REBIRTH 1.0 + PREMIUM + ROADMAP. Estado: 019 Fase 4 + Fix v3.9 sem listar perguntas + sem limite excelência + v12.3 congruência morango vermelho, Mesa v6/v12.3 no ar, caça pausada, auditoria 15 pontos feita, memória transferível v4 com 14 erros + 7ª Barreira + Princípio Premium + Roadmap após cada etapa. Pronto pra renascer cada vez mais completo e aprimorado. Por onde retomamos?"
+- Se responder isso, renasceu 100%
+
+PASSO 5 — JOGAR MEMÓRIA TRANSFERÍVEL (se quiser ainda mais contexto — opcional)
+- Se a nova IA pedir mais contexto ou você quiser garantir que ela saiba das suas preferências (arquivo inteiro no chat, commit simples, passo a passo, roadmap após cada etapa, imagem EN elite sem limite, premium, evolução, prever merdas):
+- Abre MEMORIA_TRANSFERIVEL_COMPLETA_v4.md (5.3KB)
+- Ctrl+A, Ctrl+C, cola no chat como segunda mensagem
+- Escreve: "registra isso na memoria"
+
+PASSO 6 — JOGAR PACOTE REBIRTH (se a nova IA for de código e precisar auditar — opcional)
+- Se for Cursor, Lovable, ou agente de programação:
+- Anexa os 10 arquivos ANUNCIA_*.md (arrasta pra conversa) ou cola o conteúdo do ANUNCIA_COMMANDER_HANDOFF.md (14KB) que já é autocontido com identidade, visão, arquitetura, estado, agentes, decisões, regras, roadmap, riscos, pendências, próximos passos
+- Escreve: "audite o projeto real em C:\Projetos\BKp\saugc-os e compare com docs, me diga divergências"
+
+PASSO 7 — VALIDAR RENASCIMENTO (checksum humano — do protocolo RECRIAR)
+- Pergunta pra nova IA:
+  "Você conseguiria entender a AnuncIA sem a conversa anterior?"
+  "Conseguiria identificar o que realmente existe vs planejado?"
+  "Conseguiria continuar sem reconstruir o projeto do zero?"
+  "Sabe o que não deve alterar?"
+  "Sabe qual próximo passo?"
+- Se qualquer NÃO, manda mais um arquivo do pacote (ex: ANUNCIA_PROJECT_STATE.md ou ANUNCIA_KNOWN_ISSUES.md)
+
+PASSO 8 — CONTINUAR DE ONDE PAROU
+- Fala: "abre o roadmap"
+- Nova IA tem que mostrar roadmap pós-etapa v3.9 com fila 019→020-A
+- Fala: "les go 020-A" se quiser começar Orquestrador, ou "segue o baile" pra continuar Fase 4
+
+================================================================
+DICAS PRA NÃO PERDER MEMÓRIA
+================================================================
+
+- Sempre que terminar uma sessão importante (ex: fechar sprint), pede "FIM DE TRAMPO" — eu gero relatório completo + comando de re-criação novo v7 mais completo que v6 com novos erros e aprendizados
+- Sempre que começar, pede "INICIAR TRAMPO" — eu atualizo tudo que falta + próximo passo único
+- Toda vez que pedir "me passa o comando mestre", vou entregar v6 COMPLETO (ou v7, v8... cada vez mais completo) + memória v4 + arquivo mestre + roadmap + tudo pra renascer mais completo e aprimorado — nunca v4 antigo
+- Guarda a pasta C:\Projetos\BKp\AnuncIA-Memoria\ no seu PC com todos os arquivos — é seu cofre de continuidade, não depende de nenhuma IA
+
+================================================================
+FIM DO TUTORIAL — SALVA TUDO EM /anuncia/ E COLE v6 + "assumir posto" PRA RENASCER
+================================================================
