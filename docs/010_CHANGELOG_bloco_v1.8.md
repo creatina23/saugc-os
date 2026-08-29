@@ -1,15 +1,35 @@
 # 📋 BLOCO v1.8 — para o TOPO do docs/010_CHANGELOG.md
 
 > **COMO COLAR (Lei L12 — append-only):**
-> 1. Abre `C:\Projetos\BKp\saugc-os\docs\010_CHANGELOG.md`
-> 2. Acha a linha do título: `SAUGC OS — Histórico de Alterações`
-> 3. Cola o bloco abaixo LOGO DEPOIS do título (ou seja, ACIMA da linha `## [v1.7]`)
-> 4. Nada mais muda no arquivo. As versões antigas ficam onde estão.
+
+> 1. Abre 
+
+`C:\Projetos\BKp\saugc-os\docs\010_CHANGELOG.md`
+
+> 2. Acha a linha do título: 
+
+`SAUGC OS — Histórico de Alterações`
+
+> 3. Cola o bloco abaixo LOGO 
+
+DEPOIS do título (ou seja, ACIMA da linha `## [v1.7]`)
+
+> 4. Nada mais muda no arquivo. 
+
+As versões antigas ficam onde estão.
 >
+
 > **PROVAS (Lei L3):**
-> - Ctrl+F `[v1.8]` → **1 resultado**
+
+> - Ctrl+F `[v1.8]` → **1 
+
+resultado**
+
 > - Ctrl+F `[v1.7]` → **1 resultado** (continua existindo, logo abaixo do bloco novo)
-> - Última linha do arquivo continua sendo a de sempre: `**Próximo:** Sprint 010 — banco real por usuário (schema oficial + RLS + services migrando do mock).`
+
+> - Última linha do arquivo continua sendo a de sempre: 
+
+`**Próximo:** Sprint 010 — banco real por usuário (schema oficial + RLS + services migrando do mock).`
 
 ---
 

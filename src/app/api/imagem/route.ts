@@ -150,7 +150,6 @@ async function chamarTradutor(
 }
 
 function ehPromptEliteJaBom(prompt: string): boolean {
-  // Se já é elite completo (como morango premium 120 palavras), NÃO mexe — usa direto, sem suffix confuso
   const temPhoto = /photorealistic/i.test(prompt);
   const longo = prompt.split(/\s+/).length >= 30;
   return temPhoto && longo;
@@ -159,7 +158,6 @@ function ehPromptEliteJaBom(prompt: string): boolean {
 async function enriquecerPrompt(
   promptOriginal: string
 ): Promise<{ texto: string; nota: string }> {
-  // SE JÁ É ELITE COMPLETO (120 palavras, photorealistic, 85mm), USA DIRETO SEM MEXER — quanto mais completo melhor
   if (ehPromptEliteJaBom(promptOriginal)) {
     return { texto: promptOriginal, nota: "prompt: elite completo já bom (EN) — mantido 100% original, sem diminuir caracteres" };
   }
@@ -174,10 +172,9 @@ async function enriquecerPrompt(
   if (modeloTradutorAprovado) {
     const direto = await chamarTradutor(chave, modeloTradutorAprovado, promptOriginal);
     if (direto.ok) {
-      return { texto: direto.texto, nota: `prompt: otimizado p/ inglês pelo ${modeloTradutorAprovado} (elite já bom? ${ehPromptEliteJaBom(promptOriginal)})` };
+      return { texto: direto.texto, nota: `prompt: otimizado p/ inglês pelo ${modeloTradutorAprovado}` };
     }
     tradutoresReprovados.add(modeloTradutorAprovado);
-    console.log(`[motor-imagem] tradutor fixado caiu (${direto.status}) — reprovando`);
     modeloTradutorAprovado = null;
   }
 
@@ -196,7 +193,6 @@ async function enriquecerPrompt(
     const resultado = await chamarTradutor(chave, modelo, promptOriginal);
     if (resultado.ok) {
       modeloTradutorAprovado = modelo;
-      console.log(`[motor-imagem] tradutor aprovado: ${modelo}`);
       return { texto: resultado.texto, nota: `prompt: traduzido/otimizado p/ inglês pelo ${modelo}` };
     }
     tradutoresReprovados.add(modelo);
@@ -216,7 +212,6 @@ type MotorCloudflare = {
   multipart: boolean;
 };
 
-// ORDEM NOVA v12.3: SDXL Lightning primeiro (melhor pra produto fotorealista), depois klein
 const MOTORES_CLOUDFLARE: MotorCloudflare[] = [
   {
     id: "Cloudflare · SDXL Lightning",
@@ -286,8 +281,6 @@ async function gerarViaCloudflare(
       corpoPedido = JSON.stringify(corpoJson);
     }
 
-    console.log(`[motor-imagem] Tentando ${motor.id} com prompt: ${prompt.slice(0, 120)}...`);
-
     const resposta = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${motor.modelo}`,
       {
@@ -301,7 +294,6 @@ async function gerarViaCloudflare(
     if (!resposta.ok) {
       const detalhe = await resposta.text().catch(() => "");
       anotarDetalhe(detalhe);
-      console.error(`[motor-imagem] ${motor.id} recusou:`, resposta.status, detalhe.slice(0, 600));
       return { ok: false, status: resposta.status };
     }
 
@@ -313,7 +305,6 @@ async function gerarViaCloudflare(
       } | null;
       const base64 = dados?.result?.image ?? dados?.image ?? "";
       if (base64) {
-        console.log(`[motor-imagem] ${motor.id} respondeu (json)`);
         return { ok: true, imagemBase64: base64, motor: motor.id };
       }
       return { ok: false, status: 502 };
@@ -325,10 +316,8 @@ async function gerarViaCloudflare(
     }
 
     const base64 = Buffer.from(bytes).toString("base64");
-    console.log(`[motor-imagem] ${motor.id} respondeu (${Math.round(bytes.byteLength / 1024)} KB)`);
     return { ok: true, imagemBase64: base64, motor: motor.id };
-  } catch (excecao) {
-    console.error("[motor-imagem] Exceção Cloudflare:", excecao);
+  } catch {
     return { ok: false, status: null };
   }
 }
@@ -336,7 +325,6 @@ async function gerarViaCloudflare(
 async function gerarViaHuggingFace(prompt: string, formato: Formato): Promise<Tentativa> {
   const token = process.env.HF_TOKEN;
   if (!token) {
-    console.log("[motor-imagem] HF: sem token — pulando");
     return { ok: false, status: null };
   }
   try {
@@ -372,10 +360,8 @@ async function gerarViaHuggingFace(prompt: string, formato: Formato): Promise<Te
     const bytes = await resposta.arrayBuffer().catch(() => null);
     if (!bytes || bytes.byteLength === 0) return { ok: false, status: 502 };
     const base64 = Buffer.from(bytes).toString("base64");
-    console.log(`[motor-imagem] HF SDXL respondeu (${Math.round(bytes.byteLength / 1024)} KB)`);
     return { ok: true, imagemBase64: base64, motor: "Hugging Face · SDXL" };
-  } catch (excecao) {
-    console.error("[motor-imagem] Exceção HF:", excecao);
+  } catch {
     return { ok: false, status: null };
   }
 }
@@ -395,10 +381,8 @@ async function gerarViaPollinations(prompt: string, formato: Formato, modelo: "f
     if (!bytes || bytes.byteLength === 0) return { ok: false, status: 502 };
 
     const base64 = Buffer.from(bytes).toString("base64");
-    console.log(`[motor-imagem] Pollinations ${modelo} respondeu (${Math.round(bytes.byteLength / 1024)} KB)`);
     return { ok: true, imagemBase64: base64, motor: "Pollinations · rede pública" };
-  } catch (excecao) {
-    console.error("[motor-imagem] Exceção Pollinations:", excecao);
+  } catch {
     return { ok: false, status: null };
   }
 }
@@ -423,7 +407,6 @@ async function gerarViaGeminiImagem(chave: string, prompt: string): Promise<Tent
     const dados: unknown = await resposta.json().catch(() => null);
 
     if (!resposta.ok) {
-      console.error("[motor-imagem] Gemini imagem recusou:", resposta.status);
       return { ok: false, status: resposta.status };
     }
 
@@ -434,10 +417,8 @@ async function gerarViaGeminiImagem(chave: string, prompt: string): Promise<Tent
 
     if (!base64) return { ok: false, status: 502 };
 
-    console.log("[motor-imagem] Gemini imagem respondeu");
     return { ok: true, imagemBase64: base64, motor: `Gemini imagem · ${MODELO_GEMINI_IMAGEM}` };
-  } catch (excecao) {
-    console.error("[motor-imagem] Exceção Gemini imagem:", excecao);
+  } catch {
     return { ok: false, status: null };
   }
 }
@@ -519,8 +500,6 @@ export async function POST(request: Request) {
         rodar: () => gerarViaCloudflare(accountId, tokenCloudflare, motor, promptFinal, formato, referencia),
       });
     }
-  } else {
-    console.log("[motor-imagem] sem chaves Cloudflare — motores fora da fila");
   }
 
   fila.push({
@@ -543,8 +522,6 @@ export async function POST(request: Request) {
       rotulo: "Gemini imagem (reserva paga)",
       rodar: () => gerarViaGeminiImagem(chaveGemini, promptFinal),
     });
-  } else {
-    console.log("[motor-imagem] reserva Gemini imagem: desligada");
   }
 
   if (fila.length === 0) {
@@ -577,8 +554,6 @@ export async function POST(request: Request) {
       if (resultado.status === 429) houveLimite = true;
     }
   }
-
-  console.error("[motor-imagem] TODOS os geradores falharam. último status:", ultimoStatus);
 
   if (houveLimite) {
     return NextResponse.json(
