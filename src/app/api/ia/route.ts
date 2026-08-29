@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { BASE_EXCELENCIA } from "@/lib/base-excelencia";
 
 // MESA DE MOTORES — a IA da AnuncIA nunca morre.
 // ------------------------------------------------------------------
@@ -578,6 +579,10 @@ export async function POST(request: Request) {
   const temperatura = pegarTemperatura(corpo.temperatura);
   const maxTokens = pegarMaxTokens(corpo.maxTokens);
 
+  // 020-A: Base de Excelência muda da tela pra rota — injetada em TODAS as gerações (decisão Reunião 2)
+  // Quanto for necessário para excelência SEM LIMITE — sem diminuir caracteres
+  const promptComExcelencia = `${BASE_EXCELENCIA}\n\n---\nTAREFA DO USUÁRIO:\n${prompt}\n\n---\nLEMBRETE: Entregue quanto for necessário para nível de excelência, sem limite de palavras. Resultado real > aparência.`;
+
   // 3) Monta a fila — cada etapa carrega rótulo pro resumo da verdade
   const fila: { rotulo: string; rodar: () => Promise<Tentativa> }[] = [];
 
@@ -585,7 +590,7 @@ export async function POST(request: Request) {
   if (chaveGemini) {
     fila.push({
       rotulo: "Gemini",
-      rodar: () => gerarViaGemini(chaveGemini, prompt, temperatura, maxTokens),
+      rodar: () => gerarViaGemini(chaveGemini, promptComExcelencia, temperatura, maxTokens),
     });
   } else {
     console.log("[motor-ia] sem GEMINI_API_KEY — indo direto pros reservas");
@@ -601,7 +606,7 @@ export async function POST(request: Request) {
           "https://api.groq.com/openai/v1/chat/completions",
           "https://api.groq.com/openai/v1/models",
           chaveGroq,
-          prompt,
+          promptComExcelencia,
           temperatura,
           maxTokens,
           ["llama-4", "gpt-oss", "llama-3.3", "qwen", "mistral"],
@@ -616,7 +621,7 @@ export async function POST(request: Request) {
   if (chaveOpenRouter) {
     fila.push({
       rotulo: "OpenRouter (free auto)",
-      rodar: () => gerarViaOpenRouterFree(chaveOpenRouter, prompt, temperatura, maxTokens),
+      rodar: () => gerarViaOpenRouterFree(chaveOpenRouter, promptComExcelencia, temperatura, maxTokens),
     });
   } else {
     console.log("[motor-ia] OpenRouter: sem OPENROUTER_API_KEY — fora da fila");
@@ -632,7 +637,7 @@ export async function POST(request: Request) {
           "https://api.cerebras.ai/v1/chat/completions",
           "https://api.cerebras.ai/v1/models",
           chaveCerebras,
-          prompt,
+          promptComExcelencia,
           temperatura,
           maxTokens,
           ["llama-3.3", "llama-4", "gpt-oss", "qwen"],

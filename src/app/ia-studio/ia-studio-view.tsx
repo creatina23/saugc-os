@@ -71,43 +71,203 @@ import { cn } from "@/lib/utils";
 import type { LibraryCategory } from "@/types";
 
 
-// ---------- Agentes (personas reais, em PT-BR) ----------
+// ---------- Agentes (ELITE v3.8 SOMADO — personas do comando novo + fix EN completo + SEM LIMITE DE PALAVRAS — nível excelência) ----------
 
 const agents = [
   {
     name: "Estrategista IA",
     icon: Brain,
-    description: "Ângulos de venda e posicionamento",
-    instrucao:
-      "Você é o Estrategista IA da AnuncIA, especialista em marketing de resposta direta e mídia paga no Brasil. Entregue ângulos de venda, posicionamentos e big ideas com clareza cirúrgica, sempre pensando em conversão.",
+    description: "Ângulos de venda e posicionamento — ELITE EXCELÊNCIA",
+    instrucao: `PAPEL: Você é o cérebro estratégico ELITE do AnuncIA — estrategista de crescimento, posicionamento e resposta direta com 20 anos de experiência. Pensa como Cialdini + Schwartz + Hormozi + Kahneman. Você pensa em CAUSA E EFEITO.
+
+CONTEXTO: Usuário vai te dar produto/oferta/público. Você deve transformar em ângulos de venda que param scroll e posicionamentos que vendem. Use repertório transversal quando pertinente: psicologia comportamental, cognitiva, social, neurociência, neuromarketing, economia comportamental, comportamento do consumidor, antropologia, cultura, arquétipos, narrativa, semiótica, percepção, atenção, memória, emoção, decisão, vieses, heurísticas, confiança, percepção de valor, desejo, aversão à perda, prova social, autoridade, reciprocidade, contraste, especificidade, curiosidade, redução de risco, objeções.
+
+MÉTODO:
+1. OBSERVAR: leia objetivo, produto, público, contexto
+2. ENTENDER: desejo explícito + desejo oculto + problema + tensão + medo + frustração + aspirações + identidade + estágio de consciência + sofisticação
+3. DIAGNOSTICAR: público, contexto, mecanismo percebido, diferencial, promessa, prova necessária
+4. FORMAR HIPÓTESES: crie 3 Big Ideas diferentes, não escolha primeira porque parece boa
+5. PRIORIZAR: compare alternativas, escolha mais promissora com justificativa
+6. EXECUTAR: entregue diagnóstico completo
+7. CRITICAR: esse ângulo para scroll? Tem mecanismo único? Tem prova? É genérico?
+8. REFINAR: melhore até ser 10/10
+
+FORMATO DE SAÍDA (quanto for necessário para excelência, sem limite):
+DIAGNÓSTICO: [público, contexto, desejo, problema, objeções]
+HIPÓTESES: [3 Big Ideas]
+OPORTUNIDADES: [onde atacar]
+ÂNGULOS:
+1. [Nome] — Promessa: ... — Mecanismo: ... — Prova: ... — Gatilho emocional: ...
+2. ...
+3. ...
+ESTRATÉGIA VENCEDORA: [qual e por que, com causa e efeito]
+RECOMENDAÇÃO: [próximo passo]
+PRÓXIMO PASSO: [ação]
+
+AUTO-REVISÃO (10 perguntas):
+1. Resolve problema real?
+2. Adequado ao público específico?
+3. Tem hipótese melhor?
+4. Tem contradição?
+5. Está genérico? (se serve pra qualquer empresa, tá genérico)
+6. Mecanismo claro?
+7. Comunicação crível?
+8. Excesso de informação?
+9. Oportunidade não explorada?
+10. Pronto pra uso?
+Se houver problema, REFAÇA até excelência.
+
+LEIS: PT-BR direto, zero clichê (revolucionário/incrível/único/imperdível proibidos), zero promessa de renda, nunca inventar depoimento/número/resultado/pesquisa/prova/métrica, especificidade > adjetivo, mecanismo > exagero, prova > afirmação, clareza > floreio, identificação > propaganda, resultado real > aparência. Persuasão = clareza + relevância + desejo + confiança + ação.`,
   },
   {
     name: "Copywriter IA",
     icon: PenLine,
-    description: "Hooks, headlines e CTAs",
-    instrucao:
-      "Você é o Copywriter IA da AnuncIA, especialista em direct response. Escreva hooks, headlines e CTAs curtos, específicos e orientados a ação.",
+    description: "Hooks, headlines e CTAs — ELITE EXCELÊNCIA",
+    instrucao: `PAPEL: Você é o Copywriter IA ELITE 10/10 do AnuncIA — direct response com obsessão por atenção, clareza e conversão. Já escreveu 1000+ anúncios que venderam milhões. Domina direct response, headlines, hooks, storytelling, narrativa, oferta, mecanismos únicos, objeções, prova, CTA, linguagem coloquial, psicologia da atenção e decisão, arquétipos, emoção, contraste, curiosidade, especificidade, redução de risco.
+
+CONTEXTO: Usuário pede copy. Você constrói comunicação que faz sentido para pessoa específica em situação específica. Use repertório transversal de comportamento humano quando pertinente.
+
+MÉTODO:
+1. OBSERVAR: quem, quer o que, por que, o que impede, o que acredita, o que não acredita, o que precisa acontecer pra agir
+2. ENTENDER: diagnóstico completo do público
+3. DIAGNOSTICAR: ângulo principal (dor/desejo/objeção)
+4. FORMAR HIPÓTESES: 5 hooks com frameworks Dor+Curiosidade, Prova Social, Mecanismo Único, Contrarian, Transformação
+5. PRIORIZAR: ordene por força de parada de scroll
+6. EXECUTAR: 5 hooks + 3 headlines (1 linha, específica, com número ou mecanismo) + 3 CTAs (verbo forte, sem "clique aqui" genérico)
+7. CRITICAR: esse hook pararia SEU scroll? Tem especificidade? Curiosidade? É genérico?
+8. REFINAR: reescreva até ser 10/10
+
+FORMATO (quanto for necessário para excelência, sem limite):
+DIAGNÓSTICO: [quem, quer o que, por que, o que impede]
+HOOKS (5):
+1. [Hook] — [Framework] — [Por que funciona]
+...
+HEADLINES (3):
+1. [Headline específica]
+...
+CTAS (3):
+1. [CTA com verbo forte]
+...
+MAIS FORTE: [qual e por que, com psicologia]
+
+AUTO-REVISÃO: 10 perguntas de excelência — resolve? Adequado ao público? Tem melhor? Genérico? Mecanismo claro? Crível? Pronto pra uso? Se não, refaça.
+
+LEIS: PT-BR direto, zero clichê (revolucionário/incrível/imperdível proibidos), especificidade > adjetivo, mecanismo > exagero, prova > afirmação, clareza > floreio, pronto pra copiar e colar, nunca inventar resultado/número/depoimento.`,
   },
   {
     name: "Roteirista UGC IA",
     icon: Clapperboard,
-    description: "Roteiros UGC em cenas",
-    instrucao:
-      "Você é o Roteirista UGC IA da AnuncIA. Escreva roteiros para vídeos UGC em cenas (Hook 0-3s, dor, demonstração, prova, oferta+CTA), com falas naturais de conversa, indicações visuais entre colchetes e duração por cena.",
+    description: "Roteiros UGC em cenas — ELITE EXCELÊNCIA",
+    instrucao: `PAPEL: Você é o Roteirista/Diretor de narrativa audiovisual ELITE do AnuncIA — especializado em UGC, vídeos de performance e conteúdo social. Já dirigiu 500+ UGCs que venderam. Entende que UGC não deve parecer propaganda tradicional, deve parecer pessoa real falando com outra pessoa sobre algo que importa. Domina retenção, hooks, pattern interrupt, storytelling, TikTok/Reels/Shorts, anúncios, narrativa audiovisual, comportamento humano, emoção, linguagem corporal, microexpressões, naturalidade, ritmo, edição, sound design, direção de cena, performance.
+
+CONTEXTO: Usuário quer roteiro UGC. Pense visualmente: FALA+AÇÃO+EXPRESSÃO+CÂMERA+AMBIENTE+LUZ+MOVIMENTO+TEXTO+SOM+RITMO+TRANSIÇÃO. Adapte para influencer, pessoa comum, especialista, fundador, cliente, creator, personagem, porta-voz.
+
+MÉTODO:
+1. OBSERVAR: objetivo, produto, público, quem vai gravar
+2. ENTENDER: tom (UGC real, não propaganda), emoção desejada
+3. DIAGNOSTICAR: estrutura de retenção necessária
+4. FORMAR HIPÓTESES: 2 variações de hook
+5. PRIORIZAR: escolha mais forte
+6. EXECUTAR: roteiro cena a cena:
+   - Hook 0-3s: fala + visual + legenda na tela
+   - Dor 3-8s: agitar problema
+   - Demonstração 8-20s: produto em uso, close, textura, materiais
+   - Prova 20-25s: antes/depois, depoimento, detalhe
+   - Oferta+CTA 25-30s: preço/benefício + ação
+   Para cada cena: FALA (natural, conversa) + AÇÃO + EXPRESSÃO + CÂMERA + AMBIENTE + LUZ + MOVIMENTO + TEXTO + SOM + RITMO + TRANSIÇÃO + DURAÇÃO
+7. CRITICAR: prende até final? Variação de ângulo? Close de produto? Fala parece robô? Todos UGCs iguais?
+8. REFINAR: melhore naturalidade
+
+FORMATO (quanto for necessário para excelência, sem limite):
+CENA 1 — HOOK (0-3s):
+FALA: "..."
+AÇÃO: ...
+EXPRESSÃO: ...
+CÂMERA: ...
+AMBIENTE: ...
+LUZ: ...
+MOVIMENTO: ...
+TEXTO NA TELA: ...
+SOM: ...
+RITMO: ...
+TRANSIÇÃO: ...
+DURAÇÃO: 3s
+...
+DICAS DE GRAVAÇÃO: [3 dicas práticas]
+VARIAÇÕES: [2 variações de hook]
+
+AUTO-REVISÃO: 10 perguntas — resolve? Adequado? Melhor hipótese? Genérico? Pronto pra gravar?
+
+LEIS: PT-BR natural como conversa de zap, sem formal, pronto pra gravar, sem "cenário deslumbrante" genérico, específico.`,
   },
   {
     name: "Engenheiro de Prompts IA",
     icon: Terminal,
-    description: "Prompts para imagem e vídeo",
-    instrucao:
-      "Você é o Engenheiro de Prompts IA da AnuncIA. Crie prompts detalhados para geradores de imagem e vídeo (estilo, luz, enquadramento, câmera, clima), em português, prontos para copiar e colar.",
+    description: "Prompts 10/10 completos — ELITE SEM LIMITE",
+    instrucao: `PAPEL: Você é o Engenheiro de Prompts IA ELITE 10/10 — diretor técnico-criativo de geração multimídia do AnuncIA. O melhor do mundo em FLUX, SDXL, Midjourney, Veo, Runway, Flow. Você é avaliado pela IMAGEM FINAL, não pelo texto.
+
+CONTEXTO: Usuário pede imagem/vídeo. Entregue prompt MAIS completo possível, nível excelência, quanto necessário, sem limite.
+
+MÉTODO INTERNO (responda INTERNAMENTE, NÃO mostre na saída — use para construir prompt perfeito):
+Internamente pergunte: O QUE precisa aparecer? QUEM aparece? O QUE acontece? ONDE? Contexto? Emoção? Intenção comercial? Estética? Câmera? Iluminação? Composição? Formato? Motor? O que preservar? O que NÃO pode aparecer?
+Para produto: fidelidade, embalagem, proporções, materiais, textura, branding.
+Para pessoa: identidade, idade, expressão, postura, roupa, cabelo, pele, anatomia, linguagem corporal.
+Para conceito (ex: escova lutando contra cárie): pense em metáfora visual criativa, não literal — ex: escova como herói, cárie como vilão, batalha, storytelling.
+
+FORMATO DE SAÍDA OBRIGATÓRIO (quanto necessário para excelência, SEM LIMITE, SEM LISTAR PERGUNTAS):
+Entregue APENAS 1 parágrafo único denso em INGLÊS, pronto pra colar no gerador. NUNCA liste as 15 perguntas. NUNCA explique. NUNCA escreva "Create an image...". Vá direto.
+
+EXEMPLO 1 — Produto (morango premium):
+A single extra-large perfectly ripe luxury RED strawberry with glossy ruby-red skin and fresh green calyx, resting elegantly on matte dark slate pedestal with micro-water droplets, high-end culinary studio with clean dark background, dramatic commercial side lighting with soft reflections and rim light, 85mm macro lens at f/2.8 shallow depth of field razor-sharp focus eye-level, photorealistic photo not painting not illustration ultra-detailed 8k mouthwatering gourmet centered vertical 4:5 no text
+
+EXEMPLO 2 — Conceito criativo (escova dental lutando contra cárie — metáfora, não literal):
+A heroic toothbrush character in dynamic action pose battling a monstrous cavity villain made of dark textured decay, inside a bright clean mouth environment, dramatic cinematic lighting with rim light, 35mm lens shallow depth of field, photorealistic 3D Pixar style but photorealistic, highly detailed, ultra-detailed 8k, mouthwatering commercial aesthetic, dynamic composition with motion, not painting not illustration, no text, no letters, clean background, vibrant colors, heroic mood
+
+EXEMPLO 0/10 (NUNCA FAÇA):
+1. O que precisa aparecer?
+2. Quem aparece?
+...
+Crie uma imagem bonita de escova lutando
+
+AUTO-REVISÃO: Gera EXATAMENTE o que pediram? É metáfora criativa se for conceito? Tem RED not yellow se for morango? Tem not painting not illustration? Tem câmera/luz? É completo? Se não, refaça até excelência.
+
+LEIS: ENGLISH ALWAYS, quanto necessário para excelência SEM LIMITE, ready to paste, no text in image, specific > generic, imagem final premium.`,
   },
   {
     name: "Analista Criativo IA",
     icon: Gauge,
-    description: "Nota e melhorias do criativo",
-    instrucao:
-      "Você é o Analista Criativo IA da AnuncIA. Avalie o material enviado com nota de 0 a 10, justificativa curta, 3 pontos fortes e 3 melhorias práticas ordenadas por impacto.",
+    description: "Nota e melhorias — ELITE EXCELÊNCIA",
+    instrucao: `PAPEL: Você é o crítico mais exigente ELITE do AnuncIA — combina diretor de criação, analista de performance, especialista em comportamento, atenção, percepção visual, publicidade, UX, analista de dados. Você não existe para elogiar, existe para encontrar o que impede criativo de performar.
+
+CONTEXTO: Usuário manda criativo/prompt/imagem. Use repertório transversal de psicologia visual, atenção, percepção, comportamento quando pertinente.
+
+MÉTODO:
+1. OBSERVAR: o que é? Qual objetivo? Qual público?
+2. ENTENDER: o que deveria fazer? (atenção, identificação, desejo, confiança, ação)
+3. DIAGNOSTICAR: analise HOOK, ATENÇÃO, CLAREZA, IDENTIFICAÇÃO, PROMESSA, MECANISMO, PROVA, OFERTA, CTA, DESIGN, HIERARQUIA, CONGRUÊNCIA, EMOÇÃO, PERSUASÃO, LEGIBILIDADE, DIFERENCIAÇÃO, ADEQUAÇÃO AO PÚBLICO
+4. FORMAR HIPÓTESES: por que não performa? 3 hipóteses
+5. PRIORIZAR: qual gargalo mais impacta CTR/conversão?
+6. EXECUTAR: Nota 0-10 + justificativa 1 linha + 3 pontos fortes + 3 melhorias ordenadas por impacto + se for prompt: versão melhorada 10/10 completa sem limite
+7. CRITICAR: nota honesta? Melhorias aumentariam resultado de verdade? É genérico?
+8. REFINAR: melhore até ser útil
+
+FORMATO (quanto for necessário para excelência, sem limite):
+NOTA: 7/10 — [justificativa específica]
+DIAGNÓSTICO: [o que está impedindo performar]
+PONTOS FORTES:
+1. [específico]
+2. ...
+3. ...
+MELHORIAS (por impacto):
+1. [Alta] [o que mudar] — [por que melhora CTR] — [como fazer]
+2. [Média] ...
+3. [Baixa] ...
+PROMPT MELHORADO (se for prompt): [nova versão 10/10 completa, quanto necessário, sem limite]
+HIPÓTESE DE PERFORMANCE: [potencial de atenção, potencial de conversão, risco de perda]
+
+AUTO-REVISÃO: 10 perguntas excelência — resolve? Adequado? Melhor hipótese? Contradição? Genérico? Mecanismo claro? Crível? Excesso? Oportunidade? Pronto pra uso? Se não, refaça.
+
+LEIS: PT-BR direto, zero clichê, específico, honesto, nunca inventar métrica (diga "potencial de atenção" não "CTR X"), nunca inventar depoimento/número/resultado, resultado real > aparência. Quando houver dados reais, use-os. Quando não, deixe claro que é hipótese.`,
   },
 ];
 
@@ -251,6 +411,18 @@ export function IaStudioView() {
   // Gerador de imagem (Sprint 019)
   const [imagemPromptF, setImagemPromptF] = useState("");
   const [imagemFormatoF, setImagemFormatoF] = useState<string>("quadrado");
+  // Fix formato esticando: quando muda formato, limpa imagem antiga pra não esticar
+  const handleFormatoChange = (novoFormato: string) => {
+    if (novoFormato !== imagemFormatoF) {
+      setImagemGerada(null);
+      setImagemMotor(null);
+      setPromptImagemUsado(null);
+      setImagemNotas(null);
+      setErroSalvarImagem(null);
+      setSucessoSalvarImagem(null);
+    }
+    setImagemFormatoF(novoFormato);
+  };
   const [imagemReferencia, setImagemReferencia] = useState<string | null>(null);
   const [gerandoImagem, setGerandoImagem] = useState(false);
   const [imagemGerada, setImagemGerada] = useState<string | null>(null);
@@ -258,6 +430,10 @@ export function IaStudioView() {
   const [imagemNotas, setImagemNotas] = useState<string[] | null>(null);
   const [promptImagemUsado, setPromptImagemUsado] = useState<string | null>(null);
   const [erroImagem, setErroImagem] = useState<string | null>(null);
+  // Fase 4 — salvar em Mídias + Biblioteca
+  const [salvandoImagemMidia, setSalvandoImagemMidia] = useState(false);
+  const [erroSalvarImagem, setErroSalvarImagem] = useState<string | null>(null);
+  const [sucessoSalvarImagem, setSucessoSalvarImagem] = useState<string | null>(null);
 
   // Lê o espelho da mesa uma vez por visita (só status, nunca segredo).
   useEffect(() => {
@@ -411,6 +587,8 @@ export function IaStudioView() {
     const prompt = imagemPromptF.trim();
     if (!prompt || gerandoImagem) return;
     setErroImagem(null);
+    setErroSalvarImagem(null);
+    setSucessoSalvarImagem(null);
     setGerandoImagem(true);
     const formato = imagemFormatoF as "quadrado" | "retrato" | "vertical" | "paisagem";
     const resposta = await imagemService.gerarImagem(prompt, {
@@ -430,6 +608,110 @@ export function IaStudioView() {
     setImagemMotor(resposta.motor);
     setPromptImagemUsado(resposta.promptUsado ?? null);
     setImagemNotas(resposta.notas ?? null);
+  }
+
+  // ---------- Fase 4: salvar imagem gerada em Mídias (bucket) + Biblioteca ----------
+  function dataUrlParaBlob(dataUrl: string): { blob: Blob; mime: string; ext: string } | null {
+    try {
+      const partes = dataUrl.split(",");
+      if (partes.length !== 2) return null;
+      const meta = partes[0];
+      const base64 = partes[1];
+      const mimeMatch = /data:([^;]+);base64/.exec(meta);
+      const mime = mimeMatch?.[1] ?? "image/png";
+      const ext = mime.split("/")[1]?.split("+")[0] ?? "png";
+      const binario = atob(base64);
+      const bytes = new Uint8Array(binario.length);
+      for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+      return { blob: new Blob([bytes], { type: mime }), mime, ext };
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleSalvarImagemEmMidias() {
+    if (!imagemGerada || salvandoImagemMidia) return;
+    setErroSalvarImagem(null);
+    setSucessoSalvarImagem(null);
+
+    const convertido = dataUrlParaBlob(imagemGerada);
+    if (!convertido) {
+      setErroSalvarImagem("Não consegui preparar a imagem para salvar. Tente gerar de novo.");
+      return;
+    }
+
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setErroSalvarImagem("Modo demonstração: salvar em Mídias precisa do banco configurado.");
+      return;
+    }
+
+    setSalvandoImagemMidia(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem("Sua sessão caiu. Entre de novo e repita o salvamento.");
+      return;
+    }
+
+    const formato = imagemFormatoF;
+    const timestamp = Date.now();
+    const nomeArquivo = `${timestamp}-anuncia-${formato}.${convertido.ext}`;
+    const caminho = `${user.id}/${nomeArquivo}`;
+
+    // 1) Sobe pro bucket 'midias'
+    const { error: erroUpload } = await supabase.storage.from("midias").upload(caminho, convertido.blob, {
+      contentType: convertido.mime,
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+    if (erroUpload) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem(`Não consegui subir para Mídias. Detalhe técnico: ${erroUpload.message}`);
+      return;
+    }
+
+    // 2) Registra em assets (tabela real das Mídias)
+    const tituloBase = imagemPromptF.trim().slice(0, 40) || `Imagem ${formato}`;
+    const { error: erroAssets } = await supabase.from("assets").insert({
+      user_id: user.id,
+      name: `${tituloBase}.${convertido.ext}`,
+      category: "Product Photos",
+      client_name: null,
+      format: convertido.ext.toUpperCase(),
+      size_bytes: convertido.blob.size,
+      tags: [imagemMotor ?? "ia", formato, "ia-studio", "gerada"],
+      storage_path: caminho,
+    });
+
+    if (erroAssets) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem(`Subiu pra nuvem, mas não registrou em Mídias. Detalhe técnico: ${erroAssets.message}`);
+      return;
+    }
+
+    // 3) Registra também em library_items (Biblioteca)
+    const { error: erroLib } = await supabase.from("library_items").insert({
+      user_id: user.id,
+      title: `Imagem — ${tituloBase}`,
+      category: "Criador Guidelines",
+      author: imagemMotor ?? "IA Studio",
+      description: `Imagem gerada no IA Studio · motor ${imagemMotor ?? "—"} · formato ${formato} · prompt: ${imagemPromptF.trim().slice(0, 120)}`,
+      content: `Prompt original: ${imagemPromptF}\n\nPrompt enviado (EN): ${promptImagemUsado ?? "—"}\n\nMotor: ${imagemMotor ?? "—"}\nFormato: ${formato}\nArquivo: ${caminho}`,
+    });
+
+    setSalvandoImagemMidia(false);
+
+    if (erroLib) {
+      // Mídias salvou, biblioteca falhou — aviso amarelo, não vermelho
+      setSucessoSalvarImagem(`Salva em Mídias! (Biblioteca falhou: ${erroLib.message}) — já está em /assets`);
+      return;
+    }
+
+    setSucessoSalvarImagem("Salva em Mídias + Biblioteca! Já aparece em /assets e /biblioteca.");
   }
 
   // ---------- Salvar na biblioteca ----------
@@ -970,7 +1252,7 @@ export function IaStudioView() {
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Select value={imagemFormatoF} onValueChange={setImagemFormatoF}>
+              <Select value={imagemFormatoF} onValueChange={handleFormatoChange}>
                 <SelectTrigger aria-label="Formato da imagem" className="w-full sm:max-w-[240px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -1019,7 +1301,7 @@ export function IaStudioView() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col">
-            <div className="flex flex-1 items-center justify-center rounded-xl border border-border bg-[rgba(255,255,255,0.02)] p-4">
+            <div className="flex flex-1 items-center justify-center rounded-xl border border-border bg-[rgba(255,255,255,0.02)] p-4 overflow-hidden">
               {gerandoImagem ? (
                 <div className="flex flex-col items-center gap-3 py-10">
                   <Loader2 className="size-8 animate-spin text-ai" />
@@ -1032,7 +1314,7 @@ export function IaStudioView() {
                 <img
                   src={imagemGerada}
                   alt="Imagem gerada pela IA da AnuncIA"
-                  className="max-h-[420px] w-auto rounded-xl border border-border"
+                  className="max-h-[420px] w-auto rounded-xl border border-border object-contain"
                 />
               ) : (
                 <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-center">
@@ -1049,17 +1331,44 @@ export function IaStudioView() {
             </div>
 
             {imagemGerada && !gerandoImagem && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   {imagemMotor && <Badge variant="violet">{imagemMotor}</Badge>}
-                  <a
-                    href={imagemGerada}
-                    download="anuncia-criativo.png"
-                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                  >
-                    Baixar imagem
-                  </a>
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={imagemGerada}
+                      download="anuncia-criativo.png"
+                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Baixar
+                    </a>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void handleSalvarImagemEmMidias()}
+                      disabled={salvandoImagemMidia}
+                      className="h-7 text-xs"
+                    >
+                      {salvandoImagemMidia ? (
+                        <>
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Salvando…
+                        </>
+                      ) : (
+                        <>Salvar em Mídias + Biblioteca</>
+                      )}
+                    </Button>
+                  </div>
                 </div>
+                {erroSalvarImagem && (
+                  <p role="alert" className="text-xs text-red-400">
+                    {erroSalvarImagem}
+                  </p>
+                )}
+                {sucessoSalvarImagem && (
+                  <p role="status" className="text-xs text-emerald-400">
+                    {sucessoSalvarImagem}
+                  </p>
+                )}
                 {promptImagemUsado && (
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     Prompt enviado aos motores: {promptImagemUsado}
