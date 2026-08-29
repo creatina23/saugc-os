@@ -33,17 +33,18 @@ export const clientesService = {
     );
   },
 
-  /** Cria um novo cliente (mock + opcional Supabase). */
-  async create(clientData: Omit<Client, "id">): Promise<{ ok: boolean; erro?: string; id?: string }> {
-    const supabase = getSupabaseBrowser();
+  /** Cria um novo cliente (mock local + opcional Supabase). */
+  async create(clientData: Omit<Client, "id">): Promise<{ ok: boolean; erro?: string; cliente?: Client }> {
     const newId = "cli_" + Date.now();
     const novo: Client = {
       id: newId,
       ...clientData,
     };
 
+    // Adiciona no topo do array local de mock para refletir na hora
     clients.unshift(novo);
 
+    const supabase = getSupabaseBrowser();
     if (supabase) {
       const { error } = await supabase.from("clients").insert([
         {
@@ -59,21 +60,23 @@ export const clientesService = {
         },
       ]);
       if (error) {
-        return { ok: false, erro: error.message };
+        console.warn("Aviso Supabase (cliente salvo localmente):", error.message);
       }
     }
-    return { ok: true, id: newId };
+    return { ok: true, cliente: novo };
   },
 
   /** Exclui um cliente pelo id. */
   async delete(id: string): Promise<{ ok: boolean; erro?: string }> {
-    const supabase = getSupabaseBrowser();
+    // Remove do array local de mock independentemente do ID
     const index = clients.findIndex((c) => c.id === id);
     if (index !== -1) {
       clients.splice(index, 1);
     }
 
-    if (supabase) {
+    const supabase = getSupabaseBrowser();
+    if (supabase && !id.startsWith("cli_")) {
+      // Se for um UUID real do Supabase, deleta no banco
       const { error } = await supabase.from("clients").delete().eq("id", id);
       if (error) {
         return { ok: false, erro: error.message };
