@@ -1,0 +1,567 @@
+031_MASTER_CONTEXT.md
+SAUGC OS — MASTER CONTEXT
+Documento Mestre Oficial
+Versão 1.0
+IDENTIDADE
+
+Nome oficial:
+
+SAUGC OS
+
+Sistema Operacional de Anúncios UGC com Inteligência Artificial
+
+Tipo:
+
+SaaS
+
+Status:
+
+MVP
+MISSÃO
+
+Criar a plataforma definitiva para produção de anúncios UGC utilizando Inteligência Artificial.
+
+O sistema deve permitir que qualquer usuário produza uma campanha completa em poucos minutos.
+
+OBJETIVO
+
+O usuário deverá conseguir:
+
+Criar Cliente
+
+↓
+
+Criar Campanha
+
+↓
+
+Criar Briefing
+
+↓
+
+Gerar Estratégia
+
+↓
+
+Gerar Copy
+
+↓
+
+Gerar Roteiro
+
+↓
+
+Gerar Prompt
+
+↓
+
+Salvar
+
+↓
+
+Exportar
+
+Tudo dentro do SAUGC OS.
+
+PÚBLICO
+
+Agências
+
+Social Media
+
+Gestores de Tráfego
+
+Copywriters
+
+Empresas
+
+Freelancers
+
+Criadores UGC
+
+Infoprodutores
+
+Lojas
+
+Prestadores de serviço
+
+STACK OFICIAL
+
+Frontend
+
+Next.js
+
+React
+
+TypeScript
+
+Tailwind CSS
+
+Shadcn UI
+
+Backend
+
+Supabase
+
+Banco
+
+PostgreSQL
+
+Storage
+
+Supabase Storage
+ARQUITETURA
+Usuário
+
+↓
+
+Frontend
+
+↓
+
+Services
+
+↓
+
+Supabase
+
+↓
+
+Banco
+
+↓
+
+IA
+
+↓
+
+Storage
+
+Nunca alterar essa arquitetura.
+
+MÓDULOS OFICIAIS
+
+Dashboard
+
+Clientes
+
+Campanhas
+
+Briefings
+
+Comerciais
+
+Assets
+
+Biblioteca
+
+Prompts
+
+IA Studio
+
+Configurações
+
+BANCO
+
+Estrutura principal:
+
+profiles
+
+↓
+
+clients
+
+↓
+
+campaigns
+
+↓
+
+briefings
+
+↓
+
+commercials
+
+↓
+
+assets
+
+↓
+
+prompts
+
+↓
+
+ai_generations
+
+↓
+
+ai_usage
+
+↓
+
+ai_feedback
+
+Todas as tabelas pertencem ao usuário autenticado.
+
+RLS obrigatório.
+
+AGENTES DE IA
+
+AI Strategist
+
+↓
+
+AI Copywriter
+
+↓
+
+AI UGC Writer
+
+↓
+
+AI Prompt Engineer
+
+↓
+
+AI Creative Analyst
+
+Expansão futura:
+
+AI SEO
+
+AI Funnel Builder
+
+AI Ads Manager
+
+AI Analytics
+
+FLUXO DO SISTEMA
+Cadastro
+
+↓
+
+Login
+
+↓
+
+Dashboard
+
+↓
+
+Cliente
+
+↓
+
+Campanha
+
+↓
+
+Briefing
+
+↓
+
+IA
+
+↓
+
+Resultado
+
+↓
+
+Exportação
+DESIGN
+
+Dark Mode
+
+Inspirado em:
+
+OpenAI
+
+Linear
+
+Stripe
+
+Notion
+
+Supabase
+
+Vercel
+
+Framer
+
+Características:
+
+Minimalista
+
+Profissional
+
+Moderno
+
+Alta performance
+
+EXPERIÊNCIA
+
+Máximo:
+
+3 cliques por ação.
+
+Objetivo:
+
+Menos de 10 minutos para gerar uma campanha completa.
+
+PADRÃO DE CÓDIGO
+
+Código deve ser:
+
+Modular
+
+Tipado
+
+Reutilizável
+
+Documentado
+
+Escalável
+
+Nunca misturar lógica com interface.
+
+PADRÃO DE COMPONENTES
+
+Todos reutilizáveis.
+
+Exemplo:
+
+Button
+
+Card
+
+Input
+
+Modal
+
+Table
+
+Sidebar
+
+Header
+PADRÃO DE APIs
+
+Todas passam pela camada:
+
+Services
+
+Nunca acessar APIs diretamente no frontend.
+
+INTEGRAÇÕES
+
+Supabase
+
+OpenAI
+
+Gemini
+
+Claude
+
+Storage
+
+Email
+
+WhatsApp
+
+n8n
+
+Vídeo IA
+
+Imagem IA
+
+SEGURANÇA
+
+Nunca expor:
+
+API Keys
+
+Prompts internos
+
+Tokens
+
+URLs privadas
+
+Sempre utilizar backend.
+
+ORDEM OFICIAL DE IMPLEMENTAÇÃO
+1. Estrutura visual
+
+↓
+
+2. Componentes
+
+↓
+
+3. Navegação
+
+↓
+
+4. Dados Mockados
+
+↓
+
+5. Supabase
+
+↓
+
+6. CRUD
+
+↓
+
+7. Autenticação
+
+↓
+
+8. IA
+
+↓
+
+9. Storage
+
+↓
+
+10. Deploy
+O QUE É PROIBIDO
+
+Nunca:
+
+Trocar tecnologia.
+
+Trocar banco.
+
+Criar arquitetura diferente.
+
+Criar outro fluxo.
+
+Modificar identidade visual.
+
+Alterar roadmap.
+
+Reiniciar projeto.
+
+DOCUMENTAÇÃO OFICIAL
+
+Este projeto possui os seguintes documentos:
+
+000_RULES
+
+001_README
+
+002_PROJECT_BIBLE
+
+003_ROADMAP
+
+004_ARCHITECTURE
+
+005_DATABASE
+
+006_FRONTEND
+
+007_BACKEND
+
+008_AI_SYSTEM
+
+009_DESIGN_SYSTEM
+
+010_CHANGELOG
+
+011_CURRENT_MISSION
+
+012_PROMPT_MASTER
+
+013_API
+
+014_SECURITY
+
+015_DEPLOY
+
+016_TESTS
+
+017_AUTOMATIONS
+
+018_FUTURE_MODULES
+
+019_IMPLEMENTATION
+
+020_DATABASE_BUILD
+
+021_FRONTEND_BUILD
+
+022_AI_AGENTS_BUILD
+
+023_LAUNCH_PLAN
+
+024_TECHNICAL_SPECIFICATION
+
+025_DATABASE_SCHEMA_FINAL
+
+026_UI_DESIGN_SPEC
+
+027_USER_FLOW
+
+028_AI_PROMPTS_SYSTEM
+
+029_API_INTEGRATION_SPEC
+
+030_MIGRATION_GUIDE
+
+Todos fazem parte da documentação oficial.
+
+INSTRUÇÃO PARA QUALQUER IA
+
+Ao receber este documento:
+
+Leia todo o conteúdo.
+Considere este documento como a fonte oficial do projeto.
+Não altere decisões já documentadas.
+Continue a implementação a partir do estado atual.
+Em caso de conflito, prevalece o MASTER CONTEXT.
+ESTADO ATUAL DO PROJETO
+Concluído
+Conceito do produto
+Arquitetura
+Roadmap
+Banco de dados (especificação)
+Interface (especificação)
+Fluxo do usuário
+Sistema de agentes IA
+Integrações planejadas
+Guia de migração
+Próxima etapa de desenvolvimento
+Criar a estrutura visual completa.
+Implementar componentes reutilizáveis.
+Criar navegação.
+Alimentar com dados mockados.
+Integrar Supabase.
+Implementar CRUD.
+Ativar autenticação.
+Integrar agentes de IA.
+Realizar testes.
+Publicar MVP.
+STATUS FINAL
+Projeto:
+
+SAUGC OS
+
+Versão da documentação:
+
+1.0
+
+Documentos produzidos:
+
+000 → 031
+
+Status:
+
+✅ DOCUMENTAÇÃO E ARQUITETURA CONCLUÍDAS
+
+Próxima fase:
+
+IMPLEMENTAÇÃO DO SISTEMA

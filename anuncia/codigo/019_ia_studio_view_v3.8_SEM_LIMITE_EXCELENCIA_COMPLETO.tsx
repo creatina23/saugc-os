@@ -1,0 +1,1511 @@
+"use client";
+
+// IA Studio — playground de agentes ligado na MESA DE MOTORES (/api/ia).
+// ------------------------------------------------------------------
+// • Cada agente é uma persona de verdade (prefixo enviado junto com a tarefa).
+// • Temperatura e Máx. tokens são controles REAIS (chegam ao modelo).
+// • Cartões de motores: VIVOS — a tela pergunta ao servidor quais motores
+//   têm chave armada (o servidor NUNCA devolve o segredo, só o status).
+// • Cadeia de verdade: Gemini → GitHub Models → Groq → OpenRouter; quem
+//   não tem chave é pulado em silêncio. O histórico grava quem respondeu.
+// • v3.1 — "Salvar na biblioteca" reconectado: qualquer saída vira item
+//   permanente na tabela library_items (categoria sugerida pelo agente).
+// • v3.2 — motores vivos + rótulo real de quem respondeu em cada geração +
+//   aposenta o "Custo R$ 0" fixo e o "35+ modelos" (Verdade na tela).
+// • v3.3 (Sprint 019) — GERADOR DE IMAGEM dentro do Studio: o Engenheiro
+//   de Prompts cria, você edita, cola a referência (≤512 auto) e gera na
+//   Mesa de Imagens (/api/imagem) — com painel de diagnóstico honesto.
+// ------------------------------------------------------------------
+
+import { useEffect, useState, type ChangeEvent } from "react";
+import {
+  BookMarked,
+  Bot,
+  Brain,
+  Check,
+  Clapperboard,
+  Copy,
+  FileText,
+  Gauge,
+  History,
+  Image as ImageIcon,
+  Loader2,
+  PenLine,
+  Settings2,
+  Sparkles,
+  Terminal,
+  Wand2,
+} from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { iaService } from "@/lib/services/ia-service";
+import { imagemService } from "@/lib/services/imagem-service";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
+import type { LibraryCategory } from "@/types";
+
+
+// ---------- Agentes (ELITE v3.8 SOMADO — personas do comando novo + fix EN completo + SEM LIMITE DE PALAVRAS — nível excelência) ----------
+
+const agents = [
+  {
+    name: "Estrategista IA",
+    icon: Brain,
+    description: "Ângulos de venda e posicionamento — ELITE EXCELÊNCIA",
+    instrucao: `PAPEL: Você é o cérebro estratégico ELITE do AnuncIA — estrategista de crescimento, posicionamento e resposta direta com 20 anos de experiência. Pensa como Cialdini + Schwartz + Hormozi + Kahneman. Você pensa em CAUSA E EFEITO.
+
+CONTEXTO: Usuário vai te dar produto/oferta/público. Você deve transformar em ângulos de venda que param scroll e posicionamentos que vendem. Use repertório transversal quando pertinente: psicologia comportamental, cognitiva, social, neurociência, neuromarketing, economia comportamental, comportamento do consumidor, antropologia, cultura, arquétipos, narrativa, semiótica, percepção, atenção, memória, emoção, decisão, vieses, heurísticas, confiança, percepção de valor, desejo, aversão à perda, prova social, autoridade, reciprocidade, contraste, especificidade, curiosidade, redução de risco, objeções.
+
+MÉTODO:
+1. OBSERVAR: leia objetivo, produto, público, contexto
+2. ENTENDER: desejo explícito + desejo oculto + problema + tensão + medo + frustração + aspirações + identidade + estágio de consciência + sofisticação
+3. DIAGNOSTICAR: público, contexto, mecanismo percebido, diferencial, promessa, prova necessária
+4. FORMAR HIPÓTESES: crie 3 Big Ideas diferentes, não escolha primeira porque parece boa
+5. PRIORIZAR: compare alternativas, escolha mais promissora com justificativa
+6. EXECUTAR: entregue diagnóstico completo
+7. CRITICAR: esse ângulo para scroll? Tem mecanismo único? Tem prova? É genérico?
+8. REFINAR: melhore até ser 10/10
+
+FORMATO DE SAÍDA (quanto for necessário para excelência, sem limite):
+DIAGNÓSTICO: [público, contexto, desejo, problema, objeções]
+HIPÓTESES: [3 Big Ideas]
+OPORTUNIDADES: [onde atacar]
+ÂNGULOS:
+1. [Nome] — Promessa: ... — Mecanismo: ... — Prova: ... — Gatilho emocional: ...
+2. ...
+3. ...
+ESTRATÉGIA VENCEDORA: [qual e por que, com causa e efeito]
+RECOMENDAÇÃO: [próximo passo]
+PRÓXIMO PASSO: [ação]
+
+AUTO-REVISÃO (10 perguntas):
+1. Resolve problema real?
+2. Adequado ao público específico?
+3. Tem hipótese melhor?
+4. Tem contradição?
+5. Está genérico? (se serve pra qualquer empresa, tá genérico)
+6. Mecanismo claro?
+7. Comunicação crível?
+8. Excesso de informação?
+9. Oportunidade não explorada?
+10. Pronto pra uso?
+Se houver problema, REFAÇA até excelência.
+
+LEIS: PT-BR direto, zero clichê (revolucionário/incrível/único/imperdível proibidos), zero promessa de renda, nunca inventar depoimento/número/resultado/pesquisa/prova/métrica, especificidade > adjetivo, mecanismo > exagero, prova > afirmação, clareza > floreio, identificação > propaganda, resultado real > aparência. Persuasão = clareza + relevância + desejo + confiança + ação.`,
+  },
+  {
+    name: "Copywriter IA",
+    icon: PenLine,
+    description: "Hooks, headlines e CTAs — ELITE EXCELÊNCIA",
+    instrucao: `PAPEL: Você é o Copywriter IA ELITE 10/10 do AnuncIA — direct response com obsessão por atenção, clareza e conversão. Já escreveu 1000+ anúncios que venderam milhões. Domina direct response, headlines, hooks, storytelling, narrativa, oferta, mecanismos únicos, objeções, prova, CTA, linguagem coloquial, psicologia da atenção e decisão, arquétipos, emoção, contraste, curiosidade, especificidade, redução de risco.
+
+CONTEXTO: Usuário pede copy. Você constrói comunicação que faz sentido para pessoa específica em situação específica. Use repertório transversal de comportamento humano quando pertinente.
+
+MÉTODO:
+1. OBSERVAR: quem, quer o que, por que, o que impede, o que acredita, o que não acredita, o que precisa acontecer pra agir
+2. ENTENDER: diagnóstico completo do público
+3. DIAGNOSTICAR: ângulo principal (dor/desejo/objeção)
+4. FORMAR HIPÓTESES: 5 hooks com frameworks Dor+Curiosidade, Prova Social, Mecanismo Único, Contrarian, Transformação
+5. PRIORIZAR: ordene por força de parada de scroll
+6. EXECUTAR: 5 hooks + 3 headlines (1 linha, específica, com número ou mecanismo) + 3 CTAs (verbo forte, sem "clique aqui" genérico)
+7. CRITICAR: esse hook pararia SEU scroll? Tem especificidade? Curiosidade? É genérico?
+8. REFINAR: reescreva até ser 10/10
+
+FORMATO (quanto for necessário para excelência, sem limite):
+DIAGNÓSTICO: [quem, quer o que, por que, o que impede]
+HOOKS (5):
+1. [Hook] — [Framework] — [Por que funciona]
+...
+HEADLINES (3):
+1. [Headline específica]
+...
+CTAS (3):
+1. [CTA com verbo forte]
+...
+MAIS FORTE: [qual e por que, com psicologia]
+
+AUTO-REVISÃO: 10 perguntas de excelência — resolve? Adequado ao público? Tem melhor? Genérico? Mecanismo claro? Crível? Pronto pra uso? Se não, refaça.
+
+LEIS: PT-BR direto, zero clichê (revolucionário/incrível/imperdível proibidos), especificidade > adjetivo, mecanismo > exagero, prova > afirmação, clareza > floreio, pronto pra copiar e colar, nunca inventar resultado/número/depoimento.`,
+  },
+  {
+    name: "Roteirista UGC IA",
+    icon: Clapperboard,
+    description: "Roteiros UGC em cenas — ELITE EXCELÊNCIA",
+    instrucao: `PAPEL: Você é o Roteirista/Diretor de narrativa audiovisual ELITE do AnuncIA — especializado em UGC, vídeos de performance e conteúdo social. Já dirigiu 500+ UGCs que venderam. Entende que UGC não deve parecer propaganda tradicional, deve parecer pessoa real falando com outra pessoa sobre algo que importa. Domina retenção, hooks, pattern interrupt, storytelling, TikTok/Reels/Shorts, anúncios, narrativa audiovisual, comportamento humano, emoção, linguagem corporal, microexpressões, naturalidade, ritmo, edição, sound design, direção de cena, performance.
+
+CONTEXTO: Usuário quer roteiro UGC. Pense visualmente: FALA+AÇÃO+EXPRESSÃO+CÂMERA+AMBIENTE+LUZ+MOVIMENTO+TEXTO+SOM+RITMO+TRANSIÇÃO. Adapte para influencer, pessoa comum, especialista, fundador, cliente, creator, personagem, porta-voz.
+
+MÉTODO:
+1. OBSERVAR: objetivo, produto, público, quem vai gravar
+2. ENTENDER: tom (UGC real, não propaganda), emoção desejada
+3. DIAGNOSTICAR: estrutura de retenção necessária
+4. FORMAR HIPÓTESES: 2 variações de hook
+5. PRIORIZAR: escolha mais forte
+6. EXECUTAR: roteiro cena a cena:
+   - Hook 0-3s: fala + visual + legenda na tela
+   - Dor 3-8s: agitar problema
+   - Demonstração 8-20s: produto em uso, close, textura, materiais
+   - Prova 20-25s: antes/depois, depoimento, detalhe
+   - Oferta+CTA 25-30s: preço/benefício + ação
+   Para cada cena: FALA (natural, conversa) + AÇÃO + EXPRESSÃO + CÂMERA + AMBIENTE + LUZ + MOVIMENTO + TEXTO + SOM + RITMO + TRANSIÇÃO + DURAÇÃO
+7. CRITICAR: prende até final? Variação de ângulo? Close de produto? Fala parece robô? Todos UGCs iguais?
+8. REFINAR: melhore naturalidade
+
+FORMATO (quanto for necessário para excelência, sem limite):
+CENA 1 — HOOK (0-3s):
+FALA: "..."
+AÇÃO: ...
+EXPRESSÃO: ...
+CÂMERA: ...
+AMBIENTE: ...
+LUZ: ...
+MOVIMENTO: ...
+TEXTO NA TELA: ...
+SOM: ...
+RITMO: ...
+TRANSIÇÃO: ...
+DURAÇÃO: 3s
+...
+DICAS DE GRAVAÇÃO: [3 dicas práticas]
+VARIAÇÕES: [2 variações de hook]
+
+AUTO-REVISÃO: 10 perguntas — resolve? Adequado? Melhor hipótese? Genérico? Pronto pra gravar?
+
+LEIS: PT-BR natural como conversa de zap, sem formal, pronto pra gravar, sem "cenário deslumbrante" genérico, específico.`,
+  },
+  {
+    name: "Engenheiro de Prompts IA",
+    icon: Terminal,
+    description: "Prompts 10/10 completos — ELITE EXCELÊNCIA SEM LIMITE",
+    instrucao: `PAPEL: Você é o Engenheiro de Prompts IA ELITE 10/10 — diretor técnico-criativo de geração multimídia do AnuncIA, o melhor do mundo em FLUX, SDXL, Midjourney, Veo, Runway, Flow. Sua especialidade NÃO é só produto — você projeta prompts para produtos, pessoas, influencers, modelos, creators, UGC, personagens, avatares, animais, ambientes, arquitetura, gastronomia, moda, beleza, veículos, tecnologia, cenas cinematográficas, mundos fantásticos, conceitos abstratos, situações publicitárias, thumbnails, imagens editoriais, comerciais, anúncios, storyboards, vídeos, narração, direção audiovisual. Entende composição, fotografia, cinematografia, direção de arte, iluminação, lentes, profundidade, perspectiva, textura, materiais, cor, movimento, continuidade, identidade visual, linguagem publicitária, comportamento humano, estética, narrativa. Você é avaliado pela IMAGEM FINAL, não pelo texto bonito.
+
+CONTEXTO: Usuário pede imagem/vídeo. Entregue o prompt MAIS completo possível, nível excelência, quanto for necessário, sem limite de palavras. Use repertório transversal de psicologia visual, percepção, atenção, emoção quando pertinente. Adapte ao OBJETIVO — não existe "quanto maior melhor", existe "quanto mais relevante, controlado e completo para excelência, melhor".
+
+MÉTODO ELITE — 15 PERGUNTAS OBRIGATÓRIAS ANTES DE ESCREVER (do comando verbatim):
+1. O QUE precisa aparecer?
+2. QUEM aparece? (identidade visual, idade aparente, expressão, postura, roupa, cabelo, pele, anatomia, linguagem corporal)
+3. O QUE está acontecendo?
+4. ONDE? (ambiente, arquitetura, interiores, paisagem, mundo conceitual)
+5. QUAL contexto?
+6. QUAL emoção?
+7. QUAL intenção comercial? (o prompt deve servir à ESTRATÉGIA, não só imagem bonita)
+8. QUAL estética? (fotorealista, UGC, editorial, luxo, cinematográfico, documental)
+9. QUAL câmera? (35mm, 85mm macro at f/2.8, shallow depth of field, razor-sharp focus, eye-level, 50mm)
+10. QUAL iluminação? (dramatic commercial side lighting, soft reflections, rim light, soft natural window light)
+11. QUAL composição? (centered, vertical 4:5, 1:1, 9:16, rule of thirds)
+12. QUAL formato? (quadrado, retrato, vertical, paisagem)
+13. QUAL motor? (FLUX, SDXL)
+14. QUAIS elementos precisam ser preservados?
+15. O que NÃO pode aparecer? (texto, letras, palavras, yellow fruit se for morango vermelho, painting, illustration, cartoon)
+
+Para produtos: fidelidade, embalagem, proporções, materiais, textura, branding, posicionamento, iluminação comercial.
+Para pessoas: identidade, idade, expressão, postura, roupa, cabelo, pele, anatomia, ambiente, linguagem corporal.
+
+FORMATO DE SAÍDA (quanto for necessário para nível de excelência, SEM LIMITE DE PALAVRAS):
+Parágrafo único denso, em INGLÊS (image models entendem EN 10x melhor que PT-BR), pronto pra colar no gerador. NUNCA escreva "Create an image..." — vá direto: "A young Brazilian woman...". NUNCA inclua texto, letras, palavras na imagem. Seja o MAIS completo possível para atingir excelência — pode ser 80, 120, 200, 300 palavras, o quanto for necessário.
+
+EXEMPLO 10/10 COMPLETO NÍVEL EXCELÊNCIA (morango premium — sem limite, quanto necessário):
+A single extra-large perfectly ripe luxury RED strawberry with glossy ruby-red skin, pristine small yellow seeds, and fresh vibrant green calyx, not yellow fruit, not painting, not illustration, resting elegantly on matte dark slate pedestal with glistening micro-water droplets clinging to surface, high-end culinary studio setting with clean dark-toned minimalist background with subtle reflections, dramatic commercial side lighting with soft reflections and subtle rim light emphasizing organic texture and natural gloss, shot on 85mm macro lens at f/2.8 shallow depth of field razor-sharp focus on strawberry seeds and water droplets eye-level angle, photorealistic photo ultra-detailed 8k resolution rich dynamic contrast mouthwatering gourmet aesthetic centered vertical 4:5 composition with rule of thirds, premium clean aesthetic, natural, sharp focus, no text, no letters, no words
+
+EXEMPLO 0/10 (NUNCA FAÇA — genérico):
+Crie uma imagem bonita de um morango bem iluminado estilo publicitário
+
+AUTO-REVISÃO ELITE (10 perguntas):
+1. Isso realmente resolve problema? Gera EXATAMENTE o que pediram?
+2. Está adequado ao público específico?
+3. Existe hipótese melhor? Prompt mais completo?
+4. Tem contradição? (ex: disse RED mas modelo pode entender yellow por causa de golden seeds)
+5. Está genérico? (se serve pra qualquer produto, tá genérico)
+6. Mecanismo claro? Cor específica RED not yellow? Not painting not illustration?
+7. Comunicação crível? Câmera 85mm macro f/2.8? Luz dramatic commercial?
+8. Excesso de informação irrelevante ou falta informação relevante?
+9. Oportunidade não explorada? (ex: micro-water droplets, rim light, 8k)
+10. Resultado pronto pra uso? Imagem final seria premium que cliente quer pagar?
+Se houver problema, REFAÇA até excelência, adicionando o quanto for necessário.
+
+LEIS: ENGLISH ALWAYS (FLUX/SDXL entendem EN 10x melhor), quanto for necessário para excelência SEM LIMITE (pode ser 100, 200, 300 palavras), ready to paste, no text in image, specific > generic, resultado real é imagem final premium, não texto bonito. Persuasão = clareza + relevância + desejo + confiança + ação.`,
+  },
+  {
+    name: "Analista Criativo IA",
+    icon: Gauge,
+    description: "Nota e melhorias — ELITE EXCELÊNCIA",
+    instrucao: `PAPEL: Você é o crítico mais exigente ELITE do AnuncIA — combina diretor de criação, analista de performance, especialista em comportamento, atenção, percepção visual, publicidade, UX, analista de dados. Você não existe para elogiar, existe para encontrar o que impede criativo de performar.
+
+CONTEXTO: Usuário manda criativo/prompt/imagem. Use repertório transversal de psicologia visual, atenção, percepção, comportamento quando pertinente.
+
+MÉTODO:
+1. OBSERVAR: o que é? Qual objetivo? Qual público?
+2. ENTENDER: o que deveria fazer? (atenção, identificação, desejo, confiança, ação)
+3. DIAGNOSTICAR: analise HOOK, ATENÇÃO, CLAREZA, IDENTIFICAÇÃO, PROMESSA, MECANISMO, PROVA, OFERTA, CTA, DESIGN, HIERARQUIA, CONGRUÊNCIA, EMOÇÃO, PERSUASÃO, LEGIBILIDADE, DIFERENCIAÇÃO, ADEQUAÇÃO AO PÚBLICO
+4. FORMAR HIPÓTESES: por que não performa? 3 hipóteses
+5. PRIORIZAR: qual gargalo mais impacta CTR/conversão?
+6. EXECUTAR: Nota 0-10 + justificativa 1 linha + 3 pontos fortes + 3 melhorias ordenadas por impacto + se for prompt: versão melhorada 10/10 completa sem limite
+7. CRITICAR: nota honesta? Melhorias aumentariam resultado de verdade? É genérico?
+8. REFINAR: melhore até ser útil
+
+FORMATO (quanto for necessário para excelência, sem limite):
+NOTA: 7/10 — [justificativa específica]
+DIAGNÓSTICO: [o que está impedindo performar]
+PONTOS FORTES:
+1. [específico]
+2. ...
+3. ...
+MELHORIAS (por impacto):
+1. [Alta] [o que mudar] — [por que melhora CTR] — [como fazer]
+2. [Média] ...
+3. [Baixa] ...
+PROMPT MELHORADO (se for prompt): [nova versão 10/10 completa, quanto necessário, sem limite]
+HIPÓTESE DE PERFORMANCE: [potencial de atenção, potencial de conversão, risco de perda]
+
+AUTO-REVISÃO: 10 perguntas excelência — resolve? Adequado? Melhor hipótese? Contradição? Genérico? Mecanismo claro? Crível? Excesso? Oportunidade? Pronto pra uso? Se não, refaça.
+
+LEIS: PT-BR direto, zero clichê, específico, honesto, nunca inventar métrica (diga "potencial de atenção" não "CTR X"), nunca inventar depoimento/número/resultado, resultado real > aparência. Quando houver dados reais, use-os. Quando não, deixe claro que é hipótese.`,
+  },
+];
+
+
+// ---------- Mesa de motores (selo vivo, sem segredo na tela) ----------
+
+// undefined = ainda lendo · null = o espelho falhou (sem leitura) · lista = ok
+type LeituraMesa = { id: string; armado: boolean }[] | null | undefined;
+
+type MotorId = "gemini" | "github" | "groq" | "openrouter";
+
+const provedores: {
+  id: MotorId;
+  nome: string;
+  detalhe: string;
+  descricao: string;
+  icone: typeof FileText;
+}[] = [
+  {
+    id: "gemini",
+    nome: "Gemini Flash",
+    detalhe: "Google · texto",
+    descricao:
+      "Primeiro da fila. O modelo exato é descoberto sozinho pelo motor — sempre o flash mais novo da sua chave.",
+    icone: FileText,
+  },
+  {
+    id: "github",
+    nome: "GitHub Models",
+    detalhe: "grátis com a sua conta GitHub",
+    descricao:
+      "Primeira reserva. Entra em campo usando a conta que você já tem, sem custo.",
+    icone: Terminal,
+  },
+  {
+    id: "groq",
+    nome: "Groq",
+    detalhe: "texto quase instantâneo",
+    descricao:
+      "Segunda reserva. Velocidade altíssima para o app continuar respondendo.",
+    icone: Bot,
+  },
+  {
+    id: "openrouter",
+    nome: "OpenRouter",
+    detalhe: "cota grátis diária",
+    descricao:
+      "Última linha de defesa. Garante resposta se os outros mudarem as regras do jogo.",
+    icone: Sparkles,
+  },
+];
+
+function armadoNaMesa(mesa: LeituraMesa, id: MotorId): boolean | null {
+  if (!mesa) return null;
+  const motor = mesa.find((m) => m.id === id);
+  return motor ? motor.armado : null;
+}
+
+// Rótulo honesto de quem respondeu. A rota devolve "Gemini · modelo"
+// ou o apelido da reserva: github / groq / openrouter.
+function rotuloMotor(motor: string | null): string {
+  if (!motor) return "Gemini (auto)";
+  if (motor.startsWith("Gemini")) return motor;
+  if (motor === "github") return "GitHub Models (reserva)";
+  if (motor === "groq") return "Groq (reserva)";
+  if (motor === "openrouter") return "OpenRouter (reserva)";
+  return motor;
+}
+
+
+// ---------- Salvar na biblioteca (baú real) ----------
+
+const categoriasBiblioteca = [
+  { valor: "UGC Script Templates" as LibraryCategory, rotulo: "Modelos de Roteiro UGC" },
+  { valor: "Ad Copy Hooks" as LibraryCategory, rotulo: "Hooks de Copy" },
+  { valor: "Criador Guidelines" as LibraryCategory, rotulo: "Guias do Criador" },
+  { valor: "Strategy Guides" as LibraryCategory, rotulo: "Guias de Estratégia" },
+];
+
+// Categoria sugerida conforme o agente que gerou
+const mapaCategoriaAgente: Record<string, LibraryCategory> = {
+  "Estrategista IA": "Strategy Guides",
+  "Copywriter IA": "Ad Copy Hooks",
+  "Roteirista UGC IA": "UGC Script Templates",
+  "Engenheiro de Prompts IA": "UGC Script Templates",
+  "Analista Criativo IA": "Strategy Guides",
+};
+
+type AlvoSalvamento = {
+  alvo: string; // identificador ("saida-atual" ou id do histórico)
+  agente: string;
+  prompt: string;
+  output: string;
+  motor: string; // rótulo real de quem respondeu
+};
+
+
+type GeracaoReal = {
+  id: string;
+  agente: string;
+  modelo: string; // rótulo do motor que respondeu de fato
+  prompt: string;
+  output: string;
+  hora: string;
+};
+
+
+// ---------- Gerador de imagem (Sprint 019) ----------
+
+// Formatos aceitos pela Mesa de Imagens (/api/imagem)
+const imagemFormatoOptions = [
+  { valor: "quadrado", rotulo: "Quadrado 1:1 (feed)" },
+  { valor: "retrato", rotulo: "Retrato 4:5 (feed)" },
+  { valor: "vertical", rotulo: "Vertical 9:16 (stories/reels)" },
+  { valor: "paisagem", rotulo: "Paisagem 5:4 (banner)" },
+] as const;
+
+export function IaStudioView() {
+  const [selectedAgent, setSelectedAgent] = useState(agents[0].name);
+  const [temperature, setTemperature] = useState(0.7);
+  const [maxTokens, setMaxTokens] = useState(1200);
+  const [promptText, setPromptText] = useState("");
+  const [output, setOutput] = useState("");
+  const [motorSaida, setMotorSaida] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
+  const [historico, setHistorico] = useState<GeracaoReal[]>([]);
+  const [mesa, setMesa] = useState<LeituraMesa>(undefined);
+
+  // Salvar na biblioteca
+  const [salvamentoAberto, setSalvamentoAberto] = useState(false);
+  const [alvoSalvamento, setAlvoSalvamento] = useState<AlvoSalvamento | null>(null);
+  const [tituloSalvoF, setTituloSalvoF] = useState("");
+  const [categoriaSalvaF, setCategoriaSalvaF] = useState<LibraryCategory>("UGC Script Templates");
+  const [autorSalvoF, setAutorSalvoF] = useState("");
+  const [salvandoNaBiblioteca, setSalvandoNaBiblioteca] = useState(false);
+  const [erroSalvamento, setErroSalvamento] = useState<string | null>(null);
+  const [salvoRecente, setSalvoRecente] = useState<string | null>(null);
+
+  // Gerador de imagem (Sprint 019)
+  const [imagemPromptF, setImagemPromptF] = useState("");
+  const [imagemFormatoF, setImagemFormatoF] = useState<string>("quadrado");
+  // Fix formato esticando: quando muda formato, limpa imagem antiga pra não esticar
+  const handleFormatoChange = (novoFormato: string) => {
+    if (novoFormato !== imagemFormatoF) {
+      setImagemGerada(null);
+      setImagemMotor(null);
+      setPromptImagemUsado(null);
+      setImagemNotas(null);
+      setErroSalvarImagem(null);
+      setSucessoSalvarImagem(null);
+    }
+    setImagemFormatoF(novoFormato);
+  };
+  const [imagemReferencia, setImagemReferencia] = useState<string | null>(null);
+  const [gerandoImagem, setGerandoImagem] = useState(false);
+  const [imagemGerada, setImagemGerada] = useState<string | null>(null);
+  const [imagemMotor, setImagemMotor] = useState<string | null>(null);
+  const [imagemNotas, setImagemNotas] = useState<string[] | null>(null);
+  const [promptImagemUsado, setPromptImagemUsado] = useState<string | null>(null);
+  const [erroImagem, setErroImagem] = useState<string | null>(null);
+  // Fase 4 — salvar em Mídias + Biblioteca
+  const [salvandoImagemMidia, setSalvandoImagemMidia] = useState(false);
+  const [erroSalvarImagem, setErroSalvarImagem] = useState<string | null>(null);
+  const [sucessoSalvarImagem, setSucessoSalvarImagem] = useState<string | null>(null);
+
+  // Lê o espelho da mesa uma vez por visita (só status, nunca segredo).
+  useEffect(() => {
+    let ativo = true;
+    iaService.statusMotores().then((lista) => {
+      if (ativo) setMesa(lista);
+    });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const motoresArmados = mesa ? mesa.filter((m) => m.armado).length : 0;
+  const leituraMesaRotulo =
+    mesa === undefined
+      ? "…"
+      : mesa === null
+        ? "—"
+        : `${motoresArmados} de ${mesa.length}`;
+
+  const stats = [
+    {
+      label: "Motores armados",
+      value: leituraMesaRotulo,
+      icon: Bot,
+      tone: "bg-primary/15 text-primary",
+    },
+    {
+      label: "Agentes ativos",
+      value: agents.length.toString(),
+      icon: Wand2,
+      tone: "bg-ai/15 text-ai",
+    },
+    {
+      label: "Gerações nesta sessão",
+      value: historico.length.toString(),
+      icon: History,
+      tone: "bg-success/15 text-success",
+    },
+    {
+      label: "Último motor",
+      value: historico[0]?.modelo ?? "—",
+      icon: Sparkles,
+      tone: "bg-warning/15 text-warning",
+    },
+  ];
+
+  async function handleGenerate() {
+    if (!promptText.trim() || generating) return;
+
+    setGenerating(true);
+    setOutput("");
+    setErro(null);
+    setSalvoRecente(null);
+
+    const agente =
+      agents.find((item) => item.name === selectedAgent) ?? agents[0];
+
+    // Persona do agente + tarefa + regras de saída — o segredo de um bom resultado
+    const promptFinal = [
+      agente.instrucao,
+      "",
+      `Tarefa: ${promptText.trim()}`,
+      "",
+      "Responda em português do Brasil, direto ao ponto, sem preâmbulo e sem cercas de código — texto pronto para copiar e colar no trabalho.",
+    ].join("\n");
+
+    const resultado = await iaService.gerarTexto(promptFinal, {
+      temperatura: temperature,
+      maxTokens,
+    });
+
+    setGenerating(false);
+
+    if (resultado.ok) {
+      const motorReal = rotuloMotor(resultado.motor);
+      setOutput(resultado.texto);
+      setMotorSaida(motorReal);
+      setHistorico((atual) => [
+        {
+          id: `gen-${Date.now()}`,
+          agente: agente.name,
+          modelo: motorReal,
+          prompt: promptText.trim(),
+          output: resultado.texto,
+          hora: new Date().toLocaleTimeString("pt-BR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+        ...atual,
+      ]);
+    } else {
+      setErro(resultado.erro ?? "A IA não respondeu. Tente de novo.");
+    }
+  }
+
+  async function copyText(target: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedTarget(target);
+      setTimeout(() => setCopiedTarget(null), 1800);
+    } catch {
+      setCopiedTarget(null);
+    }
+  }
+
+  // ---------- Gerador de imagem (Sprint 019) ----------
+
+  // Botão na saída do agente: manda o prompt criado pro gerador de imagem
+  function handleUsarNoGeradorImagem() {
+    const texto = output.trim();
+    if (!texto) return;
+    setImagemPromptF(texto);
+    document.getElementById("gerador-imagem-prompt")?.focus();
+  }
+
+  // Referência: o NAVEGADOR já reduz pra ≤512×512 (exigência do klein)
+  function handleReferenciaImagem(event: ChangeEvent<HTMLInputElement>) {
+    const arquivo = event.target.files?.[0];
+    event.target.value = ""; // permite reenviar o mesmo arquivo
+    if (!arquivo) return;
+    if (!arquivo.type.startsWith("image/")) {
+      setErroImagem("A referência precisa ser uma imagem.");
+      return;
+    }
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const dado = String(leitor.result ?? "");
+      const imagem = new Image();
+      imagem.onload = () => {
+        const escala = Math.min(1, 512 / Math.max(imagem.width, imagem.height));
+        const tela = document.createElement("canvas");
+        tela.width = Math.max(1, Math.round(imagem.width * escala));
+        tela.height = Math.max(1, Math.round(imagem.height * escala));
+        const contexto = tela.getContext("2d");
+        if (!contexto) {
+          setErroImagem("Não consegui preparar a referência. Tente outra imagem.");
+          return;
+        }
+        contexto.drawImage(imagem, 0, 0, tela.width, tela.height);
+        setImagemReferencia(tela.toDataURL("image/png"));
+      };
+      imagem.onerror = () => setErroImagem("Não consegui ler essa imagem.");
+      imagem.src = dado;
+    };
+    leitor.readAsDataURL(arquivo);
+  }
+
+  async function handleGerarImagem() {
+    const prompt = imagemPromptF.trim();
+    if (!prompt || gerandoImagem) return;
+    setErroImagem(null);
+    setErroSalvarImagem(null);
+    setSucessoSalvarImagem(null);
+    setGerandoImagem(true);
+    const formato = imagemFormatoF as "quadrado" | "retrato" | "vertical" | "paisagem";
+    const resposta = await imagemService.gerarImagem(prompt, {
+      formato,
+      referencia: imagemReferencia ?? undefined,
+    });
+    setGerandoImagem(false);
+    if (!resposta.ok) {
+      setImagemGerada(null);
+      setImagemMotor(null);
+      setPromptImagemUsado(null);
+      setImagemNotas(resposta.notas ?? null);
+      setErroImagem(resposta.erro ?? "Falha ao gerar a imagem.");
+      return;
+    }
+    setImagemGerada(resposta.imagem);
+    setImagemMotor(resposta.motor);
+    setPromptImagemUsado(resposta.promptUsado ?? null);
+    setImagemNotas(resposta.notas ?? null);
+  }
+
+  // ---------- Fase 4: salvar imagem gerada em Mídias (bucket) + Biblioteca ----------
+  function dataUrlParaBlob(dataUrl: string): { blob: Blob; mime: string; ext: string } | null {
+    try {
+      const partes = dataUrl.split(",");
+      if (partes.length !== 2) return null;
+      const meta = partes[0];
+      const base64 = partes[1];
+      const mimeMatch = /data:([^;]+);base64/.exec(meta);
+      const mime = mimeMatch?.[1] ?? "image/png";
+      const ext = mime.split("/")[1]?.split("+")[0] ?? "png";
+      const binario = atob(base64);
+      const bytes = new Uint8Array(binario.length);
+      for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+      return { blob: new Blob([bytes], { type: mime }), mime, ext };
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleSalvarImagemEmMidias() {
+    if (!imagemGerada || salvandoImagemMidia) return;
+    setErroSalvarImagem(null);
+    setSucessoSalvarImagem(null);
+
+    const convertido = dataUrlParaBlob(imagemGerada);
+    if (!convertido) {
+      setErroSalvarImagem("Não consegui preparar a imagem para salvar. Tente gerar de novo.");
+      return;
+    }
+
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setErroSalvarImagem("Modo demonstração: salvar em Mídias precisa do banco configurado.");
+      return;
+    }
+
+    setSalvandoImagemMidia(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem("Sua sessão caiu. Entre de novo e repita o salvamento.");
+      return;
+    }
+
+    const formato = imagemFormatoF;
+    const timestamp = Date.now();
+    const nomeArquivo = `${timestamp}-anuncia-${formato}.${convertido.ext}`;
+    const caminho = `${user.id}/${nomeArquivo}`;
+
+    // 1) Sobe pro bucket 'midias'
+    const { error: erroUpload } = await supabase.storage.from("midias").upload(caminho, convertido.blob, {
+      contentType: convertido.mime,
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+    if (erroUpload) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem(`Não consegui subir para Mídias. Detalhe técnico: ${erroUpload.message}`);
+      return;
+    }
+
+    // 2) Registra em assets (tabela real das Mídias)
+    const tituloBase = imagemPromptF.trim().slice(0, 40) || `Imagem ${formato}`;
+    const { error: erroAssets } = await supabase.from("assets").insert({
+      user_id: user.id,
+      name: `${tituloBase}.${convertido.ext}`,
+      category: "Product Photos",
+      client_name: null,
+      format: convertido.ext.toUpperCase(),
+      size_bytes: convertido.blob.size,
+      tags: [imagemMotor ?? "ia", formato, "ia-studio", "gerada"],
+      storage_path: caminho,
+    });
+
+    if (erroAssets) {
+      setSalvandoImagemMidia(false);
+      setErroSalvarImagem(`Subiu pra nuvem, mas não registrou em Mídias. Detalhe técnico: ${erroAssets.message}`);
+      return;
+    }
+
+    // 3) Registra também em library_items (Biblioteca)
+    const { error: erroLib } = await supabase.from("library_items").insert({
+      user_id: user.id,
+      title: `Imagem — ${tituloBase}`,
+      category: "Criador Guidelines",
+      author: imagemMotor ?? "IA Studio",
+      description: `Imagem gerada no IA Studio · motor ${imagemMotor ?? "—"} · formato ${formato} · prompt: ${imagemPromptF.trim().slice(0, 120)}`,
+      content: `Prompt original: ${imagemPromptF}\n\nPrompt enviado (EN): ${promptImagemUsado ?? "—"}\n\nMotor: ${imagemMotor ?? "—"}\nFormato: ${formato}\nArquivo: ${caminho}`,
+    });
+
+    setSalvandoImagemMidia(false);
+
+    if (erroLib) {
+      // Mídias salvou, biblioteca falhou — aviso amarelo, não vermelho
+      setSucessoSalvarImagem(`Salva em Mídias! (Biblioteca falhou: ${erroLib.message}) — já está em /assets`);
+      return;
+    }
+
+    setSucessoSalvarImagem("Salva em Mídias + Biblioteca! Já aparece em /assets e /biblioteca.");
+  }
+
+  // ---------- Salvar na biblioteca ----------
+
+  function abrirSalvamento(payload: AlvoSalvamento) {
+    setAlvoSalvamento(payload);
+    setTituloSalvoF(
+      payload.prompt.trim().slice(0, 60) || `Geração do ${payload.agente}`
+    );
+    setCategoriaSalvaF(
+      mapaCategoriaAgente[payload.agente] ?? "Strategy Guides"
+    );
+    setAutorSalvoF(payload.agente);
+    setErroSalvamento(null);
+    setSalvamentoAberto(true);
+  }
+
+  async function handleSalvarNaBiblioteca() {
+    if (!alvoSalvamento || salvandoNaBiblioteca) return;
+    setErroSalvamento(null);
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      setErroSalvamento("Banco não configurado — a biblioteca real precisa dele.");
+      return;
+    }
+    setSalvandoNaBiblioteca(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSalvandoNaBiblioteca(false);
+      setErroSalvamento("Sua sessão caiu. Entre de novo e repita o salvamento.");
+      return;
+    }
+
+    const { error } = await supabase.from("library_items").insert({
+      user_id: user.id,
+      title: tituloSalvoF.trim() || "Geração do IA Studio",
+      category: categoriaSalvaF,
+      author: autorSalvoF.trim() || "Equipe AnuncIA",
+      description: `Gerado no IA Studio · agente ${alvoSalvamento.agente} · motor ${alvoSalvamento.motor}`,
+      content: alvoSalvamento.output,
+    });
+
+    setSalvandoNaBiblioteca(false);
+
+    if (error) {
+      setErroSalvamento(
+        `Não consegui gravar na biblioteca. Detalhe técnico: ${error.message}`
+      );
+      return;
+    }
+
+    setSalvoRecente(alvoSalvamento.alvo);
+    setSalvamentoAberto(false);
+    setAlvoSalvamento(null);
+  }
+
+  return (
+    <>
+      <Dialog open={salvamentoAberto} onOpenChange={setSalvamentoAberto}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Salvar na biblioteca</DialogTitle>
+            <DialogDescription>
+              Esta geração vira um item permanente — aparece na página
+              Biblioteca e fica guardada no seu cofre.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="salvar-titulo" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Título
+              </label>
+              <Input
+                id="salvar-titulo"
+                value={tituloSalvoF}
+                onChange={(event) => setTituloSalvoF(event.target.value)}
+                placeholder="Ex.: Hooks Verão Glow — prova social"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="salvar-categoria" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Categoria
+                </label>
+                <Select
+                  value={categoriaSalvaF}
+                  onValueChange={(valor) => setCategoriaSalvaF(valor as LibraryCategory)}
+                >
+                  <SelectTrigger id="salvar-categoria" aria-label="Selecionar categoria">
+                    <SelectValue placeholder="Selecione a categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoriasBiblioteca.map((cat) => (
+                      <SelectItem key={cat.valor} value={cat.valor}>
+                        {cat.rotulo}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label htmlFor="salvar-autor" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Autor
+                </label>
+                <Input
+                  id="salvar-autor"
+                  value={autorSalvoF}
+                  onChange={(event) => setAutorSalvoF(event.target.value)}
+                  placeholder="Equipe AnuncIA"
+                />
+              </div>
+            </div>
+            {erroSalvamento && (
+              <p role="alert" className="text-sm text-red-400">
+                {erroSalvamento}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button
+              variant="ai"
+              onClick={() => void handleSalvarNaBiblioteca()}
+              disabled={salvandoNaBiblioteca}
+            >
+              {salvandoNaBiblioteca ? (
+                <>
+                  <Loader2 className="animate-spin" /> Gravando…
+                </>
+              ) : (
+                <>
+                  <BookMarked /> Gravar na biblioteca
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <PageHeader
+        title="IA Studio"
+        badge="Agentes exclusivos"
+        description="Agentes especializados para cada etapa do processo."
+      >
+        <Button
+          variant="ai"
+          onClick={() => document.getElementById("studio-prompt")?.focus()}
+        >
+          <Sparkles /> Nova Geração
+        </Button>
+      </PageHeader>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) => (
+          <Card key={stat.label} className="card-glow">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div
+                className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${stat.tone}`}
+              >
+                <stat.icon className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs text-muted-foreground">
+                  {stat.label}
+                </p>
+                <p className="truncate text-lg font-bold">{stat.value}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <h2 className="mt-8 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+        Mesa de motores
+      </h2>
+      <p className="mt-1 mb-3 text-xs text-muted-foreground">
+        A cadeia tenta nesta ordem e pula em silêncio quem não tem chave
+        armada — você só fica sem resposta se TODOS falharem.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {provedores.map((provedor) => {
+          const armado = armadoNaMesa(mesa, provedor.id);
+          const conectado = armado === true;
+          const rotuloSelo =
+            mesa === undefined
+              ? "Lendo…"
+              : mesa === null
+                ? "Sem leitura"
+                : conectado
+                  ? "Conectado"
+                  : "Sem chave";
+          return (
+            <Card
+              key={provedor.id}
+              className={
+                conectado
+                  ? "h-full border-success/40 shadow-[0_0_0_1px_rgba(16,185,129,0.25),0_0_24px_rgba(16,185,129,0.08)]"
+                  : "card-glow h-full opacity-70"
+              }
+            >
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-ai/15 text-ai">
+                    <provedor.icone className="size-4" />
+                  </div>
+                  <Badge variant={conectado ? "success" : "secondary"}>
+                    {rotuloSelo}
+                  </Badge>
+                </div>
+                <p className="mt-3 text-sm font-semibold">{provedor.nome}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {provedor.detalhe}
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {provedor.descricao}
+                </p>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="mt-8 grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings2 className="size-5 text-primary" />
+              Configuração da geração
+            </CardTitle>
+            <CardDescription>
+              Agente, contexto e parâmetros do modelo
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                Agente especializado
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {agents.map((agent) => {
+                  const active = agent.name === selectedAgent;
+                  return (
+                    <button
+                      key={agent.name}
+                      type="button"
+                      onClick={() => setSelectedAgent(agent.name)}
+                      aria-pressed={active}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2.5 rounded-xl border p-2.5 text-left transition-all",
+                        active
+                          ? "border-ai/50 bg-ai/10"
+                          : "border-border hover:border-[rgba(255,255,255,0.16)]"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                          active
+                            ? "bg-ai/20 text-ai"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <agent.icon className="size-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold">
+                          {agent.name}
+                        </p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {agent.description}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border p-3 text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">
+                Mesa em cadeia:{" "}
+              </span>
+              o app tenta o Gemini primeiro; se faltar chave ou a cota do dia
+              acabar, cai para o próximo motor armado (GitHub Models → Groq →
+              OpenRouter) sem te pedir nada. A seta só para quando alguém
+              responde.
+            </div>
+
+            <div>
+              <label
+                htmlFor="studio-prompt"
+                className="mb-2 block text-xs font-medium text-muted-foreground"
+              >
+                Tarefa para o agente
+              </label>
+              <Textarea
+                id="studio-prompt"
+                value={promptText}
+                onChange={(event) => setPromptText(event.target.value)}
+                placeholder="Descreva o que o agente deve gerar... Ex.: Crie 5 hooks para a campanha Verão Glow focando em prova social."
+                className="min-h-[120px]"
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-border p-3">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="font-medium text-muted-foreground">
+                    Temperatura
+                  </span>
+                  <span className="font-mono-params text-foreground">
+                    {temperature.toLocaleString("pt-BR")}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.1}
+                  value={temperature}
+                  onChange={(event) =>
+                    setTemperature(Number(event.target.value))
+                  }
+                  aria-label="Temperatura do modelo"
+                  className="w-full accent-primary"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  0 = mais certeira · 1 = mais criativa
+                </p>
+              </div>
+              <div className="rounded-xl border border-border p-3">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="font-medium text-muted-foreground">
+                    Máx. tokens
+                  </span>
+                  <span className="font-mono-params text-foreground">
+                    {maxTokens}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={200}
+                  max={4000}
+                  step={200}
+                  value={maxTokens}
+                  onChange={(event) => setMaxTokens(Number(event.target.value))}
+                  aria-label="Máximo de tokens"
+                  className="w-full accent-ai"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  roteiros longos = aumente pra não cortar no meio
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant="ai"
+              className="w-full"
+              onClick={() => void handleGenerate()}
+              disabled={generating || !promptText.trim()}
+            >
+              {generating ? <Loader2 className="animate-spin" /> : <Sparkles />}
+              {generating ? "Gerando resposta..." : "Gerar resposta"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="size-5 text-ai" />
+              Saída do agente
+            </CardTitle>
+            <CardDescription>
+              Resultado real, pronto para copiar e colar
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col">
+            <div className="flex-1 rounded-xl border border-border bg-[rgba(255,255,255,0.02)] p-4">
+              {generating ? (
+                <div className="space-y-3">
+                  {[85, 95, 60, 90, 40].map((width) => (
+                    <div
+                      key={width}
+                      style={{ width: `${width}%` }}
+                      className="h-3 animate-pulse rounded-full bg-muted"
+                    />
+                  ))}
+                  <p className="pt-2 text-xs text-muted-foreground">
+                    {selectedAgent} pensando…
+                  </p>
+                </div>
+              ) : erro ? (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.1)] px-3 py-2 text-sm text-red-300"
+                >
+                  {erro}
+                </div>
+              ) : output ? (
+                <pre className="font-mono-params text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                  {output}
+                </pre>
+              ) : (
+                <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-center">
+                  <Sparkles className="size-8 text-muted-foreground/40" />
+                  <p className="mt-3 text-sm font-medium">
+                    Nenhuma geração ainda
+                  </p>
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                    Escolha um agente, descreva a tarefa e clique em Gerar
+                    resposta para ver a IA trabalhar de verdade.
+                  </p>
+                </div>
+              )}
+            </div>
+            {output && !generating && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-muted-foreground">
+                  {motorSaida ? `Respondido por ${motorSaida}` : ""}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyText("output", output)}
+                  >
+                    {copiedTarget === "output" ? (
+                      <Check className="text-success" />
+                    ) : (
+                      <Copy />
+                    )}
+                    {copiedTarget === "output" ? "Copiado" : "Copiar"}
+                  </Button>
+                  {/* (Sprint 019) o prompt criado vai direto pro gerador de imagem */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUsarNoGeradorImagem}
+                    disabled={gerandoImagem}
+                  >
+                    <ImageIcon /> Usar no gerador de imagem
+                  </Button>
+                  <Button
+                    variant="ai"
+                    size="sm"
+                    onClick={() =>
+                      abrirSalvamento({
+                        alvo: "saida-atual",
+                        agente: selectedAgent,
+                        prompt: promptText,
+                        output,
+                        motor: motorSaida ?? rotuloMotor(null),
+                      })
+                    }
+                  >
+                    {salvoRecente === "saida-atual" ? (
+                      <>
+                        <Check className="text-success" /> Salvo na biblioteca
+                      </>
+                    ) : (
+                      <>
+                        <BookMarked /> Salvar na biblioteca
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ---------- Gerador de imagem (Sprint 019) ---------- */}
+      <h2 className="mt-8 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+        Gerador de imagem
+      </h2>
+      <p className="mt-1 mb-3 text-xs text-muted-foreground">
+        Peça ao Engenheiro de Prompts, clique em “Usar no gerador de imagem”,
+        edite se quiser e gere. A referência (o produto/estilo) é opcional — a
+        gente já reduz pra 512 por você.
+      </p>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ImageIcon className="size-5 text-ai" />
+              Prompt da imagem
+            </CardTitle>
+            <CardDescription>
+              Em português — a Mesa traduz e enriquece sozinha na geração
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea
+              id="gerador-imagem-prompt"
+              value={imagemPromptF}
+              onChange={(event) => setImagemPromptF(event.target.value)}
+              placeholder="Cole aqui o prompt do Engenheiro (ou escreva o seu). Ex.:Retrato publicitário de uma mulher segurando um morango junto aos lábios, luz natural suave, fundo neutro claro, sem nenhum texto na imagem."
+              className="min-h-[120px]"
+            />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-[11px] text-muted-foreground">
+                Referência (o produto/estilo — opcional):
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleReferenciaImagem}
+                aria-label="Escolher imagem de referência"
+                className="max-w-[220px] text-[11px] text-muted-foreground file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-transparent file:px-2 file:py-1 file:text-[11px] file:text-muted-foreground"
+              />
+              {imagemReferencia && (
+                <span className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imagemReferencia}
+                    alt="Referência escolhida"
+                    className="size-10 rounded-md border border-border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setImagemReferencia(null)}
+                    className="cursor-pointer text-muted-foreground transition-colors hover:text-red-400"
+                    aria-label="Remover referência"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select value={imagemFormatoF} onValueChange={handleFormatoChange}>
+                <SelectTrigger aria-label="Formato da imagem" className="w-full sm:max-w-[240px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {imagemFormatoOptions.map((opcao) => (
+                    <SelectItem key={opcao.valor} value={opcao.valor}>
+                      {opcao.rotulo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ai"
+                onClick={() => void handleGerarImagem()}
+                disabled={gerandoImagem || !imagemPromptF.trim()}
+                className="shrink-0"
+              >
+                {gerandoImagem ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Gerando…
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon /> Gerar imagem
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {erroImagem && (
+              <p role="alert" className="text-sm text-red-400">
+                {erroImagem}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wand2 className="size-5 text-primary" />
+              Prévia da imagem
+            </CardTitle>
+            <CardDescription>
+              Nasce aqui — baixe e use no seu criativo
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col">
+            <div className="flex flex-1 items-center justify-center rounded-xl border border-border bg-[rgba(255,255,255,0.02)] p-4 overflow-hidden">
+              {gerandoImagem ? (
+                <div className="flex flex-col items-center gap-3 py-10">
+                  <Loader2 className="size-8 animate-spin text-ai" />
+                  <p className="text-xs text-muted-foreground">
+                    A Mesa de Imagens está pintando… (cadeia klein → SDXL → schnell → rede pública)
+                  </p>
+                </div>
+              ) : imagemGerada ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={imagemGerada}
+                  alt="Imagem gerada pela IA da AnuncIA"
+                  className="max-h-[420px] w-auto rounded-xl border border-border object-contain"
+                />
+              ) : (
+                <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-center">
+                  <ImageIcon className="size-8 text-muted-foreground/40" />
+                  <p className="mt-3 text-sm font-medium">
+                    Nenhuma imagem ainda
+                  </p>
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                    Escreva (ou cole) o prompt ao lado e clique em Gerar
+                    imagem — a Mesa cuida do resto.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {imagemGerada && !gerandoImagem && (
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {imagemMotor && <Badge variant="violet">{imagemMotor}</Badge>}
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={imagemGerada}
+                      download="anuncia-criativo.png"
+                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Baixar
+                    </a>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void handleSalvarImagemEmMidias()}
+                      disabled={salvandoImagemMidia}
+                      className="h-7 text-xs"
+                    >
+                      {salvandoImagemMidia ? (
+                        <>
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Salvando…
+                        </>
+                      ) : (
+                        <>Salvar em Mídias + Biblioteca</>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                {erroSalvarImagem && (
+                  <p role="alert" className="text-xs text-red-400">
+                    {erroSalvarImagem}
+                  </p>
+                )}
+                {sucessoSalvarImagem && (
+                  <p role="status" className="text-xs text-emerald-400">
+                    {sucessoSalvarImagem}
+                  </p>
+                )}
+                {promptImagemUsado && (
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Prompt enviado aos motores: {promptImagemUsado}
+                  </p>
+                )}
+                {imagemNotas && imagemNotas.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-wide text-muted-foreground/70 uppercase">
+                      Diagnóstico da geração
+                    </p>
+                    <ul className="mt-0.5 space-y-0.5">
+                      {imagemNotas.map((nota, indice) => (
+                        <li
+                          key={`${indice}-${nota.slice(0, 12)}`}
+                          className="text-[10.5px] leading-relaxed text-muted-foreground/80"
+                        >
+                          • {nota}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="size-5 text-muted-foreground" />
+            Histórico de gerações
+          </CardTitle>
+          <CardDescription>
+            Suas gerações reais — vivem nesta sessão; salve os melhores na
+            Biblioteca pra guardar de vez
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {historico.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+              Nenhuma geração ainda nesta sessão — a sua primeira está a um
+              clique. ✨
+            </div>
+          ) : (
+            historico.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-xl border border-border p-4 transition-colors hover:border-[rgba(255,255,255,0.16)]"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="violet">{item.agente}</Badge>
+                    <Badge variant="outline">{item.modelo}</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      {item.hora}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Salvar resposta na biblioteca"
+                      title="Salvar na biblioteca"
+                      onClick={() =>
+                        abrirSalvamento({
+                          alvo: item.id,
+                          agente: item.agente,
+                          prompt: item.prompt,
+                          output: item.output,
+                          motor: item.modelo,
+                        })
+                      }
+                      className="size-8 text-muted-foreground"
+                    >
+                      {salvoRecente === item.id ? (
+                        <Check className="size-3.5 text-success" />
+                      ) : (
+                        <BookMarked className="size-3.5" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Copiar resposta do histórico"
+                      onClick={() => copyText(item.id, item.output)}
+                      className="size-8 text-muted-foreground"
+                    >
+                      {copiedTarget === item.id ? (
+                        <Check className="size-3.5 text-success" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-[rgba(255,255,255,0.02)] p-3">
+                    <p className="mb-1 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Entrada
+                    </p>
+                    <p className="text-xs leading-relaxed">{item.prompt}</p>
+                  </div>
+                  <div className="rounded-lg border border-ai/20 bg-ai/5 p-3">
+                    <p className="mb-1 text-[10px] font-semibold tracking-wider text-ai uppercase">
+                      Saída
+                    </p>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {item.output}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
