@@ -215,7 +215,7 @@ type MotorCloudflare = {
 const MOTORES_CLOUDFLARE: MotorCloudflare[] = [
   {
     id: "Cloudflare · SDXL Lightning",
-    modelo: "@cf/stability/stable-diffusion-xl-lightning",
+    modelo: "@cf/bytedance/stable-diffusion-xl-lightning",
     usaDimensoes: true,
     multipart: false,
   },
