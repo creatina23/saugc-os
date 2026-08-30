@@ -12,8 +12,8 @@ import {
   ShieldCheck,
   Mail,
   Phone,
+  Loader2,
 } from "lucide-react";
-import { clientesService } from "@/lib/services";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import type { Client } from "@/types";
@@ -22,8 +22,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 export function ClientesView() {
-  const [clientes, setClientes] = useState<Client[]>(clientesService.list());
+  const [clientes, setClientes] = useState<Client[]>([]);
   const [busca, setBusca] = useState("");
+  const [carregando, setCarregando] = useState(true);
 
   const [modalAberto, setModalAberto] = useState(false);
   const [nome, setNome] = useState("");
@@ -32,37 +33,38 @@ export function ClientesView() {
   const [telefone, setTelefone] = useState("");
   const [plano, setPlano] = useState("Growth");
   const [mrr, setMrr] = useState("12900");
+  const [salvando, setSalvando] = useState(false);
 
-  useEffect(() => {
-    let ativo = true;
+  async function carregarClientes() {
+    setCarregando(true);
     const supabase = getSupabaseBrowser();
     if (supabase) {
-      supabase
+      const { data, error } = await supabase
         .from("clients")
         .select("*")
-        .order("created_at", { ascending: false })
-        .then(({ data, error }) => {
-          if (!ativo) return;
-          if (!error && data && data.length > 0) {
-            const formatados: Client[] = data.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              company: c.company,
-              email: c.email,
-              phone: c.phone,
-              tier: c.tier || "Growth",
-              status: c.status || "Ativo",
-              mrr: Number(c.mrr) || 0,
-              logoInitials: c.logoInitials || c.name.slice(0, 2).toUpperCase(),
-              since: c.since || "2026-01",
-            }));
-            setClientes(formatados);
-          }
-        });
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        const formatados: Client[] = data.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          company: c.company,
+          email: c.email,
+          phone: c.phone,
+          tier: c.tier || "Growth",
+          status: c.status || "Ativo",
+          mrr: Number(c.mrr) || 0,
+          logoInitials: c.logoInitials || (c.name ? c.name.slice(0, 2).toUpperCase() : "CL"),
+          since: c.since || "2026-01",
+        }));
+        setClientes(formatados);
+      }
     }
-    return () => {
-      ativo = false;
-    };
+    setCarregando(false);
+  }
+
+  useEffect(() => {
+    carregarClientes();
   }, []);
 
   const clientesFiltrados = clientes.filter(
@@ -83,40 +85,59 @@ export function ClientesView() {
       return;
     }
 
-    const res = await clientesService.create({
-      name: nome,
-      company: empresa,
-      email: email || "contato@empresa.com",
-      phone: telefone || "(11) 99999-9999",
-      tier: plano as any,
-      status: "Ativo",
-      mrr: Number(mrr) || 0,
-      logoInitials: nome.slice(0, 2).toUpperCase(),
-      since: new Date().toISOString().slice(0, 7),
-    });
+    setSalvando(true);
+    const supabase = getSupabaseBrowser();
+    if (supabase) {
+      const iniciais = nome
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
 
-    if (res.ok && res.cliente) {
-      setClientes([res.cliente, ...clientes]);
-      toast("Cliente cadastrado com sucesso!", { type: "success" });
-      setModalAberto(false);
-      setNome("");
-      setEmpresa("");
-      setEmail("");
-      setTelefone("");
-    } else {
-      toast("Erro ao cadastrar", { type: "error" });
+      const { error } = await supabase.from("clients").insert([
+        {
+          name: nome,
+          company: empresa,
+          email: email || "contato@empresa.com",
+          phone: telefone || "(11) 99999-9999",
+          tier: plano,
+          status: "Ativo",
+          mrr: Number(mrr) || 0,
+          logoInitials: iniciais,
+          since: new Date().toISOString().slice(0, 7),
+        },
+      ]);
+
+      if (error) {
+        setSalvando(false);
+        toast("Erro ao cadastrar", { description: error.message, type: "error" });
+        return;
+      }
     }
+
+    setSalvando(false);
+    toast("Cliente cadastrado com sucesso!", { type: "success" });
+    setModalAberto(false);
+    setNome("");
+    setEmpresa("");
+    setEmail("");
+    setTelefone("");
+    carregarClientes();
   }
 
   async function handleExcluir(id: string) {
     if (!confirm("Deseja realmente remover este cliente da operação?")) return;
-    const res = await clientesService.delete(id);
-    if (res.ok) {
-      setClientes((atual) => atual.filter((c) => c.id !== id));
-      toast("Cliente removido com sucesso", { type: "success" });
-    } else {
-      toast("Erro ao remover cliente", { type: "error" });
+    const supabase = getSupabaseBrowser();
+    if (supabase) {
+      const { error } = await supabase.from("clients").delete().eq("id", id);
+      if (error) {
+        toast("Erro ao excluir", { description: error.message, type: "error" });
+        return;
+      }
     }
+    setClientes((atual) => atual.filter((c) => c.id !== id));
+    toast("Cliente removido com sucesso", { type: "success" });
   }
 
   return (
@@ -185,58 +206,73 @@ export function ClientesView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {clientesFiltrados.map((cliente) => (
-          <Card key={cliente.id} className="border-border bg-surface/40 backdrop-blur-md flex flex-col justify-between">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 font-bold text-primary text-sm">
-                    {cliente.logoInitials}
-                  </span>
-                  <div>
-                    <CardTitle className="text-base">{cliente.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <Building2 className="size-3" /> {cliente.company}
-                    </p>
+      {carregando ? (
+        <div className="py-20 text-center text-muted-foreground flex items-center justify-center gap-2">
+          <Loader2 className="size-5 animate-spin text-primary" /> Carregando operações...
+        </div>
+      ) : clientes.length === 0 ? (
+        <Card className="py-16 text-center">
+          <CardContent>
+            <p className="font-medium text-muted-foreground">Nenhum cliente cadastrado no banco ainda.</p>
+            <Button onClick={() => setModalAberto(true)} className="mt-4 gap-2">
+              <Plus className="size-4" /> Cadastrar o primeiro cliente
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {clientesFiltrados.map((cliente) => (
+            <Card key={cliente.id} className="border-border bg-surface/40 backdrop-blur-md flex flex-col justify-between">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 font-bold text-primary text-sm">
+                      {cliente.logoInitials}
+                    </span>
+                    <div>
+                      <CardTitle className="text-base">{cliente.name}</CardTitle>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Building2 className="size-3" /> {cliente.company}
+                      </p>
+                    </div>
                   </div>
+                  <span className="rounded-full bg-success/20 px-2 py-0.5 text-[10px] font-semibold text-success">
+                    {cliente.status}
+                  </span>
                 </div>
-                <span className="rounded-full bg-success/20 px-2 py-0.5 text-[10px] font-semibold text-success">
-                  {cliente.status}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-0">
-              <div className="space-y-1.5 text-xs text-muted-foreground border-t border-border pt-3">
-                <p className="flex items-center gap-2">
-                  <Mail className="size-3.5 text-primary" /> {cliente.email}
-                </p>
-                <p className="flex items-center gap-2">
-                  <Phone className="size-3.5 text-primary" /> {cliente.phone}
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between border-t border-border pt-3">
-                <div>
-                  <span className="text-[10px] text-muted-foreground uppercase">Plano / MRR</span>
-                  <p className="text-sm font-bold text-emerald-400">
-                    R$ {(Number(cliente.mrr) || 0).toLocaleString("pt-BR")} <span className="text-[10px] text-muted-foreground font-normal">({cliente.tier})</span>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <div className="space-y-1.5 text-xs text-muted-foreground border-t border-border pt-3">
+                  <p className="flex items-center gap-2">
+                    <Mail className="size-3.5 text-primary" /> {cliente.email}
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <Phone className="size-3.5 text-primary" /> {cliente.phone}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                  onClick={() => handleExcluir(cliente.id)}
-                  title="Excluir cliente"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
+                <div className="flex items-center justify-between border-t border-border pt-3">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground uppercase">Plano / MRR</span>
+                    <p className="text-sm font-bold text-emerald-400">
+                      R$ {(Number(cliente.mrr) || 0).toLocaleString("pt-BR")} <span className="text-[10px] text-muted-foreground font-normal">({cliente.tier})</span>
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    onClick={() => handleExcluir(cliente.id)}
+                    title="Excluir cliente"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -282,7 +318,9 @@ export function ClientesView() {
                 <Button type="button" variant="ghost" onClick={() => setModalAberto(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">Salvar Cliente</Button>
+                <Button type="submit" disabled={salvando}>
+                  {salvando ? <Loader2 className="size-4 animate-spin" /> : "Salvar Cliente"}
+                </Button>
               </div>
             </form>
           </div>
