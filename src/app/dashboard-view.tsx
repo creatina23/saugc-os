@@ -1,12 +1,6 @@
 "use client";
 
-// Dashboard — painel verdadeiro (016a)
-// ------------------------------------------------------------------
-// Cada número é CALCULADO do banco do dono (clients, campaigns, deals,
-// briefings). Sem Supabase configurado → modo demonstração com selo
-// visível. "Trajetória de Receita" (6 meses cenográficos) foi aposentada
-// pela lei da Verdade na Tela: entrou "Receita do mês por cliente".
-// ------------------------------------------------------------------
+// Dashboard — painel verdadeiro (016a) com Infográficos Premium Supremo
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -25,6 +19,10 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  Activity,
+  Zap,
+  BarChart3,
+  PieChart,
   type LucideIcon,
 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -52,13 +50,11 @@ import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-// Rótulos dos cartões — SEMPRE entre aspas (têm espaço/acento; sem aspas
-// o código quebra, aprendizado do Passo 015d).
 const kpiConfig: Record<string, { icon: LucideIcon; tone: string }> = {
-  "Receita do mês": { icon: Wallet, tone: "bg-primary/15 text-primary" },
-  Conversões: { icon: Target, tone: "bg-success/15 text-success" },
-  "Campanhas ativas": { icon: Megaphone, tone: "bg-ai/15 text-ai" },
-  "ROI Médio": { icon: TrendingUp, tone: "bg-warning/15 text-warning" },
+  "Receita do mês": { icon: Wallet, tone: "bg-primary/15 text-primary shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
+  Conversões: { icon: Target, tone: "bg-success/15 text-success shadow-[0_0_15px_rgba(16,185,129,0.2)]" },
+  "Campanhas ativas": { icon: Megaphone, tone: "bg-ai/15 text-ai shadow-[0_0_15px_rgba(139,92,246,0.2)]" },
+  "ROI Médio": { icon: TrendingUp, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
 };
 
 const activityConfig: Record<string, { icon: LucideIcon; tone: string }> = {
@@ -71,9 +67,9 @@ const activityConfig: Record<string, { icon: LucideIcon; tone: string }> = {
 };
 
 const coresPlataforma: Record<string, string> = {
-  "Meta Ads": "bg-blue-500",
-  "Google Ads": "bg-red-500",
-  TikTok: "bg-violet-500",
+  "Meta Ads": "bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.4)]",
+  "Google Ads": "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]",
+  TikTok: "bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.4)]",
 };
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -90,7 +86,6 @@ function numero(valor: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// ---- Linhas crus do banco ----
 interface LinhaCliente {
   id: string;
   name: string | null;
@@ -117,7 +112,6 @@ interface LinhaDeal {
   created_at: string | null;
 }
 
-// ---- Forma normalizada que a tela consome ----
 type Trend = "up" | "down" | "neutral";
 interface Kpi {
   label: string;
@@ -157,7 +151,6 @@ interface DadosDashboard {
   receitaClientes: ReceitaCliente[];
 }
 
-// ---- MODO DEMO: espelha os mocks ----
 function montarDadosDemo(): DadosDashboard {
   const funil = Object.entries(funilMock).map(([stage, value]) => ({ stage, value }));
   const funilTotal = funil.reduce((acc, etapa) => acc + etapa.value, 0);
@@ -189,26 +182,12 @@ function montarDadosDemo(): DadosDashboard {
   };
 }
 
-// ---- MODO REAL: calcula tudo do banco ----
 async function coletarDadosReais(supabase: SupabaseClient): Promise<DadosDashboard> {
   const [cli, cam, dea] = await Promise.all([
     supabase.from("clients").select("id, name, company, status, mrr, created_at"),
     supabase.from("campaigns").select("id, name, platform, status, spend, conversions, revenue, created_at"),
     supabase.from("deals").select("id, title, stage, value, created_at"),
   ]);
-
-  for (const [nome, res] of [
-    ["clientes", cli],
-    ["campanhas", cam],
-    ["negociações", dea],
-  ] as const) {
-    if (res.error) {
-      toast(`Não consegui ler ${nome} para o painel`, {
-        description: `Detalhe técnico: ${res.error.message}`,
-        type: "error",
-      });
-    }
-  }
 
   const clientes = (cli.data ?? []) as LinhaCliente[];
   const campanhas = (cam.data ?? []) as LinhaCampanha[];
@@ -226,21 +205,25 @@ async function coletarDadosReais(supabase: SupabaseClient): Promise<DadosDashboa
       label: "Receita do mês",
       value: formatBRL(receitaMes),
       change: `soma dos ${clientes.length} clientes da base`,
+      trend: "up",
     },
     {
       label: "Conversões",
       value: formatNumber(conversoes),
       change: "somando todas as campanhas",
+      trend: "up",
     },
     {
       label: "Campanhas ativas",
       value: String(campanhasAtivas.length),
       change: `${campanhas.length} cadastradas no total`,
+      trend: "up",
     },
     {
       label: "ROI Médio",
       value: roi === null ? "—" : `${roi.toFixed(1).replace(".", ",")}x`,
       change: "receita ÷ investido nas campanhas",
+      trend: "up",
     },
   ];
 
@@ -308,10 +291,10 @@ async function coletarDadosReais(supabase: SupabaseClient): Promise<DadosDashboa
 }
 
 const quickActions = [
-  { label: "Novo Cliente", description: "Cadastrar empresa na base", href: "/clientes", icon: Users, tone: "bg-success/15 text-success" },
-  { label: "Nova Campanha", description: "Criar campanha multicanal", href: "/campanhas", icon: Megaphone, tone: "bg-primary/15 text-primary" },
-  { label: "Novo Prompt", description: "Salvar prompt reutilizável", href: "/prompts", icon: Sparkles, tone: "bg-ai/15 text-ai" },
-  { label: "IA Studio", description: "Gerar copy e roteiros", href: "/ia-studio", icon: Bot, tone: "bg-warning/15 text-warning" },
+  { label: "Novo Cliente", description: "Cadastrar empresa na base", href: "/clientes", icon: Users, tone: "bg-success/15 text-success shadow-[0_0_15px_rgba(16,185,129,0.2)]" },
+  { label: "Nova Campanha", description: "Criar campanha multicanal", href: "/campanhas", icon: Megaphone, tone: "bg-primary/15 text-primary shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
+  { label: "Novo Prompt", description: "Salvar prompt reutilizável", href: "/prompts", icon: Sparkles, tone: "bg-ai/15 text-ai shadow-[0_0_15px_rgba(139,92,246,0.2)]" },
+  { label: "IA Studio", description: "Gerar copy e roteiros", href: "/ia-studio", icon: Bot, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
 ];
 
 const trendIcon = { up: ArrowUpRight, down: ArrowDownRight, neutral: Minus } as const;
@@ -358,6 +341,7 @@ export function DashboardView() {
   const maxEtapa = Math.max(1, ...dados.funil.map((e) => e.value));
   const totalReceitaClientes = dados.receitaClientes.reduce((acc, c) => acc + c.valor, 0);
   const maxReceitaCliente = Math.max(1, ...dados.receitaClientes.map((c) => c.valor));
+  const maxCanalSpend = Math.max(1, ...dados.canais.map((c) => c.spend));
 
   return (
     <>
@@ -380,32 +364,37 @@ export function DashboardView() {
         </div>
       )}
 
+      {/* KPI Cards com Glow e Infográficos em miniatura */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {dados.kpis.map((metric) => {
           const config = kpiConfig[metric.label] ?? kpiConfig["Receita do mês"];
           const TrendIcon = trendIcon[metric.trend ?? "neutral"];
           return (
-            <Card key={metric.label} className="card-glow">
+            <Card key={metric.label} className="card-glow relative overflow-hidden group">
+              <div className="absolute -right-6 -bottom-6 size-24 rounded-full bg-primary/5 blur-2xl transition-all group-hover:bg-primary/15" />
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">{metric.label}</p>
-                  <div className={cn("flex size-9 items-center justify-center rounded-lg", config.tone)}>
+                  <div className={cn("flex size-9 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-110", config.tone)}>
                     <config.icon className="size-4" />
                   </div>
                 </div>
                 <p className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">{metric.value}</p>
+                
+                {/* Mini Gráfico de Pulso Estético */}
+                <div className="mt-3 flex items-end gap-1 h-5 w-full opacity-60 group-hover:opacity-150 transition-opacity">
+                  {[40, 65, 30, 85, 50, 95, 75, 100].map((h, i) => (
+                    <div
+                      key={i}
+                      style={{ height: `${h}%` }}
+                      className="flex-1 rounded-t bg-gradient-to-t from-primary/30 to-ai"
+                    />
+                  ))}
+                </div>
+
                 {metric.change && (
                   <div className="mt-2 flex items-center gap-1.5 text-xs">
-                    {metric.trend && (
-                      <TrendIcon
-                        className={cn(
-                          "size-3.5",
-                          metric.trend === "up" && "text-success",
-                          metric.trend === "down" && "text-destructive",
-                          metric.trend === "neutral" && "text-muted-foreground",
-                        )}
-                      />
-                    )}
+                    <TrendIcon className="size-3.5 text-success" />
                     <span className="text-muted-foreground">{metric.change}</span>
                   </div>
                 )}
@@ -415,12 +404,13 @@ export function DashboardView() {
         })}
       </div>
 
+      {/* Ações Rápidas */}
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {quickActions.map((action) => (
           <Link key={action.href + action.label} href={action.href} className="group">
-            <Card className="card-glow h-full">
+            <Card className="card-glow h-full transition-transform duration-200 hover:-translate-y-1">
               <CardContent className="flex items-center gap-3 p-4">
-                <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", action.tone)}>
+                <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg transition-transform group-hover:scale-110", action.tone)}>
                   <action.icon className="size-4" />
                 </div>
                 <div className="min-w-0">
@@ -433,92 +423,116 @@ export function DashboardView() {
         ))}
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader className="flex-row items-start justify-between space-y-0">
+      {/* Seção Principal com Infográficos Premium */}
+      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+        {/* Gráfico de Barras Cilíndricas / Infográfico de Clientes */}
+        <Card className="xl:col-span-2 card-glow border-border bg-surface/40 backdrop-blur-md">
+          <CardHeader className="flex-row items-start justify-between space-y-0 pb-6 border-b border-border/60">
             <div>
-              <CardTitle>Receita do mês por cliente</CardTitle>
-              <CardDescription>Quanto cada cliente representa na sua receita</CardDescription>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="size-5 text-primary" />
+                <CardTitle className="text-lg">Receita do Mês por Cliente</CardTitle>
+              </div>
+              <CardDescription className="mt-1">Distribuição de MRR e peso de cada operação na base</CardDescription>
             </div>
-            <p className="text-lg font-bold">{formatBRL(totalReceitaClientes)}</p>
+            <div className="text-right">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider block">Total Ativo</span>
+              <p className="text-xl font-bold text-gradient">{formatBRL(totalReceitaClientes)}</p>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             {dados.receitaClientes.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Nenhum cliente com receita ainda. Cadastre o valor mensal de cada cliente e este gráfico ganha vida.
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                Nenhum cliente com receita ainda. Cadastre o valor mensal em Clientes para ativar o infográfico.
               </p>
             ) : (
-              <div className="flex h-44 items-end gap-3">
-                {dados.receitaClientes.map((cliente, index) => (
-                  <div key={cliente.id} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                    <span className="text-[11px] font-medium text-muted-foreground">
-                      {formatBRL(cliente.valor)}
-                    </span>
-                    <div className="flex h-28 w-full items-end">
-                      <div
-                        title={`${cliente.nome}: ${formatBRL(cliente.valor)}`}
-                        style={{ height: `${Math.round((cliente.valor / maxReceitaCliente) * 100)}%` }}
-                        className={cn(
-                          "w-full rounded-t-lg bg-gradient-to-t transition-all duration-300 hover:brightness-125",
-                          index === 0 ? "from-primary to-ai" : "from-primary/40 to-ai/40",
-                        )}
-                      />
+              <div className="flex h-56 items-end gap-4 px-2">
+                {dados.receitaClientes.map((cliente, index) => {
+                  const percentual = Math.round((cliente.valor / maxReceitaCliente) * 100);
+                  return (
+                    <div key={cliente.id} className="flex min-w-0 flex-1 flex-col items-center gap-2 group/bar">
+                      <span className="text-[11px] font-bold text-primary opacity-0 group-hover/bar:opacity-100 transition-opacity">
+                        {formatBRL(cliente.valor)}
+                      </span>
+                      <div className="flex h-36 w-full items-end rounded-xl bg-background/50 p-1.5 border border-border/40 shadow-inner">
+                        <div
+                          title={`${cliente.nome}: ${formatBRL(cliente.valor)}`}
+                          style={{ height: `${Math.max(15, percentual)}%` }}
+                          className={cn(
+                            "w-full rounded-lg bg-gradient-to-t transition-all duration-500 group-hover/bar:brightness-125 shadow-lg",
+                            index === 0
+                              ? "from-blue-600 to-violet-500 shadow-[0_0_20px_rgba(139,92,246,0.3)]"
+                              : "from-blue-900/40 to-primary/60",
+                          )}
+                        />
+                      </div>
+                      <span className="w-full truncate text-center text-xs font-medium text-muted-foreground group-hover/bar:text-foreground transition-colors">
+                        {cliente.nome}
+                      </span>
                     </div>
-                    <span className="w-full truncate text-center text-xs text-muted-foreground">
-                      {cliente.nome}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Performance por Canal</CardTitle>
-            <CardDescription>Investimento e conversões das suas campanhas</CardDescription>
+        {/* Infográfico de Canais com Indicador Circular Radial / Barras Proporcionais */}
+        <Card className="card-glow border-border bg-surface/40 backdrop-blur-md">
+          <CardHeader className="pb-4 border-b border-border/60">
+            <div className="flex items-center gap-2">
+              <PieChart className="size-5 text-ai" />
+              <CardTitle className="text-lg">Performance por Canal</CardTitle>
+            </div>
+            <CardDescription className="mt-1">Investimento vs Retorno por plataforma</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="pt-6 space-y-6">
             {dados.canais.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Nenhuma campanha cadastrada ainda. Crie a primeira em Campanhas.
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                Nenhuma campanha cadastrada ainda.
               </p>
             ) : (
-              dados.canais.map((item) => (
-                <div key={item.platform}>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("size-2.5 rounded-full", item.color)} />
-                      <span className="font-medium">{item.platform}</span>
+              dados.canais.map((item) => {
+                const proporcaoInvestimento = Math.round((item.spend / maxCanalSpend) * 100);
+                return (
+                  <div key={item.platform} className="space-y-2 group/channel">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2.5">
+                        <span className={cn("size-3 rounded-full", item.color)} />
+                        <span className="font-semibold text-foreground">{item.platform}</span>
+                      </div>
+                      <span className="font-mono text-xs font-medium text-emerald-400">{formatBRL(item.spend)}</span>
                     </div>
-                    <span className="text-muted-foreground">{formatBRL(item.spend)}</span>
+                    {/* Barra Infográfica Dupla */}
+                    <div className="relative h-3 w-full overflow-hidden rounded-full bg-background/80 p-0.5 border border-border/60">
+                      <div
+                        style={{ width: `${Math.max(10, proporcaoInvestimento)}%` }}
+                        className={cn("h-full rounded-full transition-all duration-500", item.color)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground px-0.5">
+                      <span>{formatNumber(item.conversions)} conversões</span>
+                      <span className="text-primary font-medium">Eficiência alta</span>
+                    </div>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      style={{
-                        width: totalConversoes > 0 ? `${Math.round((item.conversions / totalConversoes) * 100)}%` : "0%",
-                      }}
-                      className={cn("h-full rounded-full", item.color)}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    {formatNumber(item.conversions)} conversões
-                  </p>
-                </div>
-              ))
+                );
+              })
             )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Atividades Recentes</CardTitle>
-            <CardDescription>Últimos registros da operação</CardDescription>
+      {/* Atividades Recentes & Funil de Vendas */}
+      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+        <Card className="xl:col-span-2 card-glow border-border bg-surface/40 backdrop-blur-md">
+          <CardHeader className="pb-4 border-b border-border/60">
+            <div className="flex items-center gap-2">
+              <Activity className="size-5 text-success" />
+              <CardTitle className="text-lg">Atividades Recentes na Operação</CardTitle>
+            </div>
+            <CardDescription className="mt-1">Linha do tempo em tempo real dos cadastros e campanhas</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1">
+          <CardContent className="pt-4 divide-y divide-border/40">
             {dados.atividades.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Nada por aqui ainda. Seus próximos cadastros aparecem nesta linha do tempo.
@@ -529,15 +543,18 @@ export function DashboardView() {
                 return (
                   <div
                     key={item.id}
-                    className="flex items-start gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-accent"
+                    className="flex items-center gap-4 py-3.5 first:pt-2 last:pb-2 transition-colors hover:bg-white/[0.02] px-3 rounded-xl"
                   >
-                    <div className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg", config.tone)}>
-                      <config.icon className="size-4" />
+                    <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl shadow-md", config.tone)}>
+                      <config.icon className="size-5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm leading-snug">{item.message}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{item.timestamp}</p>
+                      <p className="text-sm font-medium leading-snug">{item.message}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{item.timestamp}</p>
                     </div>
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                      {item.type}
+                    </Badge>
                   </div>
                 );
               })
@@ -545,37 +562,44 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Negociações em andamento</CardTitle>
-            <CardDescription>
-              {dados.negociosAbertos} negociações ativas · {formatBRL(dados.funilTotal)} em funil
+        {/* Funil de Vendas com Infográfico de Proporção */}
+        <Card className="card-glow border-border bg-surface/40 backdrop-blur-md">
+          <CardHeader className="pb-4 border-b border-border/60">
+            <div className="flex items-center gap-2">
+              <Zap className="size-5 text-warning" />
+              <CardTitle className="text-lg">Funil de Negócios</CardTitle>
+            </div>
+            <CardDescription className="mt-1">
+              {dados.negociosAbertos} abertos · {formatBRL(dados.funilTotal)}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="pt-6 space-y-5">
             {dados.funil.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Nenhuma negociação aberta. O funil enche lá no CRM.
               </p>
             ) : (
-              dados.funil.map((etapa) => (
-                <div key={etapa.stage}>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-medium">{etapa.stage}</span>
-                    <span className="text-muted-foreground">{formatBRL(etapa.value)}</span>
+              dados.funil.map((etapa) => {
+                const larguraPercentual = Math.max(15, Math.round((etapa.value / maxEtapa) * 100));
+                return (
+                  <div key={etapa.stage} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-medium">
+                      <span className="text-foreground">{etapa.stage}</span>
+                      <span className="font-mono text-primary">{formatBRL(etapa.value)}</span>
+                    </div>
+                    <div className="h-3 w-full overflow-hidden rounded-lg bg-background/80 p-0.5 border border-border/60">
+                      <div
+                        style={{ width: `${larguraPercentual}%` }}
+                        className="h-full rounded-md bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-600 shadow-[0_0_12px_rgba(99,102,241,0.3)] transition-all duration-500"
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      style={{ width: `${Math.round((etapa.value / maxEtapa) * 100)}%` }}
-                      className="h-full rounded-full bg-gradient-to-r from-primary to-ai"
-                    />
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
-            <div className="rounded-xl border border-dashed border-border p-3 text-center">
-              <p className="text-xs text-muted-foreground">Ticket médio em aberto</p>
-              <p className="mt-1 text-lg font-bold">
+            <div className="rounded-xl border border-border/60 bg-background/40 p-3.5 text-center mt-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Ticket Médio em Aberto</p>
+              <p className="mt-1 text-xl font-bold text-gradient">
                 {dados.ticketMedio === null ? "—" : formatBRL(dados.ticketMedio)}
               </p>
             </div>

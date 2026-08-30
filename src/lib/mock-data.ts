@@ -140,6 +140,7 @@ export const navItems = [
   { href: "/biblioteca", label: "Biblioteca", icon: "Library" },
   { href: "/prompts", label: "Prompts", icon: "Sparkles" },
   { href: "/ia-studio", label: "IA Studio", icon: "Bot" },
+  { href: "/orquestrador", label: "Inteligência Operacional", icon: "Workflow" },
   { href: "/configuracoes", label: "Configurações", icon: "Settings" },
 ] as const;
 
@@ -151,10 +152,6 @@ export const settingsTabs = [
   "Faturamento & Plano",
   "Integrações API",
 ] as const;
-
-/* ============================================
-   NOVOS EXPORTS OFICIAIS — Sprint 001
-   ============================================ */
 
 export const commercials: Commercial[] = [
   {

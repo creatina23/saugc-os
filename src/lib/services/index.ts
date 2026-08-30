@@ -19,3 +19,4 @@ export { configuracoesService } from "./configuracoes.service";
 export { dashboardService } from "./dashboard.service";
 export { crmService, dealStageOrder } from "./crm.service";
 export { notificacoesService } from "./notificacoes.service";
+export { orquestradorService } from "./orquestrador.service";
