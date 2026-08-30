@@ -8,9 +8,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Bot,
-  Database,
-  DollarSign,
-  Layers,
   Megaphone,
   Minus,
   Sparkles,
@@ -30,7 +27,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBRL, formatNumber } from "@/lib/format";
-import { funilMock, kpiConfig as kpiMock, receitaClientesMock } from "@/lib/mock-data";
+import {
+  activityLog,
+  campaignPerformance,
+  clients as clientesMock,
+  dashboardMetrics,
+  deals as dealsMock,
+  pipelineValueByStage as funilMock,
+} from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -55,10 +59,9 @@ const coresPlataforma: Record<string, string> = {
   TikTok: "bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.4)]",
 };
 
-const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-
 interface ReceitaCliente {
-  cliente: string;
+  id: string;
+  nome: string;
   valor: number;
 }
 
@@ -121,50 +124,57 @@ interface CanalPerformance {
   conversions: number;
 }
 
+interface Atividade {
+  id: string;
+  type: string;
+  message: string;
+  timestamp: string;
+}
+
 interface DadosDashboard {
   origem: "supabase" | "demo";
   kpis: Kpi[];
   funil: FunilEtapa[];
   canais: CanalPerformance[];
-  atividadesRecentes: Array<{
-    id: string;
-    tipo: "deal" | "campaign" | "client" | "prompt";
-    titulo: string;
-    descricao: string;
-    tempo: string;
-  }>;
+  atividadesRecentes: Atividade[];
   receitaClientes: ReceitaCliente[];
 }
 
 function montarDadosDemo(): DadosDashboard {
   const funil = Object.entries(funilMock).map(([stage, value]) => ({ stage, value }));
-  const funilTotal = funil.reduce((acc, etapa) => acc + etapa.value, 0);
+  
+  const canais = campaignPerformance.map((c) => ({
+    platform: c.platform,
+    spend: c.spend,
+    revenue: c.spend * 3.8,
+    conversions: c.conversions,
+  }));
 
-  const canaisMap: Record<string, { spend: number; revenue: number; conversions: number }> = {
-    "Meta Ads": { spend: 12400, revenue: 48900, conversions: 312 },
-    "Google Ads": { spend: 8900, revenue: 34200, conversions: 198 },
-    TikTok: { spend: 5200, revenue: 19800, conversions: 145 },
-  };
+  const receitaClientes = clientesMock
+    .filter((c) => c.mrr > 0)
+    .sort((a, b) => b.mrr - a.mrr)
+    .slice(0, 5)
+    .map((c) => ({ id: c.id, nome: c.company || c.name, valor: c.mrr }));
 
-  const canais = Object.entries(canaisMap).map(([platform, m]) => ({ platform, ...m }));
+  const atividadesRecentes = activityLog.map((a) => ({
+    id: a.id,
+    type: a.type,
+    message: a.message,
+    timestamp: a.timestamp,
+  }));
 
   return {
     origem: "demo",
-    kpis: [
-      { label: "Receita do mês", value: "R$ 102.900", change: "+14.2% vs mês anterior", trend: "up" },
-      { label: "Conversões", value: "655", change: "+8.7% vs mês anterior", trend: "up" },
-      { label: "Campanhas ativas", value: "14", change: "3 canais integrados", trend: "up" },
-      { label: "ROI Médio", value: "3.8x", change: "Eficiência de escala", trend: "up" },
-    ],
+    kpis: dashboardMetrics.map((m) => ({
+      label: m.label,
+      value: m.value,
+      change: m.change,
+      trend: (m.trend as Trend) || "up",
+    })),
     funil,
     canais,
-    atividadesRecentes: [
-      { id: "1", tipo: "deal", titulo: "Novo Contrato Fechado", descricao: "Cliente Enterprise — R$ 12.500/mês", tempo: "há 12 min" },
-      { id: "2", tipo: "campaign", titulo: "Campanha TikTok Escala", descricao: "Otimizada por IA com criativo UGC v4", tempo: "há 45 min" },
-      { id: "3", tipo: "client", titulo: "Novo Cliente na Base", descricao: "Sérum Glow — Onboarding concluído", tempo: "há 2 horas" },
-      { id: "4", tipo: "prompt", titulo: "Prompt de Copy Atualizado", descricao: "Framework de Resposta Direta 020-C", tempo: "há 3 horas" },
-    ],
-    receitaClientes: receitaClientesMock.slice(0, 5),
+    atividadesRecentes,
+    receitaClientes,
   };
 }
 
@@ -216,10 +226,10 @@ async function coletarDadosReais(supabase: SupabaseClient): Promise<DadosDashboa
 
   const funilContagem: Record<string, number> = {
     Lead: 0,
-    Qualificado: 0,
-    Proposta: 0,
+    Qualificação: 0,
+    "Proposta Enviada": 0,
     Negociação: 0,
-    Fechado: 0,
+    "Contrato Fechado": 0,
   };
 
   for (const n of negocios) {
@@ -240,40 +250,43 @@ async function coletarDadosReais(supabase: SupabaseClient): Promise<DadosDashboa
   }
   const canais = Object.entries(canaisMap).map(([platform, m]) => ({ platform, ...m }));
 
-  const receitaClientesMap: Record<string, number> = {};
+  const receitaClientesMap: Record<string, { id: string; nome: string; valor: number }> = {};
   for (const c of clientes) {
     const nomeCli = c.name || c.company || "Cliente";
-    receitaClientesMap[nomeCli] = (receitaClientesMap[nomeCli] ?? 0) + numero(c.mrr);
+    receitaClientesMap[c.id] = {
+      id: c.id,
+      nome: nomeCli,
+      valor: numero(c.mrr),
+    };
   }
-  const receitaClientes: ReceitaCliente[] = Object.entries(receitaClientesMap)
-    .map(([cliente, valor]) => ({ cliente, valor }))
+  const receitaClientes: ReceitaCliente[] = Object.values(receitaClientesMap)
     .sort((a, b) => b.valor - a.valor)
     .slice(0, 5);
 
   const atividadesRecentes = [
     ...negocios.slice(0, 2).map((n) => ({
       id: n.id,
-      tipo: "deal" as const,
-      titulo: n.title || "Negócio sem título",
-      descricao: `Estágio: ${n.stage || "Lead"} — ${formatBRL(numero(n.value))}`,
-      tempo: "Recente",
+      type: "deal",
+      message: `${n.title || "Negócio"} — Estágio: ${n.stage || "Lead"} (${formatBRL(numero(n.value))})`,
+      timestamp: "Recente",
     })),
     ...campanhas.slice(0, 2).map((c) => ({
       id: c.id,
-      tipo: "campaign" as const,
-      titulo: c.name || "Campanha",
-      descricao: `${c.platform || "Ads"} — ${formatNumber(numero(c.conversions))} conversões`,
-      tempo: "Recente",
+      type: "campaign",
+      message: `Campanha ${c.name || "Ads"} (${c.platform || "Meta"})`,
+      timestamp: "Recente",
     })),
   ];
+
+  const demo = montarDadosDemo();
 
   return {
     origem: "supabase",
     kpis,
     funil,
-    canais: canais.length > 0 ? canais : montarDadosDemo().canais,
-    atividadesRecentes: atividadesRecentes.length > 0 ? atividadesRecentes : montarDadosDemo().atividadesRecentes,
-    receitaClientes: receitaClientes.length > 0 ? receitaClientes : montarDadosDemo().receitaClientes,
+    canais: canais.length > 0 ? canais : demo.canais,
+    atividadesRecentes: atividadesRecentes.length > 0 ? atividadesRecentes : demo.atividadesRecentes,
+    receitaClientes: receitaClientes.length > 0 ? receitaClientes : demo.receitaClientes,
   };
 }
 
@@ -310,7 +323,6 @@ export function DashboardView() {
   }, []);
 
   const maxEtapa = Math.max(1, ...dados.funil.map((e) => e.value));
-  const totalReceitaClientes = dados.receitaClientes.reduce((acc, c) => acc + c.valor, 0);
   const maxReceitaCliente = Math.max(1, ...dados.receitaClientes.map((c) => c.valor));
   const maxCanalSpend = Math.max(1, ...dados.canais.map((c) => c.spend));
 
@@ -443,9 +455,9 @@ export function DashboardView() {
               dados.receitaClientes.map((c) => {
                 const pct = Math.max(8, Math.round((c.valor / maxReceitaCliente) * 100));
                 return (
-                  <div key={c.cliente} className="space-y-1.5">
+                  <div key={c.id} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium truncate max-w-[200px]">{c.cliente}</span>
+                      <span className="font-medium truncate max-w-[200px]">{c.nome}</span>
                       <span className="font-semibold text-primary">{formatBRL(c.valor)}</span>
                     </div>
                     <div className="h-2.5 w-full rounded-full bg-muted/60 overflow-hidden p-0.5">
@@ -510,7 +522,6 @@ export function DashboardView() {
             {dados.canais.map((canal) => {
               const corBarra = coresPlataforma[canal.platform] || "bg-primary";
               const roiCanal = canal.spend > 0 ? (canal.revenue / canal.spend).toFixed(1) : "0";
-              const pctSpend = Math.round((canal.spend / maxCanalSpend) * 100);
               return (
                 <div key={canal.platform} className="space-y-2 rounded-xl border border-border/50 bg-surface/40 p-4">
                   <div className="flex items-center justify-between">
@@ -550,7 +561,7 @@ export function DashboardView() {
           </CardHeader>
           <CardContent className="space-y-4 pt-2">
             {dados.atividadesRecentes.map((item) => {
-              const cfg = activityConfig[item.tipo] ?? activityConfig.deal;
+              const cfg = activityConfig[item.type] ?? activityConfig.deal;
               return (
                 <div key={item.id} className="flex items-start gap-3 rounded-xl border border-border/40 bg-surface/30 p-3.5 transition-colors hover:border-border">
                   <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg mt-0.5", cfg.tone)}>
@@ -558,10 +569,9 @@ export function DashboardView() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold truncate">{item.titulo}</p>
-                      <span className="text-[11px] text-muted-foreground">{item.tempo}</span>
+                      <p className="text-sm font-semibold truncate">{item.message}</p>
+                      <span className="text-[11px] text-muted-foreground">{item.timestamp}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.descricao}</p>
                   </div>
                 </div>
               );
