@@ -13,7 +13,8 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import { clientesService } from "@/lib/services/clientes.service";
+import { clientesService } from "@/lib/services";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import type { Client } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -21,11 +22,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 export function ClientesView() {
-  const [clientes, setClientes] = useState<Client[]>([]);
+  const [clientes, setClientes] = useState<Client[]>(clientesService.list());
   const [busca, setBusca] = useState("");
-  const [carregando, setCarregando] = useState(true);
 
-  // Estados do Modal de Novo Cliente
   const [modalAberto, setModalAberto] = useState(false);
   const [nome, setNome] = useState("");
   const [empresa, setEmpresa] = useState("");
@@ -34,15 +33,36 @@ export function ClientesView() {
   const [plano, setPlano] = useState("Growth");
   const [mrr, setMrr] = useState("12900");
 
-  async function carregarClientes() {
-    setCarregando(true);
-    const lista = await clientesService.list();
-    setClientes(lista);
-    setCarregando(false);
-  }
-
   useEffect(() => {
-    carregarClientes();
+    let ativo = true;
+    const supabase = getSupabaseBrowser();
+    if (supabase) {
+      supabase
+        .from("clients")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .then(({ data, error }) => {
+          if (!ativo) return;
+          if (!error && data && data.length > 0) {
+            const formatados: Client[] = data.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              company: c.company,
+              email: c.email,
+              phone: c.phone,
+              tier: c.tier || "Growth",
+              status: c.status || "Ativo",
+              mrr: Number(c.mrr) || 0,
+              logoInitials: c.logoInitials || c.name.slice(0, 2).toUpperCase(),
+              since: c.since || "2026-01",
+            }));
+            setClientes(formatados);
+          }
+        });
+    }
+    return () => {
+      ativo = false;
+    };
   }, []);
 
   const clientesFiltrados = clientes.filter(
@@ -52,7 +72,6 @@ export function ClientesView() {
       c.email.toLowerCase().includes(busca.toLowerCase())
   );
 
-  // Receita Total (MRR) somada de verdade dos clientes ativos
   const receitaTotal = clientes
     .filter((c) => c.status === "Ativo")
     .reduce((acc, c) => acc + (Number(c.mrr) || 0), 0);
@@ -64,13 +83,6 @@ export function ClientesView() {
       return;
     }
 
-    const iniciais = nome
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
-
     const res = await clientesService.create({
       name: nome,
       company: empresa,
@@ -79,20 +91,20 @@ export function ClientesView() {
       tier: plano as any,
       status: "Ativo",
       mrr: Number(mrr) || 0,
-      logoInitials: iniciais,
+      logoInitials: nome.slice(0, 2).toUpperCase(),
       since: new Date().toISOString().slice(0, 7),
     });
 
-    if (res.ok) {
+    if (res.ok && res.cliente) {
+      setClientes([res.cliente, ...clientes]);
       toast("Cliente cadastrado com sucesso!", { type: "success" });
       setModalAberto(false);
       setNome("");
       setEmpresa("");
       setEmail("");
       setTelefone("");
-      carregarClientes();
     } else {
-      toast("Erro ao cadastrar", { description: res.erro, type: "error" });
+      toast("Erro ao cadastrar", { type: "error" });
     }
   }
 
@@ -100,16 +112,15 @@ export function ClientesView() {
     if (!confirm("Deseja realmente remover este cliente da operação?")) return;
     const res = await clientesService.delete(id);
     if (res.ok) {
-      toast("Cliente removido", { type: "success" });
-      carregarClientes();
+      setClientes((atual) => atual.filter((c) => c.id !== id));
+      toast("Cliente removido com sucesso", { type: "success" });
     } else {
-      toast("Erro ao remover", { description: res.erro, type: "error" });
+      toast("Erro ao remover cliente", { type: "error" });
     }
   }
 
   return (
     <div className="space-y-8 pb-16">
-      {/* Cabeçalho */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Clientes (Operações)</h1>
@@ -123,7 +134,6 @@ export function ClientesView() {
         </Button>
       </div>
 
-      {/* Métricas Dinâmicas */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="border-border bg-surface/60 backdrop-blur-xl">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -163,7 +173,6 @@ export function ClientesView() {
         </Card>
       </div>
 
-      {/* Barra de Pesquisa */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -176,7 +185,6 @@ export function ClientesView() {
         </div>
       </div>
 
-      {/* Lista de Clientes */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {clientesFiltrados.map((cliente) => (
           <Card key={cliente.id} className="border-border bg-surface/40 backdrop-blur-md flex flex-col justify-between">
@@ -193,13 +201,7 @@ export function ClientesView() {
                     </p>
                   </div>
                 </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    cliente.status === "Ativo"
-                      ? "bg-success/20 text-success"
-                      : "bg-amber-500/20 text-amber-400"
-                  }`}
-                >
+                <span className="rounded-full bg-success/20 px-2 py-0.5 text-[10px] font-semibold text-success">
                   {cliente.status}
                 </span>
               </div>
@@ -236,7 +238,6 @@ export function ClientesView() {
         ))}
       </div>
 
-      {/* Modal Simples de Cadastro */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl space-y-4">
