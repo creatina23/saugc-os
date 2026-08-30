@@ -67,8 +67,8 @@ interface ReceitaCliente {
 
 function numero(valor: unknown): number {
   if (typeof valor === "number" && Number.isFinite(valor)) return valor;
-  if (typeof value === "string") {
-    const limpo = value.replace(/[^\d.,-]/g, "").replace(",", ".");
+  if (typeof valor === "string") {
+    const limpo = valor.replace(/[^\d.,-]/g, "").replace(",", ".");
     const n = parseFloat(limpo);
     return Number.isFinite(n) ? n : 0;
   }
