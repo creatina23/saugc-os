@@ -137,3 +137,17 @@ O que esses comandos fazem:
 git fetch origin — Busca as atualizações mais recentes do GitHub.
 git reset --hard origin/main — Alinha 100% o seu computador com a versão oficial e verde que está no GitHub (eliminando qualquer conflito de arquivos locais).
 npm run build — Roda a compilação na sua bancada para confirmar que está tudo verde (~7 segundos).
+
+
+/docs
+   │
+   ├── ANUNCIA_GLOBAL_CONTEXT.md
+   ├── ANUNCIA_ARCHITECTURE.md
+   ├── ANUNCIA_PROJECT_STATE.md
+   ├── ANUNCIA_AGENT_ROSTER.md
+   ├── ANUNCIA_DECISION_LOG.md
+   ├── ANUNCIA_ROADMAP.md
+   ├── ANUNCIA_INTEGRATIONS.md
+   ├── ANUNCIA_DATABASE_MAP.md
+   ├── ANUNCIA_KNOWN_ISSUES.md
+   └── ANUNCIA_COMMANDER_HANDOFF.md
