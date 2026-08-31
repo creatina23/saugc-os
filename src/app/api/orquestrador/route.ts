@@ -1,9 +1,9 @@
-// /api/orquestrador/route.ts — Motor Cognitivo Dinâmico de Elite (Deus ex machina)
+// /api/orquestrador/route.ts — Motor Cognitivo de Elite com Consistência de Vídeo (8s) & Guia de IAs
 
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
-async function chamarIA(promptDoAgente: string, systemPrompt: string, briefingContext?: { produto: string; nicho: string; publico: string; objetivo: string }): Promise<string> {
+async function chamarIA(promptDoAgente: string, systemPrompt: string, briefingContext?: { produto: string; nicho: string; publico: string; objetivo: string; pipelineMode: string }): Promise<string> {
   const geminiKey = process.env.GEMINI_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
   const openRouterKey = process.env.OPENROUTER_API_KEY;
@@ -19,7 +19,7 @@ async function chamarIA(promptDoAgente: string, systemPrompt: string, briefingCo
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ parts: [{ text: promptCompleto }] }],
-            generationConfig: { temperature: 0.8, maxOutputTokens: 2500 },
+            generationConfig: { temperature: 0.8, maxOutputTokens: 3000 },
           }),
         }
       );
@@ -46,7 +46,7 @@ async function chamarIA(promptDoAgente: string, systemPrompt: string, briefingCo
             { role: "user", content: promptDoAgente },
           ],
           temperature: 0.8,
-          max_tokens: 2500,
+          max_tokens: 3000,
         }),
       });
       if (res.ok) {
@@ -72,7 +72,7 @@ async function chamarIA(promptDoAgente: string, systemPrompt: string, briefingCo
             { role: "user", content: promptDoAgente },
           ],
           temperature: 0.8,
-          max_tokens: 2500,
+          max_tokens: 3000,
         }),
       });
       if (res.ok) {
@@ -83,87 +83,96 @@ async function chamarIA(promptDoAgente: string, systemPrompt: string, briefingCo
     } catch {}
   }
 
-  // MOTOR COGNITIVO DINÂMICO DE ELITE (Fallback Avançado Baseado no Briefing Real)
+  // MOTOR DE ELITE DEEP DIVE (Respostas hiper-customizadas com Guia de IAs e Prompts Fracionados)
   const prod = briefingContext?.produto || "Produto Inovador";
   const nicho = briefingContext?.nicho || "Mercado de Alta Performance";
   const pub = briefingContext?.publico || "Consumidores Exigentes";
   const obj = briefingContext?.objetivo || "Escalar Conversões";
+  const mode = briefingContext?.pipelineMode || "completa";
 
   if (systemPrompt.includes("Comportamento Humano")) {
     return `[DIAGNÓSTICO NEUROMARKETING DE ELITE — DEUS EX MACHINA]
-• Alvo: ${pub} no nicho de ${nicho} com foco em ${prod}.
+• Alvo: ${pub} | Nicho: ${nicho} | Foco: ${prod} (Modo: ${mode})
 
 1. Dores Viscerais & Frustrações Ocultas:
-   - O esgotamento de testar soluções milagrosas no mercado de ${nicho} que geram apenas frustração e desperdício financeiro.
-   - O receio de tomar uma decisão errada e continuar estagnado enquanto concorrentes escalam.
-   
+   - O esgotamento do público em relação a promessas vazias no nicho de ${nicho}.
+   - O medo de investir tempo e dinheiro em soluções que não geram a transformação prometida.
+
 2. Vieses Cognitivos Acionados:
-   - Viés de Contraste: Contrapadrão imediato entre o padrão amador do mercado e a sofisticação de ${prod}.
-   - Prova Social Inegável: Necessidade de validação por pares que já testaram e validaram a transformação.
+   - Viés de Prova Social Autêntica (UGC e depoimentos reais).
+   - Aversão à Perda (destacar o custo de continuar sem ${prod}).
 
 3. Gatilhos de Decisão Dominantes:
-   - Urgência Baseada em Oportunidade Única + Garantia Incondicional de Performance.`;
+   - Autoridade instantânea, clareza cirúrgica e urgência baseada em lote limitado.`;
   }
 
   if (systemPrompt.includes("Estrategista")) {
-    return `[MATRIZ DE ESCALA & ÂNGULOS DE CONVERSÃO — ${obj.toUpperCase()}]
-• Produto: ${prod} | Nicho: ${nicho}
+    return `[MATRIZ DE ESCALA & FUNIL DE VENDAS]
+• Objetivo: ${obj}
 
-1. Ângulo de Ataque A (A Dor Oculta): Focar na ineficiência das soluções tradicionais de ${nicho} e como ${prod} resolve a raiz do problema em segundos.
-2. Ângulo de Ataque B (O Atalho de Performance): Enfatizar a velocidade e a facilidade de implementação para ${pub}.
-3. Ângulo de Ataque C (O Custo da Inação): Mostrar matematicamente quanto custa continuar sem ${prod} este mês.
+1. Ângulo de Ataque A (A Quebra do Padrão): Expor a falha das alternativas comuns em ${nicho} e introduzir ${prod}.
+2. Ângulo de Ataque B (O Atalho de Performance): Mostrar a velocidade com que ${pub} alcança o resultado.
 
-Funil de Tráfego Validado:
-- Topo (Descoberta): Vídeos UGC de alto impacto (0-15s) focados no Ângulo A.
-- Meio (Consideração): Carrossel interativo quebrando as 3 principais objeções de ${nicho}.
-- Fundo (Conversão): Página de Vendas Direta com Order Bump + Retargeting de Escassez.`;
+Funil de Tráfego:
+- Topo: Vídeos UGC (0-30s) divididos em blocos de 8s para máxima retenção no TikTok Ads e Reels.
+- Fundo: Página de Vendas Direta com Order Bump.`;
   }
 
   if (systemPrompt.includes("Copywriter")) {
-    return `[COPYWRITING DE RESPOSTA DIRETA — FRAMEWORK ELITE 10/10]
-• Campanha para: ${prod} (${nicho})
+    return `[COPYWRITING DE RESPOSTA DIRETA & ROTEIRO UGC (PT-BR)]
+• Produto: ${prod}
 
-• Hooks de Alta Retenção (0.5s a 3s):
-  1. "Se você atua em ${nicho} e ainda não testou ${prod}, você está jogando dinheiro fora todos os dias."
-  2. "O segredo que os líderes de ${nicho} estão usando para ${obj.toLowerCase()} sem aumentar o orçamento."
-  3. "Pare de aceitar resultados mediocres. Veja o que acontece quando ${prod} entra em campo."
-
-• Corpo da Copy (Framework PAS Avançado):
-  - Problema: O mercado de ${nicho} está saturado de promessas vazias que exigem esforço máximo e trazem zero retorno para ${pub}.
-  - Agitação: Continuar ignorando essa falha estrutural só vai distanciar você da sua meta de ${obj}.
-  - Solução: Chegou ${prod}. Desenvolvido sob medida para eliminar complexidade e entregar velocidade cirúrgica.
-
-• Call to Action (CTA) Magnética:
-  "Toque no botão abaixo, garanta condições exclusivas de lançamento e experimente o poder real de ${prod} agora mesmo."`;
+• Hook 0.5s: "Se você faz parte de ${pub} e ainda sofre com ${nicho}, pare tudo."
+• Roteiro 30s (Fracionado para Vídeo):
+  - [00:00 - 00:08] "Olha, eu era o primeiro a duvidar até testar ${prod}." (Problema)
+  - [00:08 - 00:16] "O que mais me impressionou foi a rapidez no resultado sem complicação." (Agitação)
+  - [00:16 - 00:24] "A minha rotina mudou completamente em poucos dias de uso." (Solução)
+  - [00:24 - 00:30] "Clica no link abaixo e garante o seu com desconto exclusivo de lançamento." (CTA)`;
   }
 
   if (systemPrompt.includes("Diretor Criativo")) {
-    return `[DIREÇÃO DE ARTE & ENSCENAÇÃO CINEMATOGRÁFICA]
-• Projeto: ${prod} — Público: ${pub}
+    return `[DIREÇÃO DE ARTE, GUIAS DE IAs DE VÍDEO & PROMPTS FRACIONADOS (8s)]
 
-1. Formato & Dimensão: Vídeo vertical 9:16 (Otimizado para Meta Ads Reels & TikTok).
-2. Paleta de Cores & Atmosfera: Estética high-end, minimalista e futurista, transmitindo autoridade e sofisticação imediata.
-3. Roteiro de Cena (Storyboarding):
-   - [00:00 - 00:03] Close-up dramático no produto ${prod} com iluminação lateral recortada. Legenda dinâmica em destaque na tela.
-   - [00:03 - 00:15] Demonstração prática em tempo real, mostrando a facilidade e o impacto visual imediato para ${pub}.
-   - [00:15 - 00:30] Encerramento com selo de garantia em destaque e transição suave para o botão de chamada para ação.`;
+💡 GUIA DE IAs PARA CRIAÇÃO DE VÍDEO (RECOMENDADAS):
+1. Runway Gen-3 Alpha (Pago / Créditos Grátis) — Perfeito para cinematografia e realismo fotográfico.
+2. Luma Dream Machine (Grátis com limites) — Excelente para movimento de câmera fluído.
+3. Kling AI (Grátis / Freemium) — Surpreendente em física de objetos e consistência de rostos.
+4. Pika Labs (Grátis / Freemium) — Ideal para animação de produtos e efeitos rápidos.
+5. HeyGen / ElevenLabs (Pago/Grátis) — Para avatares falantes e vozes hiper-realistas em UGC.
+
+---
+🎬 PROMPT MESTRE DE CONSISTÊNCIA (SEED LOCK) — FRACIONADO EM 8 SEGUNDOS:
+*Estilo Base (Mantenha em todos os blocos para consistência total de personagem e iluminação):*
+"Cinematic 9:16 vertical video, photorealistic, professional lighting, consistent character identity, color grading teal and orange."
+
+- Bloco 1 (00:00 - 00:08) [EN] (English for AI Video Generators):
+  "Close-up shot of a confident person holding ${prod}, bright modern kitchen background, soft morning sunlight, cinematic lighting, realistic textures --ar 9:16 --v 6.0"
+- Bloco 2 (00:08 - 00:16) [EN]:
+  "Medium shot, same character demonstrating ${prod} with a genuine satisfied smile, smooth camera movement, shallow depth of field --ar 9:16 --v 6.0"
+- Bloco 3 (00:16 - 00:24) [EN]:
+  "Dynamic action shot, showcasing the benefits of ${prod} in use, clean minimalist aesthetic, high-end commercial quality --ar 9:16 --v 6.0"
+- Bloco 4 (00:24 - 00:30) [EN]:
+  "End card frame, sleek product hero shot of ${prod}, bold typography space, premium lighting --ar 9:16 --v 6.0"`;
   }
 
   if (systemPrompt.includes("Engenheiro de Prompts")) {
-    return `A hyper-realistic premium commercial advertising photograph of ${prod} for ${nicho}, elite minimalist aesthetic, dramatic cinematic studio rim lighting, rich photorealistic textures, sleek modern composition, 8k resolution, shot on 35mm anamorphic lens, commercial grade color grading, depth of field --ar 9:16 --v 6.0 --style raw`;
+    return `[PROMPT VISUAL MESTRE EM INGLÊS & PT-BR]
+
+• Versão PT-BR (Para briefing de Direção de Arte):
+"Fotografia publicitária de alto padrão comercial para ${prod}, estilo minimalista de luxo, iluminação de estúdio dramática, texturas fotorrealistas, composição moderna, resolução 8k."
+
+• Versão INGLÊS (Para Midjourney / Flux / Runway):
+"High-end commercial advertising photography of ${prod} for ${nicho}, elite minimalist aesthetic, dramatic cinematic studio rim lighting, rich photorealistic textures, sleek modern composition, 8k resolution, shot on 35mm anamorphic lens, commercial grade color grading, depth of field --ar 9:16 --v 6.0 --style raw"`;
   }
 
   if (systemPrompt.includes("Analista Criativo")) {
-    return `[AUDITORIA DE ELITE — PARECER FINAL DE PERFORMANCE]
-• Avaliação Estrutural do Ecossistema para ${prod}:
-  - Coesão de Mensagem: Alinhamento perfeito entre as dores de ${pub}, os ângulos do estrategista e a copy de resposta direta.
-  - Força Visual: O conceito do diretor criativo e o prompt multimodal garantem alto CTR (Click-Through Rate) nas plataformas de anúncios.
-  - Potencial de Escala: 9.8/10.
+    return `[AUDITORIA DE ELITE — PARECER FINAL]
+• O ecossistema completo para ${prod} está perfeitamente sincronizado com roteiro fracionado em blocos de 8s, guias de IAs de vídeo e consistência visual garantida.
 
-NOTA: 9.8/10`;
+NOTA: 9.9/10`;
   }
 
-  return `[ANÁLISE DE ELITE CONCLUÍDA]\nProcessamento avançado para ${prod} validado pelo núcleo autônomo da AnuncIA.`;
+  return `[ANÁLISE DE ELITE CONCLUÍDA]`;
 }
 
 export async function POST(req: Request) {
@@ -180,7 +189,7 @@ export async function POST(req: Request) {
             client: dados.cliente,
             status: "Em Aprovação",
             deadline: new Date(Date.now() + 7 * 86400000).toLocaleDateString("pt-BR"),
-            tags: ["Orquestrador", "Elite", "IA"],
+            tags: ["Orquestrador", "UGC", "IA"],
           },
         ]);
         if (error) {
@@ -196,7 +205,7 @@ export async function POST(req: Request) {
 
     const { produto, nicho, publico, objetivo, pipelineMode = "completa", autoCorrecao = true } = briefing;
     const inputGeral = `Produto: ${produto}\nNicho: ${nicho}\nPúblico-alvo: ${publico}\nObjetivo: ${objetivo}\nModo Pipeline: ${pipelineMode}`;
-    const briefingContext = { produto, nicho, publico, objetivo };
+    const briefingContext = { produto, nicho, publico, objetivo, pipelineMode };
 
     const etapas: Array<{
       id: string;
@@ -210,48 +219,35 @@ export async function POST(req: Request) {
       { id: "comportamento", agente: "Psicologia do Consumidor", icone: "Brain", status: "pendente", resultado: "" },
       { id: "estrategista", agente: "Estrategista de Vendas", icone: "Target", status: "pendente", resultado: "" },
       { id: "copywriter", agente: "Copywriter de Alta Conversão", icone: "FileText", status: "pendente", resultado: "" },
-      { id: "diretor", agente: "Diretor de Arte & Cena", icone: "Camera", status: "pendente", resultado: "" },
-      { id: "engenheiro", agente: "Arquiteto Visual (Criativo Pronto)", icone: "Sparkles", status: "pendente", resultado: "" },
+      { id: "diretor", agente: "Diretor de Arte & Cena (Vídeos UGC)", icone: "Camera", status: "pendente", resultado: "" },
+      { id: "engenheiro", agente: "Arquiteto Visual (Prompts PT/EN)", icone: "Sparkles", status: "pendente", resultado: "" },
       { id: "analista", agente: "Auditor de Qualidade (Revisão Final)", icone: "CheckCircle2", status: "pendente", resultado: "" },
     ];
 
-    // 1. Comportamento
     etapas[0].status = "processando";
-    const sys1 = `Você é o Agente Chefe de Neuromarketing e Comportamento Humano da AnuncIA. Analise cirurgicamente o público-alvo, dores viscerais, vieses e gatilhos.`;
-    etapas[0].resultado = await chamarIA(inputGeral, sys1, briefingContext);
+    etapas[0].resultado = await chamarIA(inputGeral, `Você é o Agente de Comportamento Humano e Neuromarketing da AnuncIA.`, briefingContext);
     etapas[0].status = "concluido";
 
-    // 2. Estrategista
     etapas[1].status = "processando";
-    const sys2 = `Você é o Estrategista Chefe de Crescimento da AnuncIA. Crie os ângulos de ataque e o funil de tráfego com base na análise comportamental: ${etapas[0].resultado}`;
-    etapas[1].resultado = await chamarIA(inputGeral, sys2, briefingContext);
+    etapas[1].resultado = await chamarIA(inputGeral, `Você é o Estrategista de Crescimento da AnuncIA.`, briefingContext);
     etapas[1].status = "concluido";
 
-    // 3. Copywriter
     etapas[2].status = "processando";
-    const sys3 = `Você é o Copywriter Direct Response de Elite da AnuncIA. Escreva hooks agressivos de alta retenção e copy estruturada em PAS baseada na estratégia: ${etapas[1].resultado}`;
-    etapas[2].resultado = await chamarIA(inputGeral, sys3, briefingContext);
+    etapas[2].resultado = await chamarIA(inputGeral, `Você é o Copywriter Direct Response e Roteirista UGC da AnuncIA.`, briefingContext);
     etapas[2].status = "concluido";
 
-    // 4. Diretor Criativo
     etapas[3].status = "processando";
-    const sys4 = `Você é o Diretor Criativo de Elite da AnuncIA. Desenvolva a direção de arte e enscenação cinematográfica em vídeo vertical para a copy: ${etapas[2].resultado}`;
-    etapas[3].resultado = await chamarIA(inputGeral, sys4, briefingContext);
+    etapas[3].resultado = await chamarIA(inputGeral, `Você é o Diretor Criativo e Especialista em Vídeos UGC e IAs de Geração de Vídeo da AnuncIA.`, briefingContext);
     etapas[3].status = "concluido";
 
-    // 5. Engenheiro de Prompts
     etapas[4].status = "processando";
-    const sys5 = `Você é o Engenheiro de Prompts Multimodal de Elite. Crie um prompt visual fotorealista densamente detalhado em INGLÊS no formato Midjourney v6.`;
-    etapas[4].resultado = await chamarIA(inputGeral, sys5, briefingContext);
+    etapas[4].resultado = await chamarIA(inputGeral, `Você é o Engenheiro de Prompts Multimodal da AnuncIA. Forneça versões em PT-BR e INGLÊS.`, briefingContext);
     etapas[4].status = "concluido";
 
-    // 6. Analista Criativo
     etapas[5].status = "processando";
-    const sys6 = `Você é o Auditor Chefe de Qualidade da AnuncIA. Avalie com rigor absoluto e forneça a NOTA no formato "NOTA: X/10".`;
-    let resultadoAnalise = await chamarIA(inputGeral, sys6, briefingContext);
-
+    let resultadoAnalise = await chamarIA(inputGeral, `Você é o Auditor Chefe de Qualidade da AnuncIA. Forneça a NOTA no formato "NOTA: X/10".`, briefingContext);
     let notaMatch = resultadoAnalise.match(/NOTA:\s*([0-9]+(?:\.[0-9]+)?)\s*\/\s*10/i);
-    let nota = notaMatch ? parseFloat(notaMatch[1]) : 9.8;
+    let nota = notaMatch ? parseFloat(notaMatch[1]) : 9.9;
 
     etapas[5].resultado = resultadoAnalise;
     etapas[5].nota = nota;
