@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Video, Sparkles, CheckCircle2, Loader2, Play } from "lucide-react";
+import { Video, Sparkles, BookOpen, CheckCircle2, Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/toast";
 
@@ -48,8 +49,13 @@ export function YoutubeView() {
             <h1 className="text-2xl font-bold tracking-tight">YouTube Growth Engine</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Central de inteligência para estruturar pautas, títulos magnéticos, roteiros e thumbnails para o seu canal.
+            Central de inteligência para estruturar pautas, títulos magnéticos, roteiros e thumbnails para o seu canal de marketing e IA.
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400">
+            <Sparkles className="size-3.5" /> Funil de Conteúdo Ativo
+          </span>
         </div>
       </div>
 
@@ -58,7 +64,7 @@ export function YoutubeView() {
           <Card className="border-border bg-surface/60 backdrop-blur-xl">
             <CardHeader>
               <CardTitle className="text-base">Briefing do Vídeo</CardTitle>
-              <CardDescription>Defina o tema central do seu próximo vídeo.</CardDescription>
+              <CardDescription>Defina o tema central do seu próximo vídeo para o YouTube.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleGerarPauta} className="space-y-4">
@@ -93,18 +99,35 @@ export function YoutubeView() {
           <Card className="border-border bg-surface/60 backdrop-blur-xl">
             <CardHeader>
               <CardTitle className="text-base">Resultado Estratégico</CardTitle>
-              <CardDescription>Estrutura pronta para gravação</CardDescription>
+              <CardDescription>Estrutura pronta para gravação e publicação</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {resultado ? (
                 <div className="space-y-4 animate-fade-in">
                   <div className="p-4 rounded-xl border border-border/50 bg-background/50 space-y-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Título Otimizado</p>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Título Otimizado (CTR Max)</p>
                     <p className="text-base font-bold text-foreground">{resultado.titulo}</p>
                   </div>
+
                   <div className="p-4 rounded-xl border border-border/50 bg-background/50 space-y-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Hook de Retenção</p>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Hook de Retenção (Primeiros 45s)</p>
                     <p className="text-sm font-medium text-primary">{resultado.hook}</p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-border/50 bg-background/50 space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Capítulos / Timestamps</p>
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {resultado.capitulos.map((cap: string, idx: number) => (
+                        <li key={idx} className="flex items-center gap-2">
+                          <CheckCircle2 className="size-3.5 text-success shrink-0" /> {cap}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-border/50 bg-background/50 space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Prompt para Thumbnail (Capa)</p>
+                    <p className="text-xs font-mono text-ai">{resultado.thumbnailPrompt}</p>
                   </div>
                 </div>
               ) : (
