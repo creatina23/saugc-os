@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Video, Sparkles, CheckCircle2, Loader2, Play } from "lucide-react";
+import { Video, Sparkles, CheckCircle2, Loader2, Play, Flame, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,7 @@ interface YoutubeResult {
   hook: string;
   capitulos: string[];
   thumbnailPrompt: string;
+  estrategiaCapping: string;
 }
 
 export function YoutubeView() {
@@ -27,20 +28,23 @@ export function YoutubeView() {
     }
 
     setAnalisando(true);
+    
+    // Simulação executada sob a diretriz do Prompt Mestre Supremo (Mago do YouTube)
     setTimeout(() => {
       setAnalisando(false);
       setResultado({
-        titulo: `[Growth & IA] ${tema} (O Guia Definitivo 2026)`,
-        hook: "00:00 - 00:45: Revelando o erro de R$ 50.000 que a maioria dos gestores comete ao tentar escalar tráfego manualmente.",
+        titulo: `[O Segredo] ${tema} (Revelado por Especialistas)`,
+        hook: "00:00 - 00:45: Revelando o erro de R$ 50.000 que 93% dos gestores cometem ao tentar escalar tráfego manualmente — e como a IA resolve isso em minutos.",
         capitulos: [
-          "00:45 - O Caos Operacional das Agências Tradicionais",
-          "03:20 - Como o Orquestrador de 6 Agentes Automatiza a Estratégia",
-          "08:15 - Estudo de Caso Prático: Do Zero ao Criativo Validado",
-          "14:40 - O Futuro do Marketing Digital com IA Aplicada",
+          "00:45 - O Caos Operacional e o Fim das Agências Lentas",
+          "03:20 - A Anatomia do Orquestrador de Agentes de IA",
+          "08:15 - Estudo de Caso Prático: Do Briefing ao Criativo Validado",
+          "14:40 - O Futuro do Marketing Digital com Automação Total",
         ],
-        thumbnailPrompt: "Cinematic close-up of a digital marketer looking at glowing analytics dashboard, neon lighting, highly detailed, YouTube thumbnail style --ar 16:9 --v 6.0",
+        thumbnailPrompt: "Cinematic close-up of a digital marketer looking at glowing analytics dashboard, neon lighting, dramatic high contrast, YouTube thumbnail style --ar 16:9 --v 6.0",
+        estrategiaCapping: "Foque nos primeiros 3 segundos de vídeo com corte seco na dor principal do público. Isso garante retenção acima de 70% no primeiro minuto.",
       });
-      toast("Pauta e Roteiro para YouTube gerados com sucesso!", { type: "success" });
+      toast("Pauta, Roteiro Mestre e Estratégia gerados com sucesso!", { type: "success" });
     }, 1200);
   }
 
@@ -52,15 +56,15 @@ export function YoutubeView() {
             <span className="flex size-8 items-center justify-center rounded-xl bg-red-500/15 text-red-400">
               <Video className="size-5" />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight">YouTube Growth Engine</h1>
+            <h1 className="text-2xl font-bold tracking-tight">YouTube Growth Engine (Supremacia de Conteúdo)</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Central de inteligência para estruturar pautas, títulos magnéticos, roteiros e thumbnails para o seu canal de marketing e IA.
+            Central de inteligência para estruturar pautas, ganchos de retenção implacáveis e capas de alta conversão.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400">
-            <Sparkles className="size-3.5" /> Funil de Conteúdo Ativo
+            <Sparkles className="size-3.5" /> Motor de Retenção Ativo
           </span>
         </div>
       </div>
@@ -69,8 +73,10 @@ export function YoutubeView() {
         <div className="lg:col-span-5 space-y-6">
           <Card className="border-border bg-surface/60 backdrop-blur-xl">
             <CardHeader>
-              <CardTitle className="text-base">Briefing do Vídeo</CardTitle>
-              <CardDescription>Defina o tema central do seu próximo vídeo para o YouTube.</CardDescription>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Target className="size-4 text-red-400" /> Briefing do Vídeo de Impacto
+              </CardTitle>
+              <CardDescription>Defina o tema central ou a dor mestre do seu próximo vídeo.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleGerarPauta} className="space-y-4">
@@ -83,16 +89,16 @@ export function YoutubeView() {
                     placeholder="Ex: Como escalar tráfego pago..."
                   />
                 </div>
-                <Button type="submit" className="w-full gap-2 font-semibold" disabled={gerando}>
+                <Button type="submit" className="w-full gap-2 font-semibold bg-red-600 hover:bg-red-700 text-white" disabled={gerando}>
                   {gerando ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      Gerando Roteiro e Pauta...
+                      Invocando Mago do YouTube...
                     </>
                   ) : (
                     <>
                       <Play className="size-4 fill-current" />
-                      Gerar Pauta & Estrutura YouTube
+                      Gerar Pauta & Estrutura Suprema
                     </>
                   )}
                 </Button>
@@ -104,8 +110,10 @@ export function YoutubeView() {
         <div className="lg:col-span-7 space-y-6">
           <Card className="border-border bg-surface/60 backdrop-blur-xl">
             <CardHeader>
-              <CardTitle className="text-base">Resultado Estratégico</CardTitle>
-              <CardDescription>Estrutura pronta para gravação e publicação</CardDescription>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Flame className="size-4 text-amber-400" /> Resultado Estratégico Mestre
+              </CardTitle>
+              <CardDescription>Estrutura cirúrgica pronta para gravação e explosão de views</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {resultado ? (
@@ -116,12 +124,12 @@ export function YoutubeView() {
                   </div>
 
                   <div className="p-4 rounded-xl border border-border/50 bg-background/50 space-y-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Hook de Retenção (Primeiros 45s)</p>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Hook de Retenção Crítica (Primeiros 45s)</p>
                     <p className="text-sm font-medium text-primary">{resultado.hook}</p>
                   </div>
 
                   <div className="p-4 rounded-xl border border-border/50 bg-background/50 space-y-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Capítulos / Timestamps</p>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Capítulos / Timestamps Estratégicos</p>
                     <ul className="space-y-1 text-xs text-muted-foreground">
                       {resultado.capitulos.map((cap: string, idx: number) => (
                         <li key={idx} className="flex items-center gap-2">
@@ -132,13 +140,18 @@ export function YoutubeView() {
                   </div>
 
                   <div className="p-4 rounded-xl border border-border/50 bg-background/50 space-y-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Prompt para Thumbnail (Capa)</p>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Estratégia de Retenção do Mago</p>
+                    <p className="text-xs text-amber-300 font-medium">{resultado.estrategiaCapping}</p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-border/50 bg-background/50 space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase">Prompt para Thumbnail (Capa de Alto Clique)</p>
                     <p className="text-xs font-mono text-ai">{resultado.thumbnailPrompt}</p>
                   </div>
                 </div>
               ) : (
                 <div className="py-16 text-center text-muted-foreground text-sm">
-                  Preencha o tema ao lado e clique em gerar para estruturar seu vídeo.
+                  Preencha o tema ao lado e clique em gerar para estruturar seu vídeo magnético.
                 </div>
               )}
             </CardContent>
