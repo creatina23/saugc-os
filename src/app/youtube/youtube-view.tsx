@@ -1,17 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { Video, Sparkles, BookOpen, CheckCircle2, Loader2, Play } from "lucide-react";
+import { Video, Sparkles, CheckCircle2, Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/lib/toast";
+
+interface YoutubeResult {
+  titulo: string;
+  hook: string;
+  capitulos: string[];
+  thumbnailPrompt: string;
+}
 
 export function YoutubeView() {
   const [tema, setTema] = useState("Como escalar tráfego pago usando agentes de IA no Orquestrador da AnuncIA");
   const [gerando, setAnalisando] = useState(false);
-  const [resultado, setResultado] = useState<any | null>(null);
+  const [resultado, setResultado] = useState<YoutubeResult | null>(null);
 
   async function handleGerarPauta(e: React.FormEvent) {
     e.preventDefault();

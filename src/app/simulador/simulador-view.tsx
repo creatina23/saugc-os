@@ -14,13 +14,12 @@ import {
 import { formatBRL, formatNumber } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 
 export function SimuladorView() {
   const [orcamentoDiario, setOrcamentoDiario] = useState<string>("300");
   const [ticketMedio, setTicketMedio] = useState<string>("297");
   const [roasEsperado, setRoasEsperado] = useState<string>("3.5");
-  const [taxaConversao, setTaxaConversao] = useState<string>("2.5"); // %
+  const [taxaConversao, setTaxaConversao] = useState<string>("2.5");
 
   const budgetDia = Number(orcamentoDiario) || 0;
   const budgetMes = budgetDia * 30;
@@ -31,14 +30,12 @@ export function SimuladorView() {
   const receitaMensal = budgetMes * roas;
   const lucroEstimado = receitaMensal - budgetMes;
   const vendasMensais = ticket > 0 ? Math.round(receitaMensal / ticket) : 0;
-  const cliquesEstimados = cpa > 0 ? Math.round((budgetMes / cpa) * 15) : 0; // estimativa de funil
+  const cliquesEstimados = cpa > 0 ? Math.round((budgetMes / cpa) * 15) : 0;
 
-  // Alerta de saturação
   const alertaSaturacao = budgetDia > 2000;
 
   return (
     <div className="space-y-8 pb-16">
-      {/* Cabeçalho */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -59,7 +56,6 @@ export function SimuladorView() {
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Parâmetros de Entrada */}
         <div className="lg:col-span-5 space-y-6">
           <Card className="border-border bg-surface/60 backdrop-blur-xl">
             <CardHeader>
@@ -108,11 +104,11 @@ export function SimuladorView() {
                     placeholder="3.5"
                   />
                 </div>
-                <p className="text-[11px] text-muted-foreground">CPA (Custo por Aquisição) estimado: <span className="font-semibold text-emerald-400">{formatBRL(cpa)}</span></p>
+                <p className="text-[11px] text-muted-foreground">CPA estimado: <span className="font-semibold text-emerald-400">{formatBRL(cpa)}</span></p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Taxa de Conversão Média da Página (%)</label>
+                <label className="text-xs font-medium text-muted-foreground">Taxa de Conversão Média (%)</label>
                 <Input
                   inputMode="decimal"
                   value={taxaConversao}
@@ -126,7 +122,7 @@ export function SimuladorView() {
                   <ShieldAlert className="size-4 shrink-0 mt-0.5" />
                   <div>
                     <p className="font-semibold">Alerta de Saturação de Público</p>
-                    <p className="text-[11px] text-amber-200/80 mt-0.5">Orçamentos acima de R$ 2.000/dia exigem rotação semanal de criativos UGC para evitar fadiga de anúncio.</p>
+                    <p className="text-[11px] text-amber-200/80 mt-0.5">Orçamentos acima de R$ 2.000/dia exigem rotação semanal de criativos.</p>
                   </div>
                 </div>
               )}
@@ -134,7 +130,6 @@ export function SimuladorView() {
           </Card>
         </div>
 
-        {/* Resultados Projetados */}
         <div className="lg:col-span-7 space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Card className="card-glow border-border bg-surface/60 backdrop-blur-xl relative overflow-hidden">
@@ -167,45 +162,38 @@ export function SimuladorView() {
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart3 className="size-4 text-ai" /> Indicadores de Conversão & Volume
               </CardTitle>
-              <CardDescription>Métricas de vendas estimadas com base nos parâmetros inseridos</CardDescription>
+              <CardDescription>Métricas de vendas estimadas com base nos parâmetros</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-xl border border-border/50 bg-background/50">
                 <div>
                   <p className="text-xs text-muted-foreground">Vendas / Mês</p>
                   <p className="text-xl font-bold mt-1">{formatNumber(vendasMensais)}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">pedidos aprovados</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Vendas / Dia</p>
                   <p className="text-xl font-bold mt-1">~{Math.max(1, Math.round(vendasMensais / 30))}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">conversões diárias</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Cliques Úteis</p>
                   <p className="text-xl font-bold mt-1">{formatNumber(cliquesEstimados)}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">visitas qualificadas</p>
                 </div>
               </div>
 
-              {/* Cenários Comparativos */}
               <div className="space-y-2 pt-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cenários de Sensibilidade</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-xl border border-border/40 p-3 bg-surface/30">
                     <p className="text-xs font-medium text-amber-400">Conservador (-20%)</p>
                     <p className="text-sm font-bold mt-1">{formatBRL(receitaMensal * 0.8)}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">ROAS {(roas * 0.8).toFixed(1)}x</p>
                   </div>
                   <div className="rounded-xl border border-primary/40 p-3 bg-primary/5">
                     <p className="text-xs font-medium text-primary">Realista (Atual)</p>
                     <p className="text-sm font-bold mt-1">{formatBRL(receitaMensal)}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">ROAS {roas.toFixed(1)}x</p>
                   </div>
                   <div className="rounded-xl border border-success/40 p-3 bg-success/5">
                     <p className="text-xs font-medium text-success">Otimista (+25%)</p>
                     <p className="text-sm font-bold mt-1">{formatBRL(receitaMensal * 1.25)}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">ROAS {(roas * 1.25).toFixed(1)}x</p>
                   </div>
                 </div>
               </div>
