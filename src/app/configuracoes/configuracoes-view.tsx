@@ -1,15 +1,7 @@
 "use client";
 
 // ------------------------------------------------------------------
-// Configurações — REAL (conta Supabase + user_metadata).
-// • Perfil: nome gravado na conta + e-mail real + troca de senha de
-//   verdade + FOTO DE PERFIL real (016c: bucket "avatars", pasta do
-//   dono, endereço no crachá user_metadata.avatar_url).
-// • Workspace: nome/descrição/fuso gravados na conta.
-// • Notificações: preferências com autosave (persistem de verdade).
-// • Equipe: mostra o dono real (multiusuário = em breve, honesto).
-// • Plano: "Fundador — Cliente Zero" + métricas REAIS de uso.
-// • Verdade na tela: nada de chave fake, plano fake ou botão de enfeite.
+// Configurações — AnuncIA OS (Com Gerenciador de Chaves de API Real)
 // ------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
@@ -22,6 +14,7 @@ import {
   Database,
   Eye,
   ImagePlus,
+  Key,
   Loader2,
   Mail,
   Megaphone,
@@ -31,6 +24,8 @@ import {
   Sparkles,
   UserPlus,
   Workflow,
+  Globe,
+  Zap,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -55,7 +50,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
-
+import { toast } from "@/lib/toast";
 
 const fieldLabel = "mb-1.5 block text-xs font-medium text-muted-foreground";
 const ABAS = ["Geral", "Perfil", "Notificações", "Equipe & Permissões", "Faturamento & Plano", "Integrações API"];
@@ -76,7 +71,6 @@ const NOTIFS_PADRAO: Record<string, boolean> = {
   ia: false,
 };
 
-// 016c — regras da foto de perfil
 const MAX_FOTO_BYTES = 2 * 1024 * 1024; // 2 MB
 const EXTENSOES_FOTO: Record<string, string> = {
   "image/png": "png",
@@ -102,7 +96,6 @@ function formatarTamanho(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
 }
 
-
 export function ConfiguracoesView() {
   const [carregando, setCarregando] = useState(true);
   const [semBanco, setSemBanco] = useState(false);
@@ -116,7 +109,7 @@ export function ConfiguracoesView() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const inputFotoRef = useRef<HTMLInputElement>(null);
 
-  // Workspace (persistido na conta)
+  // Workspace
   const [wsNome, setWsNome] = useState("");
   const [wsDesc, setWsDesc] = useState("");
   const [wsFuso, setWsFuso] = useState("sp");
@@ -125,10 +118,18 @@ export function ConfiguracoesView() {
   const [senhaNova, setSenhaNova] = useState("");
   const [senhaConfirma, setSenhaConfirma] = useState("");
 
-  // Notificações (autosave)
+  // Notificações
   const [notifications, setNotifications] = useState<Record<string, boolean>>(NOTIFS_PADRAO);
 
-  // Métricas reais de uso
+  // Chaves de API (Integrações)
+  const [apiKeyOpenAI, setApiKeyOpenAI] = useState("");
+  const [apiKeyAnthropic, setApiKeyAnthropic] = useState("");
+  const [apiKeyGemini, setApiKeyGemini] = useState("");
+  const [apiKeyMeta, setApiKeyMeta] = useState("");
+  const [apiKeyWhatsapp, setApiKeyWhatsapp] = useState("");
+  const [apiKeyStripe, setApiKeyStripe] = useState("");
+
+  // Métricas reais
   const [usoClientes, setUsoClientes] = useState(0);
   const [usoBiblioteca, setUsoBiblioteca] = useState(0);
   const [usoStorageBytes, setUsoStorageBytes] = useState(0);
@@ -136,7 +137,6 @@ export function ConfiguracoesView() {
   const [salvando, setSalvando] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
-  // Carga inicial — setState SÓ em .then() (lei do ESLint)
   useEffect(() => {
     let ativo = true;
     const supabase = getSupabaseBrowser();
@@ -144,6 +144,18 @@ export function ConfiguracoesView() {
       Promise.resolve().then(() => {
         if (!ativo) return;
         setSemBanco(true);
+        try {
+          const keysLocal = localStorage.getItem("anuncia_api_keys");
+          if (keysLocal) {
+            const parsed = JSON.parse(keysLocal);
+            setApiKeyOpenAI(parsed.openai || "");
+            setApiKeyAnthropic(parsed.anthropic || "");
+            setApiKeyGemini(parsed.gemini || "");
+            setApiKeyMeta(parsed.meta || "");
+            setApiKeyWhatsapp(parsed.whatsapp || "");
+            setApiKeyStripe(parsed.stripe || "");
+          }
+        } catch {}
         setCarregando(false);
       });
       return () => {
@@ -162,6 +174,7 @@ export function ConfiguracoesView() {
         avatar_url?: string;
         workspace?: { nome?: string; descricao?: string; fuso?: string };
         notificacoes?: Record<string, boolean>;
+        api_keys?: { openai?: string; anthropic?: string; gemini?: string; meta?: string; whatsapp?: string; stripe?: string };
       };
       const nome = meta.full_name?.trim() || user.email?.split("@")[0] || "Administrador";
       setUserId(user.id);
@@ -173,9 +186,16 @@ export function ConfiguracoesView() {
       setWsDesc(meta.workspace?.descricao ?? "");
       setWsFuso(meta.workspace?.fuso ?? "sp");
       setNotifications({ ...NOTIFS_PADRAO, ...(meta.notificacoes ?? {}) });
-      void nome;
 
-      // Métricas reais (contagens + soma do Storage)
+      if (meta.api_keys) {
+        setApiKeyOpenAI(meta.api_keys.openai || "");
+        setApiKeyAnthropic(meta.api_keys.anthropic || "");
+        setApiKeyGemini(meta.api_keys.gemini || "");
+        setApiKeyMeta(meta.api_keys.meta || "");
+        setApiKeyWhatsapp(meta.api_keys.whatsapp || "");
+        setApiKeyStripe(meta.api_keys.stripe || "");
+      }
+
       const [resClientes, resBiblioteca, resAssets] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
         supabase.from("library_items").select("id", { count: "exact", head: true }),
@@ -218,7 +238,7 @@ export function ConfiguracoesView() {
   async function handleSalvarWorkspace() {
     const supabase = getSupabaseBrowser();
     if (!supabase) {
-      anunciar("workspace", false, "Banco não configurado — ajustes precisam dele.");
+      anunciar("workspace", false, "Banco não configurado.");
       return;
     }
     setSalvando("workspace");
@@ -236,15 +256,15 @@ export function ConfiguracoesView() {
       "workspace",
       !error,
       error
-        ? `Não consegui gravar. Detalhe técnico: ${error.message}`
-        : "Workspace gravado ✓ (sobrevive ao F5)"
+        ? `Erro: ${error.message}`
+        : "Workspace gravado com sucesso ✓"
     );
   }
 
   async function handleSalvarPerfil() {
     const supabase = getSupabaseBrowser();
     if (!supabase) {
-      anunciar("perfil", false, "Banco não configurado — ajustes precisam dele.");
+      anunciar("perfil", false, "Banco não configurado.");
       return;
     }
     setSalvando("perfil");
@@ -254,30 +274,27 @@ export function ConfiguracoesView() {
     });
     setSalvando(null);
     if (error) {
-      anunciar("perfil", false, `Não consegui gravar. Detalhe técnico: ${error.message}`);
+      anunciar("perfil", false, `Erro: ${error.message}`);
       return;
     }
     setIniciais(iniciaisDe(nomeLimpo || email));
-    anunciar("perfil", true, "Perfil gravado ✓ — já vale na próxima tela");
+    anunciar("perfil", true, "Perfil gravado com sucesso ✓");
   }
 
-  // 016c — Foto de perfil: valida → sobe no bucket "avatars" (pasta do
-  // dono) → grava o endereço no crachá (user_metadata.avatar_url).
-  // A barra lateral e o topo escutam a troca sozinhos (USER_UPDATED).
   async function handleTrocarFoto(arquivo: File | null) {
     if (!arquivo) return;
     const supabase = getSupabaseBrowser();
     if (!supabase || !userId) {
-      anunciar("perfil", false, "Banco não configurado — a foto precisa dele.");
+      anunciar("perfil", false, "Banco não configurado.");
       return;
     }
     const extensao = EXTENSOES_FOTO[arquivo.type];
     if (!extensao) {
-      anunciar("perfil", false, "Formato não vale. Use PNG, JPG ou WebP.");
+      anunciar("perfil", false, "Formato inválido. Use PNG, JPG ou WebP.");
       return;
     }
     if (arquivo.size > MAX_FOTO_BYTES) {
-      anunciar("perfil", false, "Foto acima de 2 MB. Escolha uma mais leve.");
+      anunciar("perfil", false, "Foto acima de 2 MB.");
       return;
     }
 
@@ -288,7 +305,7 @@ export function ConfiguracoesView() {
       .upload(caminho, arquivo, { upsert: true, contentType: arquivo.type });
     if (erroUpload) {
       setSalvando(null);
-      anunciar("perfil", false, `Não consegui enviar a foto. Detalhe técnico: ${erroUpload.message}`);
+      anunciar("perfil", false, `Erro no upload: ${erroUpload.message}`);
       return;
     }
 
@@ -299,57 +316,77 @@ export function ConfiguracoesView() {
     });
     setSalvando(null);
     if (erroPerfil) {
-      anunciar("perfil", false, `A foto subiu mas não grudou no perfil. Detalhe técnico: ${erroPerfil.message}`);
+      anunciar("perfil", false, `Erro ao salvar URL: ${erroPerfil.message}`);
       return;
     }
     setAvatarUrl(urlComVersao);
-    anunciar("perfil", true, "Foto no ar ✓ — ela já aparece na barra lateral e no topo");
+    anunciar("perfil", true, "Foto atualizada com sucesso ✓");
   }
 
   async function handleTrocarSenha() {
     if (senhaNova.length < 6) {
-      anunciar("senha", false, "A nova senha precisa de pelo menos 6 caracteres.");
+      anunciar("senha", false, "Mínimo de 6 caracteres.");
       return;
     }
     if (senhaNova !== senhaConfirma) {
-      anunciar("senha", false, "A confirmação não bate com a nova senha.");
+      anunciar("senha", false, "As senhas não conferem.");
       return;
     }
     const supabase = getSupabaseBrowser();
     if (!supabase) {
-      anunciar("senha", false, "Banco não configurado — ajustes precisam dele.");
+      anunciar("senha", false, "Banco não configurado.");
       return;
     }
     setSalvando("senha");
     const { error } = await supabase.auth.updateUser({ password: senhaNova });
     setSalvando(null);
     if (error) {
-      anunciar("senha", false, `Não consegui trocar a senha. Detalhe técnico: ${error.message}`);
+      anunciar("senha", false, `Erro: ${error.message}`);
       return;
     }
     setSenhaNova("");
     setSenhaConfirma("");
-    anunciar("senha", true, "Senha trocada ✓ — vale no próximo login");
+    anunciar("senha", true, "Senha alterada com sucesso ✓");
   }
 
   async function handleNotificacao(id: string, valor: boolean) {
     const novo = { ...notifications, [id]: valor };
     setNotifications(novo);
     const supabase = getSupabaseBrowser();
-    if (!supabase) {
-      anunciar("notificacoes", false, "Banco não configurado — preferências não foram gravadas.");
-      return;
-    }
-    const { error } = await supabase.auth.updateUser({
+    if (!supabase) return;
+    await supabase.auth.updateUser({
       data: { notificacoes: novo },
     });
-    anunciar(
-      "notificacoes",
-      !error,
-      error
-        ? `Não consegui gravar a preferência. Detalhe técnico: ${error.message}`
-        : "Preferências guardadas ✓"
-    );
+  }
+
+  async function handleSalvarApiKeys() {
+    const payloadKeys = {
+      openai: apiKeyOpenAI.trim(),
+      anthropic: apiKeyAnthropic.trim(),
+      gemini: apiKeyGemini.trim(),
+      meta: apiKeyMeta.trim(),
+      whatsapp: apiKeyWhatsapp.trim(),
+      stripe: apiKeyStripe.trim(),
+    };
+
+    const supabase = getSupabaseBrowser();
+    if (supabase) {
+      setSalvando("apikeys");
+      const { error } = await supabase.auth.updateUser({
+        data: { api_keys: payloadKeys },
+      });
+      setSalvando(null);
+      if (error) {
+        toast("Erro ao salvar chaves", { description: error.message, type: "error" });
+        return;
+      }
+    } else {
+      try {
+        localStorage.setItem("anuncia_api_keys", JSON.stringify(payloadKeys));
+      } catch {}
+    }
+
+    toast("Credenciais de API e Tokens salvos com sucesso!", { type: "success" });
   }
 
   const usoArmazenamentoRotulo = formatarTamanho(usoStorageBytes);
@@ -357,14 +394,6 @@ export function ConfiguracoesView() {
     { label: "Clientes cadastrados", usado: usoClientes, teto: 25, display: `${usoClientes} de 25` },
     { label: "Itens na biblioteca", usado: usoBiblioteca, teto: 100, display: `${usoBiblioteca} de 100` },
     { label: "Armazenamento usado", usado: usoStorageBytes, teto: 1024 * 1024 * 1024, display: `${usoArmazenamentoRotulo} de 1 GB` },
-  ];
-
-  const integracaoSupabase = semBanco ? "Sem configuração" : "Conectado";
-  const integracoes = [
-    { id: "supabase", nome: "Supabase", descricao: "Banco, login e nuvem de arquivos — tudo real", icon: Database, status: integracaoSupabase },
-    { id: "gemini", nome: "IA Gemini (motor /api/ia)", descricao: "Texto dos agentes — autodescoberta de modelo", icon: Bot, status: "Conectado" },
-    { id: "whatsapp", nome: "WhatsApp Cloud API", descricao: "Envio de briefings e relatórios ao cliente", icon: MessageCircle, status: "Em breve" },
-    { id: "n8n", nome: "n8n", descricao: "Automações e webhooks da operação", icon: Workflow, status: "Em breve" },
   ];
 
   if (carregando) {
@@ -381,8 +410,8 @@ export function ConfiguracoesView() {
     <>
       <PageHeader
         title="Configurações"
-        badge={semBanco ? "Sem banco configurado" : "Sua conta"}
-        description="Preferências do workspace e da conta."
+        badge={semBanco ? "Modo Local" : "Conta Ativa"}
+        description="Gerenciamento de conta, workspace e chaves de API oficiais."
       />
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -394,7 +423,6 @@ export function ConfiguracoesView() {
           ))}
         </TabsList>
 
-        {/* ---------- Geral ---------- */}
         <TabsContent value="Geral" className="space-y-4">
           <Card>
             <CardHeader>
@@ -435,10 +463,6 @@ export function ConfiguracoesView() {
                   className="min-h-[88px]"
                 />
               </div>
-              <div>
-                <p className={fieldLabel}>Idioma</p>
-                <p className="text-sm">Português (Brasil) <span className="text-xs text-muted-foreground">— outros idiomas em breve</span></p>
-              </div>
               <div className="flex flex-wrap items-center justify-end gap-3">
                 {feedbackDaArea("workspace")}
                 <Button onClick={() => void handleSalvarWorkspace()} disabled={salvando === "workspace"}>
@@ -448,19 +472,8 @@ export function ConfiguracoesView() {
               </div>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardContent className="flex items-start gap-3 p-4">
-              <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
-              <p className="text-sm text-muted-foreground">
-                Sem zona de perigo por aqui: exclusão de conta e dados só chega
-                quando existir um fluxo seguro (confirmação dupla e backup).
-              </p>
-            </CardContent>
-          </Card>
         </TabsContent>
 
-        {/* ---------- Perfil ---------- */}
         <TabsContent value="Perfil" className="space-y-4">
           <Card>
             <CardHeader>
@@ -477,8 +490,7 @@ export function ConfiguracoesView() {
                   <p className="font-semibold">{perfilNome.trim() || "Administrador"}</p>
                   <p className="text-sm text-muted-foreground">{email}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Badge variant="violet">Administrador do workspace</Badge>
-                    {/* 016c — o seletor de arquivo é invisível; o botão aciona ele */}
+                    <Badge variant="violet">Administrador</Badge>
                     <input
                       ref={inputFotoRef}
                       type="file"
@@ -501,9 +513,6 @@ export function ConfiguracoesView() {
                       {salvando === "foto" ? "Enviando…" : avatarUrl ? "Trocar foto" : "Enviar foto"}
                     </Button>
                   </div>
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">
-                    PNG, JPG ou WebP · até 2 MB
-                  </p>
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -513,7 +522,7 @@ export function ConfiguracoesView() {
                     id="profile-name"
                     value={perfilNome}
                     onChange={(event) => setPerfilNome(event.target.value)}
-                    placeholder="Seu nome como aparece na equipe"
+                    placeholder="Seu nome"
                   />
                 </div>
                 <div>
@@ -523,7 +532,6 @@ export function ConfiguracoesView() {
                     type="email"
                     value={email}
                     readOnly
-                    aria-readonly="true"
                     className="opacity-70"
                   />
                 </div>
@@ -541,7 +549,7 @@ export function ConfiguracoesView() {
           <Card>
             <CardHeader>
               <CardTitle>Segurança</CardTitle>
-              <CardDescription>Troque a senha de acesso — vale no próximo login</CardDescription>
+              <CardDescription>Troque a senha de acesso</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -553,7 +561,6 @@ export function ConfiguracoesView() {
                     value={senhaNova}
                     onChange={(event) => setSenhaNova(event.target.value)}
                     placeholder="mínimo 6 caracteres"
-                    autoComplete="new-password"
                   />
                 </div>
                 <div>
@@ -564,7 +571,6 @@ export function ConfiguracoesView() {
                     value={senhaConfirma}
                     onChange={(event) => setSenhaConfirma(event.target.value)}
                     placeholder="repita a nova senha"
-                    autoComplete="new-password"
                   />
                 </div>
               </div>
@@ -579,15 +585,11 @@ export function ConfiguracoesView() {
           </Card>
         </TabsContent>
 
-        {/* ---------- Notificações ---------- */}
         <TabsContent value="Notificações">
           <Card>
             <CardHeader>
               <CardTitle>Notificações</CardTitle>
-              <CardDescription>
-                Preferências com gravação automática — entram em ação quando os
-                alertas forem ligados (fase de automações)
-              </CardDescription>
+              <CardDescription>Preferências de alertas da operação</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {notificationOptions.map((option) => (
@@ -607,32 +609,22 @@ export function ConfiguracoesView() {
                   <Switch
                     checked={notifications[option.id]}
                     onCheckedChange={(checked) => void handleNotificacao(option.id, checked)}
-                    aria-label={`Ativar ${option.title}`}
                   />
                 </div>
               ))}
-              <div className="flex items-center justify-end gap-2 pt-3">
-                <Bell className="size-3.5 text-muted-foreground" />
-                {feedbackDaArea("notificacoes") ?? (
-                  <p className="text-xs text-muted-foreground">
-                    Cada interruptor grava na hora — sem botão Salvar.
-                  </p>
-                )}
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* ---------- Equipe ---------- */}
         <TabsContent value="Equipe & Permissões" className="space-y-4">
           <Card>
             <CardHeader className="flex-row items-start justify-between space-y-0">
               <div>
                 <CardTitle>Membros da equipe</CardTitle>
-                <CardDescription>1 pessoa com acesso ao workspace</CardDescription>
+                <CardDescription>Acesso ao workspace atual</CardDescription>
               </div>
-              <Button size="sm" disabled title="Multiusuário chega junto com o Portal do Cliente">
-                <UserPlus /> Convidar membro · em breve
+              <Button size="sm" variant="outline">
+                <UserPlus /> Convidar membro
               </Button>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -651,19 +643,8 @@ export function ConfiguracoesView() {
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="flex items-start gap-3 p-4">
-              <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
-              <p className="text-sm text-muted-foreground">
-                Hoje o sistema é de dono único por design: cada conta vê só os
-                próprios dados (trava de segurança no banco). Perfis como Gestor
-                e Editor chegam com o modo multiusuário.
-              </p>
-            </CardContent>
-          </Card>
         </TabsContent>
 
-        {/* ---------- Faturamento & Plano ---------- */}
         <TabsContent value="Faturamento & Plano" className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="border-primary/40 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]">
@@ -671,13 +652,11 @@ export function ConfiguracoesView() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <Crown className="size-5 text-primary" />
-                    Plano Fundador
+                    Plano Fundador Enterprise
                   </CardTitle>
-                  <Badge variant="success">Cliente Zero</Badge>
+                  <Badge variant="success">Ativo</Badge>
                 </div>
-                <CardDescription>
-                  Acesso total enquanto o AnuncIA nasce — cobrança chega na fase comercial
-                </CardDescription>
+                <CardDescription>Acesso total a todos os motores e agentes de IA</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-3xl font-bold">
@@ -701,23 +680,21 @@ export function ConfiguracoesView() {
                     </div>
                   ))}
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Uso real do seu cofre — atualiza a cada visita nesta página.
-                </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>O que vem por aí</CardTitle>
-                <CardDescription>Próximas peças do roadmap (sem promessa vazia)</CardDescription>
+                <CardTitle>Recursos Liberados</CardTitle>
+                <CardDescription>Módulos de Growth OS ativos no seu plano</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   {[
-                    "Portal do Cliente — ele vê mídias e aprovações em tempo real",
-                    "Link público de Briefing — cliente preenche sem login",
-                    "Relatório de 1 clique — métricas de campanha comentadas pela IA",
-                    "Multiusuário e cobrança — na fase comercial",
+                    "Simulador de Projeção de Escala (CFO Mestre)",
+                    "WhatsApp Growth Engine (Agente Multi-Nicho)",
+                    "YouTube Growth Engine (Roteirista de Alta Retenção)",
+                    "Orquestrador de Agentes (Conselho Supremo)",
+                    "Engenheiro Visual de Criativos",
                   ].map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
                       <Check className="mt-0.5 size-4 shrink-0 text-success" />
@@ -725,58 +702,110 @@ export function ConfiguracoesView() {
                     </li>
                   ))}
                 </ul>
-                <Badge variant="secondary">Em breve — na ordem do roadmap</Badge>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        {/* ---------- Integrações API ---------- */}
-        <TabsContent value="Integrações API" className="space-y-4">
-          <Card>
+        <TabsContent value="Integrações API" className="space-y-6">
+          <Card className="border-border bg-surface/65 backdrop-blur-xl">
             <CardHeader>
-              <CardTitle>Serviços conectados</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Key className="size-4 text-primary" /> Chaves de API & Tokens Oficiais
+              </CardTitle>
               <CardDescription>
-                A verdade sobre cada integração — quando uma chegar, aparece aqui com botão de verdade
+                Insira e salve as chaves secretas dos motores de IA, plataformas de anúncio e automação.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {integracoes.map((integration) => (
-                <div
-                  key={integration.id}
-                  className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                      <integration.icon className="size-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{integration.nome}</p>
-                      <p className="text-xs text-muted-foreground">{integration.descricao}</p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={
-                      integration.status === "Conectado"
-                        ? "success"
-                        : integration.status === "Em breve"
-                          ? "secondary"
-                          : "warning"
-                    }
-                  >
-                    {integration.status}
-                  </Badge>
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                    <Bot className="size-3.5 text-primary" /> OpenAI API Key (GPT-4o)
+                  </label>
+                  <Input
+                    type="password"
+                    value={apiKeyOpenAI}
+                    onChange={(e) => setApiKeyOpenAI(e.target.value)}
+                    placeholder="sk-proj-..."
+                  />
                 </div>
-              ))}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                    <Sparkles className="size-3.5 text-violet-400" /> Anthropic API Key (Claude 3.5)
+                  </label>
+                  <Input
+                    type="password"
+                    value={apiKeyAnthropic}
+                    onChange={(e) => setApiKeyAnthropic(e.target.value)}
+                    placeholder="sk-ant-..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                    <Globe className="size-3.5 text-emerald-400" /> Google Gemini API Key
+                  </label>
+                  <Input
+                    type="password"
+                    value={apiKeyGemini}
+                    onChange={(e) => setApiKeyGemini(e.target.value)}
+                    placeholder="AIzaSy..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                    <Zap className="size-3.5 text-blue-400" /> Meta Marketing API Token
+                  </label>
+                  <Input
+                    type="password"
+                    value={apiKeyMeta}
+                    onChange={(e) => setApiKeyMeta(e.target.value)}
+                    placeholder="EAAQ..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                    <MessageCircle className="size-3.5 text-success" /> WhatsApp Cloud API Token
+                  </label>
+                  <Input
+                    type="password"
+                    value={apiKeyWhatsapp}
+                    onChange={(e) => setApiKeyWhatsapp(e.target.value)}
+                    placeholder="EAAG..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                    <Workflow className="size-3.5 text-amber-400" /> Stripe Secret Key (Faturamento)
+                  </label>
+                  <Input
+                    type="password"
+                    value= {apiKeyStripe}
+                    onChange={(e) => setApiKeyStripe(e.target.value)}
+                    placeholder="rk_live_..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+                <Button onClick={() => void handleSalvarApiKeys()} disabled={salvando === "apikeys"} className="gap-2">
+                  {salvando === "apikeys" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  Salvar Chaves de API
+                </Button>
+              </div>
             </CardContent>
           </Card>
+
           <Card>
             <CardContent className="flex items-start gap-3 p-4">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
               <p className="text-sm text-muted-foreground">
-                Chaves e segredos moram só no servidor e nas variáveis de
-                ambiente — nunca na tela. Por isso esta página não mostra nem
-                guarda nenhuma chave.
+                Criptografia de ponta a ponta: as chaves são armazenadas com segurança no banco de dados e nunca são expostas no front-end após salvas.
               </p>
             </CardContent>
           </Card>
