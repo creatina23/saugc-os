@@ -1,4 +1,6 @@
 // orquestrador.service.ts — Sprint 020-C (Pipeline Dinâmica + Persistência Supabase)
+// P0.1: campo aditivo "erro?" — mensagem honesta quando a etapa falhou por
+// falta de resposta do motor de IA. Nenhum campo existente foi removido.
 
 export interface EtapaOrquestracao {
   id: string;
@@ -8,6 +10,7 @@ export interface EtapaOrquestracao {
   resultado: string;
   nota?: number;
   iteracao?: number;
+  erro?: string; // P0.1 — mensagem honesta de falha (sem conteúdo simulado)
 }
 
 export interface PipelineResultado {
@@ -43,9 +46,12 @@ export const orquestradorService = {
         };
       }
 
+      // P0.1: ok:false (falha total) AINDA carrega etapas — a UI precisa
+      // preservar e renderizar o estado real de cada etapa.
       return {
-        ok: true,
-        etapas: data.etapas || [],
+        ok: data.ok === true && Array.isArray(data.etapas) ? true : false,
+        etapas: Array.isArray(data.etapas) ? data.etapas : [],
+        erro: data.erro,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";
