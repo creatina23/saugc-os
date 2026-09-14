@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { BASE_EXCELENCIA } from "@/lib/base-excelencia";
+import { montarPromptCognitivo } from "@/lib/constituicao/composicao";
 
 // MESA DE MOTORES — a IA da AnuncIA nunca morre.
 // ------------------------------------------------------------------
@@ -579,9 +580,20 @@ export async function POST(request: Request) {
   const temperatura = pegarTemperatura(corpo.temperatura);
   const maxTokens = pegarMaxTokens(corpo.maxTokens);
 
-  // 020-A: Base de Excelência muda da tela pra rota — injetada em TODAS as gerações (decisão Reunião 2)
-  // Quanto for necessário para excelência SEM LIMITE — sem diminuir caracteres
-  const promptComExcelencia = `${BASE_EXCELENCIA}\n\n---\nTAREFA DO USUÁRIO:\n${prompt}\n\n---\nLEMBRETE: Entregue quanto for necessário para nível de excelência, sem limite de palavras. Resultado real > aparência.`;
+  // 020-A: Base de Excelência na rota — CORE-03 (P0.2C): montagem via compositor
+  // cognitivo. Constituição 1.0.0 sempre presente (não parametrizável); prompt do
+  // usuário = USER_COMMAND; BASE_EXCELENCIA = LEGACY_REPERTOIRE (íntegra).
+  // O antigo LEMBRETE foi removido por redundância (classificação A, decisão do
+  // dono): suas duas metades já vivem nas LEIS DA CASA (base-excelencia.ts:81-82)
+  // e na Constituição (C-01). Metadata do compositor permanece interno — o
+  // contrato HTTP NÃO muda nesta unidade.
+  const { prompt: promptComExcelencia } = montarPromptCognitivo({
+    userCommand: prompt,
+    selectedRepertoire: {
+      ids: ["legacy-base-excelencia"],
+      conteudo: BASE_EXCELENCIA,
+    },
+  });
 
   // 3) Monta a fila — cada etapa carrega rótulo pro resumo da verdade
   const fila: { rotulo: string; rodar: () => Promise<Tentativa> }[] = [];
