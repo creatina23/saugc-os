@@ -18,6 +18,7 @@
 
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { montarPromptCognitivo } from "@/lib/constituicao/composicao";
 
 // Mensagem honesta de erro (user-facing) — NÃO afirma causa exata
 // (P0.1 não possui diagnóstico de provedor suficiente para isso).
@@ -28,6 +29,7 @@ const MSG_ERRO_IA =
 async function chamarIA(
   promptDoAgente: string,
   systemPrompt: string,
+  agenteId: string,
   _briefingContext?: {
     produto: string;
     nicho: string;
@@ -40,7 +42,16 @@ async function chamarIA(
   const groqKey = process.env.GROQ_API_KEY;
   const openRouterKey = process.env.OPENROUTER_API_KEY;
 
-  const promptCompleto = `${systemPrompt}\n\n--- DADOS DE ENTRADA ---\n${promptDoAgente}`;
+  // CORE-04 (P0.2C): composição cognitiva 1× por chamada — USER_COMMAND
+  // (briefing) + AGENT_CONTRACT (persona, versao "1") sobre a Constituição.
+  const { prompt: promptCompleto } = montarPromptCognitivo({
+    userCommand: promptDoAgente,
+    agentContract: {
+      id: agenteId,
+      versao: "1",
+      conteudo: systemPrompt,
+    },
+  });
 
   // Camada 1: Gemini
   if (geminiKey) {
@@ -80,10 +91,7 @@ async function chamarIA(
         },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: promptDoAgente },
-          ],
+          messages: [{ role: "user", content: promptCompleto }],
           temperature: 0.8,
           max_tokens: 3000,
         }),
@@ -111,10 +119,7 @@ async function chamarIA(
         },
         body: JSON.stringify({
           model: "google/gemini-2.0-flash-exp:free",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: promptDoAgente },
-          ],
+          messages: [{ role: "user", content: promptCompleto }],
           temperature: 0.8,
           max_tokens: 3000,
         }),
@@ -193,7 +198,7 @@ export async function POST(req: Request) {
       systemPrompt: string
     ): Promise<void> {
       etapa.status = "processando";
-      const texto = await chamarIA(inputGeral, systemPrompt, briefingContext);
+      const texto = await chamarIA(inputGeral, systemPrompt, etapa.id, briefingContext);
       if (texto) {
         etapa.resultado = texto;
         etapa.status = "concluido";
@@ -215,6 +220,7 @@ export async function POST(req: Request) {
     const textoAuditor = await chamarIA(
       inputGeral,
       "Você é o Auditor Chefe de Qualidade da AnuncIA. Forneça a NOTA no formato \"NOTA: X/10\".",
+      etapas[5].id,
       briefingContext
     );
     if (textoAuditor) {
