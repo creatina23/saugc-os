@@ -13,7 +13,6 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
-import { clientesService } from "@/lib/services";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import type { Client } from "@/types";
@@ -21,10 +20,30 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
+// TR-04B: converte uma linha REAL da tabela clients (Supabase) no tipo da UI.
+// Nenhuma outra fonte de dados é aceita nesta tela.
+function clienteDaLinha(c: any): Client {
+  return {
+    id: c.id,
+    name: c.name,
+    company: c.company,
+    email: c.email,
+    phone: c.phone,
+    tier: c.tier || "Growth",
+    status: c.status || "Ativo",
+    mrr: Number(c.mrr) || 0,
+    logoInitials: c.logoInitials || String(c.name || "").slice(0, 2).toUpperCase(),
+    since: c.since || "2026-01",
+  };
+}
+
 export function ClientesView() {
-  const [clientes, setClientes] = useState<Client[]>(clientesService.list());
+  // TR-04B: estado inicial SEMPRE vazio — a única fonte é o Supabase (RLS).
+  const [clientes, setClientes] = useState<Client[]>([]);
   const [busca, setBusca] = useState("");
-  const [modoDemo, setModoDemo] = useState(false);
+  const [statusBase, setStatusBase] = useState<"carregando" | "pronto" | "erro">("carregando");
+  const [erroMsg, setErroMsg] = useState("");
+  const [salvando, setSalvando] = useState(false);
 
   // Estados do Modal de Novo Cliente
   const [modalAberto, setModalAberto] = useState(false);
@@ -35,41 +54,37 @@ export function ClientesView() {
   const [plano, setPlano] = useState("Growth");
   const [mrr, setMrr] = useState("12900");
 
-  useEffect(() => {
-    let ativo = true;
+  // TR-04B: SELECT real é a ÚNICA fonte. [] = vazio verdadeiro; erro = erro real.
+  // Nunca há fallback para dados fictícios.
+  async function carregarClientes() {
+    setStatusBase("carregando");
+    setErroMsg("");
     const supabase = getSupabaseBrowser();
-    if (supabase) {
-      supabase
-        .from("clients")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .then(({ data, error }) => {
-          if (!ativo) return;
-          if (!error && data && data.length > 0) {
-            const formatados: Client[] = data.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              company: c.company,
-              email: c.email,
-              phone: c.phone,
-              tier: c.tier || "Growth",
-              status: c.status || "Ativo",
-              mrr: Number(c.mrr) || 0,
-              logoInitials: c.logoInitials || c.name.slice(0, 2).toUpperCase(),
-              since: c.since || "2026-01",
-            }));
-            setClientes(formatados);
-            setModoDemo(false);
-          } else {
-            setModoDemo(true);
-          }
-        });
-    } else {
-      setModoDemo(true);
+    if (!supabase) {
+      setClientes([]);
+      setErroMsg(
+        "Supabase não configurado neste ambiente (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). Nenhum cliente pode ser carregado."
+      );
+      setStatusBase("erro");
+      return;
     }
-    return () => {
-      ativo = false;
-    };
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+      setClientes([]);
+      setErroMsg(error.message);
+      setStatusBase("erro");
+      return;
+    }
+    setClientes((data ?? []).map(clienteDaLinha));
+    setStatusBase("pronto");
+  }
+
+  useEffect(() => {
+    carregarClientes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const clientesFiltrados = clientes.filter(
@@ -90,6 +105,13 @@ export function ClientesView() {
       toast("Preencha o nome e a empresa", { type: "error" });
       return;
     }
+    if (salvando) return;
+
+    const supabase = getSupabaseBrowser();
+    if (!supabase) {
+      toast("Supabase não configurado — não é possível salvar o cliente.", { type: "error" });
+      return;
+    }
 
     const iniciais = nome
       .split(" ")
@@ -98,42 +120,41 @@ export function ClientesView() {
       .slice(0, 2)
       .toUpperCase();
 
-    const novoCliente: Client = {
-      id: "cli_" + Date.now(),
-      name: nome,
-      company: empresa,
-      email: email || "contato@empresa.com",
-      phone: telefone || "(11) 99999-9999",
-      tier: plano as any,
-      status: "Ativo",
-      mrr: Number(mrr) || 0,
-      logoInitials: iniciais,
-      since: new Date().toISOString().slice(0, 7),
-    };
+    setSalvando(true);
+    // TR-04B: INSERT SEM user_id — o banco aplica DEFAULT auth.uid() e a RLS
+    // (WITH CHECK auth.uid() = user_id) valida a propriedade. O registro só é
+    // aceito na UI quando o Supabase devolve a linha persistida (.select().single()).
+    const { data, error } = await supabase
+      .from("clients")
+      .insert([
+        {
+          name: nome,
+          company: empresa,
+          email: email || "contato@empresa.com",
+          phone: telefone || "(11) 99999-9999",
+          tier: plano,
+          status: "Ativo",
+          mrr: Number(mrr) || 0,
+          logoInitials: iniciais,
+          since: new Date().toISOString().slice(0, 7),
+        },
+      ])
+      .select()
+      .single();
+    setSalvando(false);
 
-    // Tenta salvar no Supabase de forma blindada, sem quebrar se a tabela/conexão falhar
-    const supabase = getSupabaseBrowser();
-    if (supabase) {
-      try {
-        await supabase.from("clients").insert([
-          {
-            name: novoCliente.name,
-            company: novoCliente.company,
-            email: novoCliente.email,
-            phone: novoCliente.phone,
-            tier: novoCliente.tier,
-            status: novoCliente.status,
-            mrr: novoCliente.mrr,
-            logoInitials: novoCliente.logoInitials,
-            since: novoCliente.since,
-          },
-        ]);
-      } catch (err) {
-        console.warn("Aviso: Supabase indisponível, salvando localmente.", err);
-      }
+    if (error || !data) {
+      toast(
+        error
+          ? `Falha ao salvar o cliente: ${error.message}`
+          : "Falha ao salvar o cliente: o registro persistido não foi retornado.",
+        { type: "error" }
+      );
+      return; // formulário permanece aberto com os dados para nova tentativa
     }
 
-    setClientes([novoCliente, ...clientes]);
+    setClientes((atual) => [clienteDaLinha(data), ...atual]);
+    setStatusBase("pronto");
     toast("Cliente cadastrado com sucesso!", { type: "success" });
     setModalAberto(false);
     setNome("");
@@ -145,12 +166,25 @@ export function ClientesView() {
   async function handleExcluir(id: string) {
     if (!confirm("Deseja realmente remover este cliente da operação?")) return;
     const supabase = getSupabaseBrowser();
-    if (supabase) {
-      try {
-        await supabase.from("clients").delete().eq("id", id);
-      } catch (err) {
-        console.warn("Aviso: Erro ao excluir no Supabase", err);
-      }
+    if (!supabase) {
+      toast("Supabase não configurado — não é possível excluir o cliente.", { type: "error" });
+      return;
+    }
+    // TR-04B: DELETE real pelo UUID persistido, com confirmação da linha afetada
+    // (.select("id") retorna o que foi efetivamente removido). Sem confirmação,
+    // o cliente permanece na tela.
+    const { data, error } = await supabase
+      .from("clients")
+      .delete()
+      .eq("id", id)
+      .select("id");
+    if (error) {
+      toast(`Falha ao excluir o cliente: ${error.message}`, { type: "error" });
+      return;
+    }
+    if (!data || data.length === 0) {
+      toast("Falha ao excluir: nenhum registro foi removido (não encontrado ou sem permissão).", { type: "error" });
+      return;
     }
     setClientes((atual) => atual.filter((c) => c.id !== id));
     toast("Cliente removido com sucesso", { type: "success" });
@@ -225,7 +259,49 @@ export function ClientesView() {
         </div>
       </div>
 
-      {/* Lista de Clientes */}
+      {/* TR-04B: LOADING — skeleton simples, sem dados */}
+      {statusBase === "carregando" && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Card key={i} className="border-border bg-surface/40 p-6 animate-pulse">
+              <div className="mb-3 h-4 w-2/3 rounded bg-muted" />
+              <div className="mb-6 h-3 w-1/2 rounded bg-muted" />
+              <div className="h-3 w-full rounded bg-muted" />
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* TR-04B: ERROR — erro real com nova tentativa; nunca dados fictícios */}
+      {statusBase === "erro" && (
+        <Card className="border-border bg-surface/60 p-8 text-center">
+          <p className="text-sm font-semibold text-red-400">Falha ao carregar os clientes</p>
+          <p className="mx-auto mt-2 max-w-md break-words text-xs text-muted-foreground">{erroMsg}</p>
+          <Button variant="outline" className="mt-4" onClick={() => carregarClientes()}>
+            Tentar novamente
+          </Button>
+        </Card>
+      )}
+
+      {/* TR-04B: EMPTY — vazio verdadeiro (banco sem clientes ou busca sem resultado) */}
+      {statusBase === "pronto" && clientesFiltrados.length === 0 && (
+        <Card className="border-border bg-surface/60 p-10 text-center">
+          <Users className="mx-auto size-8 text-muted-foreground" />
+          <p className="mt-3 text-sm font-semibold">
+            {clientes.length === 0
+              ? "Você ainda não possui clientes."
+              : "Nenhum cliente encontrado para esta busca."}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {clientes.length === 0
+              ? "Cadastre o primeiro cliente para iniciar uma operação real."
+              : "Ajuste os termos da busca."}
+          </p>
+        </Card>
+      )}
+
+      {/* Lista de Clientes (somente dados reais persistidos) */}
+      {statusBase === "pronto" && clientesFiltrados.length > 0 && (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {clientesFiltrados.map((cliente) => (
           <Card key={cliente.id} className="border-border bg-surface/40 backdrop-blur-md flex flex-col justify-between">
@@ -284,6 +360,7 @@ export function ClientesView() {
           </Card>
         ))}
       </div>
+      )}
 
       {/* Modal Simples de Cadastro */}
       {modalAberto && (
@@ -331,7 +408,9 @@ export function ClientesView() {
                 <Button type="button" variant="ghost" onClick={() => setModalAberto(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">Salvar Cliente</Button>
+                <Button type="submit" disabled={salvando}>
+                  {salvando ? "Salvando..." : "Salvar Cliente"}
+                </Button>
               </div>
             </form>
           </div>
