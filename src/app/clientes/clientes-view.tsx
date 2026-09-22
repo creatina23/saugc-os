@@ -32,7 +32,7 @@ function clienteDaLinha(c: any): Client {
     tier: c.tier || "Growth",
     status: c.status || "Ativo",
     mrr: Number(c.mrr) || 0,
-    logoInitials: c.logoInitials || String(c.name || "").slice(0, 2).toUpperCase(),
+    logoInitials: c.logo_initials || String(c.name || "").slice(0, 2).toUpperCase(),
     since: c.since || "2026-01",
   };
 }
@@ -135,7 +135,7 @@ export function ClientesView() {
           tier: plano,
           status: "Ativo",
           mrr: Number(mrr) || 0,
-          logoInitials: iniciais,
+          logo_initials: iniciais,
           since: new Date().toISOString().slice(0, 7),
         },
       ])
