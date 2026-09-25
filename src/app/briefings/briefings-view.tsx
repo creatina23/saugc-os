@@ -61,7 +61,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { briefings, clients } from "@/lib/mock-data";
+import { briefings } from "@/lib/mock-data";
 import { iaService } from "@/lib/services/ia-service";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -172,6 +172,7 @@ function demoParaBriefing(item: MockBriefing): BriefingReal {
 async function coletarTudo(): Promise<{
   lista: BriefingReal[];
   clientes: string[];
+  clientesErro: string | null;
 } | null> {
   const supabase = getSupabaseBrowser();
   if (!supabase) return null;
@@ -183,11 +184,16 @@ async function coletarTudo(): Promise<{
 
   if (resBriefings.error) return null; // cai no modo demo; selo fica visível
 
+  // TR-04.8B: erro na lista de clientes NÃO vira "zero clientes" silencioso —
+  // briefings seguem disponíveis (degradação honesta) e a falha fica visível.
   return {
     lista: ((resBriefings.data ?? []) as LinhaBriefing[]).map(briefingDaLinha),
-    clientes: ((resClientes.data ?? []) as { company: string | null }[])
-      .map((linha) => linha.company ?? "")
-      .filter(Boolean),
+    clientes: resClientes.error
+      ? []
+      : ((resClientes.data ?? []) as { company: string | null }[])
+          .map((linha) => linha.company ?? "")
+          .filter(Boolean),
+    clientesErro: resClientes.error ? resClientes.error.message : null,
   };
 }
 
@@ -198,6 +204,8 @@ export function BriefingsView() {
   const [clientes, setClientes] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [modoDemo, setModoDemo] = useState(false);
+  // TR-04.8B: falha real na consulta de clientes (distinguível de "zero clientes")
+  const [clientesErro, setClientesErro] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<string>("Todos");
@@ -236,10 +244,14 @@ export function BriefingsView() {
       if (resultado === null) {
         setModoDemo(true);
         setLista(briefings.map(demoParaBriefing));
-        setClientes(clients.map((c) => c.company));
+        // TR-04.8B: modo demo sem empresas fictícias — select de cliente fica
+        // apenas com "Sem cliente"; o selo de demonstração permanece.
+        setClientes([]);
+        setClientesErro(null);
       } else {
         setLista(resultado.lista);
         setClientes(resultado.clientes);
+        setClientesErro(resultado.clientesErro);
       }
       setCarregando(false);
     });
@@ -433,7 +445,9 @@ export function BriefingsView() {
     const prazoLegivel = prazoF ? dataCurta(prazoF) : "";
     const contexto = [
       `- Título do briefing: ${tituloF.trim() || "(não informado)"}`,
-      clienteSel !== "Sem cliente" ? `- Cliente/marca: ${clienteSel}` : "",
+      // TR-04.8B: em modo demo o cliente vem do mock — nunca injetar empresa
+      // fictícia no contexto da IA; em modo real o comportamento não muda.
+      !modoDemo && clienteSel !== "Sem cliente" ? `- Cliente/marca: ${clienteSel}` : "",
       creatorF.trim() ? `- Criador que vai gravar: ${creatorF.trim()}` : "",
       etiquetasF.trim() ? `- Requisitos (tags): ${etiquetasF.trim()}` : "",
       prazoLegivel ? `- Prazo de entrega: ${prazoLegivel}` : "",
@@ -1028,6 +1042,19 @@ CENA 2 (8s): <comando completo>
           </div>
         </CardContent>
       </Card>
+
+      {/* TR-04.8B: falha na lista de clientes — visível, sem inventar dados */}
+      {clientesErro && (
+        <div
+          role="alert"
+          className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+        >
+          <p className="text-sm text-amber-300">
+            Falha ao carregar a lista de clientes: {clientesErro}. Os briefings seguem
+            disponíveis, mas o filtro por cliente está indisponível.
+          </p>
+        </div>
+      )}
 
       {filtered.length > 0 ? (
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
