@@ -2,7 +2,7 @@
 
 // Dashboard — painel verdadeiro (016a) com Infográficos Premium Supremo
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownRight,
@@ -19,6 +19,7 @@ import {
   Zap,
   BarChart3,
   PieChart,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -26,6 +27,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatBRL, formatNumber } from "@/lib/format";
 import {
   activityLog,
@@ -74,6 +76,16 @@ function numero(valor: unknown): number {
   }
   const n = Number(valor);
   return Number.isFinite(n) ? n : 0;
+}
+
+// TR-04.8D.1: data curta real para as atualizações derivadas ("12 ago 2026")
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+function dataCurta(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 interface LinhaCliente {
@@ -132,7 +144,6 @@ interface Atividade {
 }
 
 interface DadosDashboard {
-  origem: "supabase" | "demo";
   kpis: Kpi[];
   funil: FunilEtapa[];
   canais: CanalPerformance[];
@@ -164,7 +175,6 @@ function montarDadosDemo(): DadosDashboard {
   }));
 
   return {
-    origem: "demo",
     kpis: dashboardMetrics.map((m) => ({
       label: m.label,
       value: m.value,
@@ -178,12 +188,27 @@ function montarDadosDemo(): DadosDashboard {
   };
 }
 
-async function coletarDadosReais(supabase: SupabaseClient): Promise<DadosDashboard> {
+// TR-04.8D.1: erro por fonte — res.error nunca vira "zero dados" silencioso.
+type FonteErro = {
+  clientes: string | null;
+  campanhas: string | null;
+  negocios: string | null;
+};
+
+async function coletarDadosReais(
+  supabase: SupabaseClient
+): Promise<{ dados: DadosDashboard; erros: FonteErro }> {
   const [cli, cam, dea] = await Promise.all([
     supabase.from("clients").select("id, name, company, status, mrr, created_at"),
     supabase.from("campaigns").select("id, name, platform, status, spend, revenue, conversions, created_at"),
     supabase.from("deals").select("id, title, stage, value, created_at"),
   ]);
+
+  const erros: FonteErro = {
+    clientes: cli.error ? cli.error.message : null,
+    campanhas: cam.error ? cam.error.message : null,
+    negocios: dea.error ? dea.error.message : null,
+  };
 
   const clientes = (cli.data ?? []) as LinhaCliente[];
   const campanhas = (cam.data ?? []) as LinhaCampanha[];
@@ -197,30 +222,28 @@ async function coletarDadosReais(supabase: SupabaseClient): Promise<DadosDashboa
   const totalRevenue = campanhas.reduce((acc, c) => acc + numero(c.revenue), 0);
   const roi = totalSpend > 0 ? totalRevenue / totalSpend : null;
 
+  // TR-04.8D.1: sem "trend" inventado — tendência só existirá quando houver
+  // comparação real (8D.2+). Os textos de apoio descrevem o cálculo de verdade.
   const kpis: Kpi[] = [
     {
       label: "Receita do mês",
       value: formatBRL(receitaMes),
       change: `soma dos ${clientes.length} clientes da base`,
-      trend: "up",
     },
     {
       label: "Conversões",
       value: formatNumber(conversoes),
       change: "somando todas as campanhas",
-      trend: "up",
     },
     {
       label: "Campanhas ativas",
       value: String(campanhasAtivas.length),
       change: `${campanhas.length} cadastradas no total`,
-      trend: "up",
     },
     {
       label: "ROI Médio",
       value: roi === null ? "—" : `${roi.toFixed(1).replace(".", ",")}x`,
       change: "receita ÷ investido nas campanhas",
-      trend: "up",
     },
   ];
 
@@ -263,30 +286,34 @@ async function coletarDadosReais(supabase: SupabaseClient): Promise<DadosDashboa
     .sort((a, b) => b.valor - a.valor)
     .slice(0, 5);
 
-  const atividadesRecentes = [
-    ...negocios.slice(0, 2).map((n) => ({
-      id: n.id,
-      type: "deal",
-      message: `${n.title || "Negócio"} — Estágio: ${n.stage || "Lead"} (${formatBRL(numero(n.value))})`,
-      timestamp: "Recente",
+  // TR-04.8D.1: "Atualizações recentes" DERIVADAS de registros reais com
+  // created_at — não é um log de eventos e não usa timestamp fake.
+  const derivadas = [
+    ...clientes.map((c) => ({
+      id: `cli-${c.id}`,
+      type: "client",
+      message: `Cliente cadastrado: ${c.name || c.company || "Sem nome"}`,
+      timestamp: dataCurta(c.created_at) || "sem data",
+      quando: c.created_at ?? "",
     })),
-    ...campanhas.slice(0, 2).map((c) => ({
-      id: c.id,
+    ...campanhas.map((c) => ({
+      id: `cam-${c.id}`,
       type: "campaign",
-      message: `Campanha ${c.name || "Ads"} (${c.platform || "Meta"})`,
-      timestamp: "Recente",
+      message: `Campanha criada: ${c.name || "Sem nome"}`,
+      timestamp: dataCurta(c.created_at) || "sem data",
+      quando: c.created_at ?? "",
     })),
   ];
+  const atividadesRecentes: Atividade[] = derivadas
+    .sort((a, b) => (a.quando < b.quando ? 1 : -1))
+    .slice(0, 5)
+    .map(({ id, type, message, timestamp }) => ({ id, type, message, timestamp }));
 
-  const demo = montarDadosDemo();
-
+  // ZERO fallback demo: fonte vazia é vazio honesto; fonte com erro é
+  // comunicada pelo widget correspondente (nunca mock, nunca zero falso).
   return {
-    origem: "supabase",
-    kpis,
-    funil,
-    canais: canais.length > 0 ? canais : demo.canais,
-    atividadesRecentes: atividadesRecentes.length > 0 ? atividadesRecentes : demo.atividadesRecentes,
-    receitaClientes: receitaClientes.length > 0 ? receitaClientes : demo.receitaClientes,
+    dados: { kpis, funil, canais, atividadesRecentes, receitaClientes },
+    erros,
   };
 }
 
@@ -299,28 +326,92 @@ const quickActions = [
 
 const trendIcon = { up: ArrowUpRight, down: ArrowDownRight, neutral: Minus } as const;
 
+// TR-04.8D.1: máquina de estados explícita — LOADING / READY / PARTIAL /
+// ERROR / DEMO. Mock só é alcançável dentro de DEMO (sem Supabase).
+type Painel =
+  | { estado: "loading" }
+  | { estado: "demo"; dados: DadosDashboard }
+  | { estado: "erro" }
+  | { estado: "pronto"; dados: DadosDashboard; erros: FonteErro };
+
+const SEM_ERROS: FonteErro = { clientes: null, campanhas: null, negocios: null };
+
 export function DashboardView() {
-  const [dados, setDados] = useState<DadosDashboard>(montarDadosDemo());
-  const [carregando, setCarregando] = useState(true);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
+  // TR-04.8D.1: nasce em LOADING — nenhum mock aparece antes do dado real.
+  const [painel, setPainel] = useState<Painel>({ estado: "loading" });
+
+  const carregar = useCallback(async () => {
+    if (!supabase) {
+      setPainel({ estado: "demo", dados: montarDadosDemo() });
+      return;
+    }
+    setPainel({ estado: "loading" });
+    try {
+      const { dados, erros } = await coletarDadosReais(supabase);
+      if (erros.clientes && erros.campanhas && erros.negocios) {
+        setPainel({ estado: "erro" }); // ERROR: nenhuma fonte respondeu
+      } else {
+        setPainel({ estado: "pronto", dados, erros }); // READY ou PARTIAL
+      }
+    } catch (err) {
+      // Rejeição explícita: nunca skeleton eterno, nunca demo disfarçada.
+      console.error("Erro ao carregar dados do dashboard:", err);
+      setPainel({ estado: "erro" });
+    }
+  }, [supabase]);
 
   useEffect(() => {
-    async function carregar() {
-      try {
-        const supabase = getSupabaseBrowser();
-        if (!supabase) {
-          setCarregando(false);
-          return;
-        }
-        const res = await coletarDadosReais(supabase);
-        setDados(res);
-      } catch (err) {
-        console.error("Erro ao carregar dados do dashboard:", err);
-      } finally {
-        setCarregando(false);
-      }
-    }
-    carregar();
-  }, []);
+    void carregar();
+  }, [carregar]);
+
+  // ---------- LOADING: skeleton real, zero mock ----------
+  if (painel.estado === "loading") {
+    return (
+      <div className="space-y-6" aria-busy="true" aria-label="Carregando painel">
+        <div className="h-10 w-72 animate-pulse rounded-lg bg-white/10" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {["k1", "k2", "k3", "k4"].map((chave) => (
+            <Skeleton key={chave} className="h-32 w-full rounded-2xl" />
+          ))}
+        </div>
+        <div className="grid gap-8 lg:grid-cols-12">
+          <Skeleton className="h-72 w-full rounded-2xl lg:col-span-6" />
+          <Skeleton className="h-72 w-full rounded-2xl lg:col-span-6" />
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- ERROR: estado explícito + Retry, nunca demo ----------
+  if (painel.estado === "erro") {
+    return (
+      <Card className="mx-auto mt-10 max-w-lg">
+        <CardContent className="flex flex-col items-center px-6 py-12 text-center">
+          <div className="flex size-11 items-center justify-center rounded-xl bg-destructive/15 text-destructive">
+            <Activity className="size-5" />
+          </div>
+          <h2 className="mt-4 text-base font-semibold">Não consegui carregar o painel</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            As fontes de dados não responderam. Nada aqui é ilustração — tente novamente.
+          </p>
+          <Button size="sm" className="mt-4" onClick={() => void carregar()}>
+            <RefreshCw /> Tentar novamente
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const dados = painel.dados;
+  const erros = painel.estado === "pronto" ? painel.erros : SEM_ERROS;
+  const modoDemo = painel.estado === "demo";
+  const fontesFalhas = [
+    erros.clientes ? "clientes" : null,
+    erros.campanhas ? "campanhas" : null,
+    erros.negocios ? "negociações" : null,
+  ].filter((fonte): fonte is string => fonte !== null);
+  const temErroParcial = fontesFalhas.length > 0;
 
   const maxEtapa = Math.max(1, ...dados.funil.map((e) => e.value));
   const maxReceitaCliente = Math.max(1, ...dados.receitaClientes.map((c) => c.valor));
@@ -332,14 +423,19 @@ export function DashboardView() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight">Centro de Comando & Desempenho</h1>
-            {dados.origem === "demo" && (
+            {modoDemo && (
               <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning text-xs">
                 Modo Demonstração (Conecte o Supabase)
               </Badge>
             )}
-            {dados.origem === "supabase" && (
+            {!modoDemo && !temErroParcial && (
               <Badge variant="outline" className="border-success/40 bg-success/10 text-success text-xs">
                 Dados Reais Sincronizados
+              </Badge>
+            )}
+            {temErroParcial && (
+              <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-300 text-xs">
+                Dados Parciais ({fontesFalhas.length} fonte{fontesFalhas.length > 1 ? "s" : ""} com falha)
               </Badge>
             )}
           </div>
@@ -357,7 +453,7 @@ export function DashboardView() {
         </div>
       </div>
 
-      {dados.origem === "demo" && (
+      {modoDemo && (
         <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-lg bg-primary/20 text-primary">
@@ -374,11 +470,30 @@ export function DashboardView() {
         </div>
       )}
 
+      {/* TR-04.8D.1: PARTIAL — persistente, nomeia as fontes e oferece Retry */}
+      {temErroParcial && (
+        <div
+          role="alert"
+          className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+        >
+          <p className="text-sm text-amber-300">
+            Dados parciais: falha ao carregar {fontesFalhas.join(", ")}. Os demais
+            números seguem reais — os blocos afetados avisam o que aconteceu.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => void carregar()}>
+            <RefreshCw /> Recarregar
+          </Button>
+        </div>
+      )}
+
       {/* KPI Cards com Glow e Infográficos em miniatura */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {dados.kpis.map((metric) => {
           const config = kpiConfig[metric.label] ?? kpiConfig["Receita do mês"];
-          const TrendIcon = trendIcon[metric.trend ?? "neutral"];
+          const TrendIcon = metric.trend ? trendIcon[metric.trend] : null;
+          // TR-04.8D.1: KPI de fonte falha não vira zero — vira indisponível.
+          const erroFonte =
+            metric.label === "Receita do mês" ? erros.clientes : erros.campanhas;
           return (
             <Card key={metric.label} className="card-glow relative overflow-hidden group">
               <div className="absolute -right-6 -bottom-6 size-24 rounded-full bg-primary/5 blur-2xl transition-all group-hover:bg-primary/15" />
@@ -389,24 +504,23 @@ export function DashboardView() {
                     <config.icon className="size-4" />
                   </div>
                 </div>
-                <p className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">{metric.value}</p>
-                
-                {/* Mini Gráfico de Pulso Estético */}
-                <div className="mt-3 flex items-end gap-1 h-5 w-full opacity-60 group-hover:opacity-100 transition-opacity">
-                  {[40, 65, 30, 85, 50, 95, 75, 100].map((h, i) => (
-                    <div
-                      key={i}
-                      style={{ height: `${h}%` }}
-                      className="flex-1 rounded-t bg-gradient-to-t from-primary/30 to-ai"
-                    />
-                  ))}
-                </div>
-
-                {metric.change && (
-                  <div className="mt-2 flex items-center gap-1.5 text-xs">
-                    <TrendIcon className="size-3.5 text-success" />
-                    <span className="text-muted-foreground">{metric.change}</span>
-                  </div>
+                {erroFonte ? (
+                  <>
+                    <p className="mt-3 text-2xl font-bold tracking-tight text-muted-foreground md:text-3xl">—</p>
+                    <p className="mt-2 text-xs text-destructive">
+                      Indisponível — falha na consulta. Detalhe técnico: {erroFonte}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">{metric.value}</p>
+                    {metric.change && (
+                      <div className="mt-2 flex items-center gap-1.5 text-xs">
+                        {TrendIcon && <TrendIcon className="size-3.5 text-success" />}
+                        <span className="text-muted-foreground">{metric.change}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -449,8 +563,16 @@ export function DashboardView() {
             </Link>
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
-            {dados.receitaClientes.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">Nenhum cliente cadastrado ainda.</p>
+            {erros.clientes ? (
+              <p role="alert" className="text-sm text-destructive py-8 text-center">
+                Não consegui carregar os clientes — indisponível agora (isso não é
+                zero). Detalhe técnico: {erros.clientes}
+              </p>
+            ) : dados.receitaClientes.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Nenhum cliente cadastrado ainda. Cadastre clientes com receita
+                mensal e este gráfico ganha vida.
+              </p>
             ) : (
               dados.receitaClientes.map((c) => {
                 const pct = Math.max(8, Math.round((c.valor / maxReceitaCliente) * 100));
@@ -487,7 +609,17 @@ export function DashboardView() {
             </Link>
           </CardHeader>
           <CardContent className="space-y-3 pt-4">
-            {dados.funil.map((etapa) => {
+            {erros.negocios ? (
+              <p role="alert" className="text-sm text-destructive py-8 text-center">
+                Negociações indisponíveis — o funil não pode ser exibido (isso não
+                é zero). Detalhe técnico: {erros.negocios}
+              </p>
+            ) : dados.funil.every((etapa) => etapa.value === 0) ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Nenhuma negociação registrada ainda. O funil enche lá no CRM.
+              </p>
+            ) : (
+            dados.funil.map((etapa) => {
               const pct = Math.max(6, Math.round((etapa.value / maxEtapa) * 100));
               return (
                 <div key={etapa.stage} className="space-y-1">
@@ -503,7 +635,8 @@ export function DashboardView() {
                   </div>
                 </div>
               );
-            })}
+            })
+            )}
           </CardContent>
         </Card>
       </div>
@@ -519,7 +652,17 @@ export function DashboardView() {
             <CardDescription>Investimento e retorno gerado por plataforma</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 pt-2">
-            {dados.canais.map((canal) => {
+            {erros.campanhas ? (
+              <p role="alert" className="text-sm text-destructive py-8 text-center">
+                Campanhas indisponíveis — o desempenho por canal não pode ser
+                exibido (isso não é zero). Detalhe técnico: {erros.campanhas}
+              </p>
+            ) : dados.canais.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Nenhuma campanha cadastrada ainda. Crie a primeira em Campanhas.
+              </p>
+            ) : (
+            dados.canais.map((canal) => {
               const corBarra = coresPlataforma[canal.platform] || "bg-primary";
               const roiCanal = canal.spend > 0 ? (canal.revenue / canal.spend).toFixed(1) : "0";
               return (
@@ -547,20 +690,32 @@ export function DashboardView() {
                   </div>
                 </div>
               );
-            })}
+            })
+            )}
           </CardContent>
         </Card>
 
-        {/* Atividades Recentes da Operação */}
+        {/* Atualizações Recentes da Operação */}
         <Card className="lg:col-span-6 card-glow">
           <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Activity className="size-4 text-warning" /> Atividade Recente da Operação
-            </CardTitle>
-            <CardDescription>Últimas movimentações registradas na base</CardDescription>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Activity className="size-4 text-warning" /> Atualizações Recentes
+              </CardTitle>
+              <CardDescription>Derivadas das datas de criação de clientes e campanhas</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 pt-2">
-            {dados.atividadesRecentes.map((item) => {
+            {erros.clientes && erros.campanhas ? (
+              <p role="alert" className="text-sm text-destructive py-8 text-center">
+                Registros indisponíveis — as fontes que alimentam estas
+                atualizações falharam (isso não é vazio).
+              </p>
+            ) : dados.atividadesRecentes.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Nenhum registro ainda. Clientes e campanhas que você criar
+                aparecem aqui com a data real de cadastro.
+              </p>
+            ) : (
+            dados.atividadesRecentes.map((item) => {
               const cfg = activityConfig[item.type] ?? activityConfig.deal;
               return (
                 <div key={item.id} className="flex items-start gap-3 rounded-xl border border-border/40 bg-surface/30 p-3.5 transition-colors hover:border-border">
@@ -575,7 +730,8 @@ export function DashboardView() {
                   </div>
                 </div>
               );
-            })}
+            })
+            )}
           </CardContent>
         </Card>
       </div>
