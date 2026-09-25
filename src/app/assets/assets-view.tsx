@@ -52,7 +52,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { assetsService, clientesService } from "@/lib/services";
+import { assetsService } from "@/lib/services";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Asset, AssetCategory } from "@/types";
@@ -226,6 +226,7 @@ function demoParaMidia(item: Asset): MidiaReal {
 async function coletarTudo(): Promise<{
   midias: MidiaReal[];
   clientes: string[];
+  clientesErro: string | null;
 } | null> {
   const supabase = getSupabaseBrowser();
   if (!supabase) return null;
@@ -246,11 +247,16 @@ async function coletarTudo(): Promise<{
 
   if (resMidias.error) return null; // cai no modo demo; selo fica visível
 
+  // TR-04B.2: erro na lista de clientes NÃO vira "zero clientes" silencioso —
+  // mídias seguem disponíveis (degradação honesta) e a falha fica visível na UI.
   return {
     midias: ((resMidias.data ?? []) as LinhaMidia[]).map(midiaDaLinha),
-    clientes: ((resClientes.data ?? []) as { company: string | null }[])
-      .map((linha) => linha.company ?? "")
-      .filter(Boolean),
+    clientes: resClientes.error
+      ? []
+      : ((resClientes.data ?? []) as { company: string | null }[])
+          .map((linha) => linha.company ?? "")
+          .filter(Boolean),
+    clientesErro: resClientes.error ? resClientes.error.message : null,
   };
 }
 
@@ -282,6 +288,8 @@ export function MídiasView() {
   );
   const [carregando, setCarregando] = useState(true);
   const [modoDemo, setModoDemo] = useState(false);
+  // TR-04B.2: falha real na consulta de clientes (distinguível de "zero clientes")
+  const [clientesErro, setClientesErro] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("Todas");
@@ -308,10 +316,14 @@ export function MídiasView() {
       if (resultado === null) {
         setModoDemo(true);
         setMidias(assetsService.list().map(demoParaMidia));
-        setClientes(clientesService.list().map((c) => c.company));
+        // TR-04B.2: modo demo sem empresas fictícias — filtro/dialog ficam
+        // apenas com "Todos"/"Sem cliente"; o selo de demonstração permanece.
+        setClientes([]);
+        setClientesErro(null);
       } else {
         setMidias(resultado.midias);
         setClientes(resultado.clientes);
+        setClientesErro(resultado.clientesErro);
         const supabase = getSupabaseBrowser();
         const caminhos = resultado.midias
           .filter((m) => m.caminho && m.ehImagem)
@@ -784,6 +796,19 @@ export function MídiasView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* TR-04B.2: falha na lista de clientes — visível, sem inventar dados */}
+      {clientesErro && (
+        <div
+          role="alert"
+          className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+        >
+          <p className="text-sm text-amber-300">
+            Falha ao carregar a lista de clientes: {clientesErro}. As mídias seguem
+            disponíveis, mas o filtro por cliente está indisponível.
+          </p>
+        </div>
+      )}
 
       {erroAcao && (
         <div

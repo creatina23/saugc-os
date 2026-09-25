@@ -3,10 +3,9 @@
 // ------------------------------------------------------------
 // Porta de entrada oficial para TODOS os dados do sistema.
 //
-// Uso:  import { clientesService } from "@/lib/services";
+// Uso:  import { assetsService } from "@/lib/services";
 // ============================================================
 
-export { clientesService } from "./clientes.service";
 export { campanhasService } from "./campanhas.service";
 export { briefingsService } from "./briefings.service";
 export { comerciaisService, commercialStatusOrder } from "./comerciais.service";
