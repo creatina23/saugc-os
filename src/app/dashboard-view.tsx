@@ -5,11 +5,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
   Bot,
+  Briefcase,
+  CircleDollarSign,
   Megaphone,
-  Minus,
   Sparkles,
   Target,
   TrendingUp,
@@ -28,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatBRL, formatNumber } from "@/lib/format";
+import { formatBRL, formatNumber, formatPercent } from "@/lib/format";
 import {
   activityLog,
   campaignPerformance,
@@ -43,9 +42,13 @@ import { cn } from "@/lib/utils";
 
 const kpiConfig: Record<string, { icon: LucideIcon; tone: string }> = {
   "Receita do mês": { icon: Wallet, tone: "bg-primary/15 text-primary shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
+  MRR: { icon: Wallet, tone: "bg-primary/15 text-primary shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
   Conversões: { icon: Target, tone: "bg-success/15 text-success shadow-[0_0_15px_rgba(16,185,129,0.2)]" },
   "Campanhas ativas": { icon: Megaphone, tone: "bg-ai/15 text-ai shadow-[0_0_15px_rgba(139,92,246,0.2)]" },
   "ROI Médio": { icon: TrendingUp, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
+  "ROI Global": { icon: TrendingUp, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
+  "Oportunidades abertas": { icon: Briefcase, tone: "bg-success/15 text-success shadow-[0_0_15px_rgba(16,185,129,0.2)]" },
+  "Pipeline aberto": { icon: CircleDollarSign, tone: "bg-ai/15 text-ai shadow-[0_0_15px_rgba(139,92,246,0.2)]" },
 };
 
 const activityConfig: Record<string, { icon: LucideIcon; tone: string }> = {
@@ -88,6 +91,11 @@ function dataCurta(iso: string | null): string {
   return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// TR-04.8D.2a: BRL com centavos p/ CPC (formatBRL arredonda para inteiro).
+function brl2(valor: number): string {
+  return `R$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 interface LinhaCliente {
   id: string;
   name: string | null;
@@ -103,6 +111,8 @@ interface LinhaCampanha {
   platform: string | null;
   status: string | null;
   spend: unknown;
+  impressions: unknown;
+  clicks: unknown;
   revenue: unknown;
   conversions: unknown;
   created_at: string | null;
@@ -116,22 +126,25 @@ interface LinhaDeal {
   created_at: string | null;
 }
 
-type Trend = "up" | "down" | "neutral";
+// TR-04.8D.2a: KPI sem "trend" — subtexto apenas factual (fonte/cálculo).
 interface Kpi {
   label: string;
   value: string;
-  change?: string;
-  trend?: Trend;
+  sub?: string;
 }
 
-interface FunilEtapa {
+// TR-04.8D.2a: funil por VALOR (R$) — dados reais de deals.value/stage.
+interface FunilValorEtapa {
   stage: string;
-  value: number;
+  valor: number;
+  quantidade: number;
 }
 
 interface CanalPerformance {
   platform: string;
   spend: number;
+  impressions: number;
+  clicks: number;
   revenue: number;
   conversions: number;
 }
@@ -145,18 +158,34 @@ interface Atividade {
 
 interface DadosDashboard {
   kpis: Kpi[];
-  funil: FunilEtapa[];
+  // TR-04.8D.2a: pulso comercial (deals reais) + funil por valor
+  oportunidadesAbertas: number;
+  pipelineAberto: number;
+  ticketMedioAberto: number | null;
+  funilValor: FunilValorEtapa[];
   canais: CanalPerformance[];
   atividadesRecentes: Atividade[];
   receitaClientes: ReceitaCliente[];
 }
 
 function montarDadosDemo(): DadosDashboard {
-  const funil = Object.entries(funilMock).map(([stage, value]) => ({ stage, value }));
-  
+  // TR-04.8D.2a: demo selada — funil por valor deriva do mock (ilustrativo).
+  const abertosMock = dealsMock.filter((d) => d.stage !== "Contrato Fechado");
+  const pipelineAberto = abertosMock.reduce((acc, d) => acc + numero(d.value), 0);
+  const funilValor: FunilValorEtapa[] = Object.entries(funilMock)
+    .filter(([stage]) => stage !== "Contrato Fechado")
+    .map(([stage, valor]) => ({
+      stage,
+      valor,
+      quantidade: abertosMock.filter((d) => d.stage === stage).length,
+    }));
+
   const canais = campaignPerformance.map((c) => ({
     platform: c.platform,
     spend: c.spend,
+    // mock não tem impressões/cliques — CTR/CPC exibem "—" (nada inventado)
+    impressions: 0,
+    clicks: 0,
     revenue: c.spend * 3.8,
     conversions: c.conversions,
   }));
@@ -178,10 +207,12 @@ function montarDadosDemo(): DadosDashboard {
     kpis: dashboardMetrics.map((m) => ({
       label: m.label,
       value: m.value,
-      change: m.change,
-      trend: (m.trend as Trend) || "up",
+      sub: m.change,
     })),
-    funil,
+    oportunidadesAbertas: abertosMock.length,
+    pipelineAberto,
+    ticketMedioAberto: abertosMock.length > 0 ? pipelineAberto / abertosMock.length : null,
+    funilValor,
     canais,
     atividadesRecentes,
     receitaClientes,
@@ -200,7 +231,7 @@ async function coletarDadosReais(
 ): Promise<{ dados: DadosDashboard; erros: FonteErro }> {
   const [cli, cam, dea] = await Promise.all([
     supabase.from("clients").select("id, name, company, status, mrr, created_at"),
-    supabase.from("campaigns").select("id, name, platform, status, spend, revenue, conversions, created_at"),
+    supabase.from("campaigns").select("id, name, platform, status, spend, impressions, clicks, revenue, conversions, created_at"),
     supabase.from("deals").select("id, title, stage, value, created_at"),
   ]);
 
@@ -222,52 +253,76 @@ async function coletarDadosReais(
   const totalRevenue = campanhas.reduce((acc, c) => acc + numero(c.revenue), 0);
   const roi = totalSpend > 0 ? totalRevenue / totalSpend : null;
 
-  // TR-04.8D.1: sem "trend" inventado — tendência só existirá quando houver
-  // comparação real (8D.2+). Os textos de apoio descrevem o cálculo de verdade.
+  // TR-04.8D.2a: pulso comercial real (deals) — aberto = stage ≠ "Contrato
+  // Fechado". Sem ponderação por probabilidade e sem forecast nesta fase.
+  const abertos = negocios.filter((n) => (n.stage || "") !== "Contrato Fechado");
+  const pipelineAberto = abertos.reduce((acc, n) => acc + numero(n.value), 0);
+  const ticketMedioAberto = abertos.length > 0 ? pipelineAberto / abertos.length : null;
+
+  // TR-04.8D.1/2a: sem "trend" inventado — subtextos descrevem o cálculo real.
   const kpis: Kpi[] = [
     {
-      label: "Receita do mês",
+      label: "MRR",
       value: formatBRL(receitaMes),
-      change: `soma dos ${clientes.length} clientes da base`,
+      sub: `soma dos ${clientes.length} clientes da base`,
     },
     {
       label: "Conversões",
       value: formatNumber(conversoes),
-      change: "somando todas as campanhas",
+      sub: `somando ${campanhas.length} campanhas`,
     },
     {
       label: "Campanhas ativas",
       value: String(campanhasAtivas.length),
-      change: `${campanhas.length} cadastradas no total`,
+      sub: `${campanhas.length} cadastradas no total`,
     },
     {
-      label: "ROI Médio",
+      label: "ROI Global",
       value: roi === null ? "—" : `${roi.toFixed(1).replace(".", ",")}x`,
-      change: "receita ÷ investido nas campanhas",
+      sub: "receita ÷ investido nas campanhas",
+    },
+    {
+      label: "Oportunidades abertas",
+      value: String(abertos.length),
+      sub:
+        ticketMedioAberto === null
+          ? "nenhum negócio aberto no CRM"
+          : `ticket médio ${formatBRL(ticketMedioAberto)}`,
+    },
+    {
+      label: "Pipeline aberto",
+      value: formatBRL(pipelineAberto),
+      sub: `${abertos.length} oportunidade${abertos.length === 1 ? "" : "s"} em andamento`,
     },
   ];
 
-  const funilContagem: Record<string, number> = {
-    Lead: 0,
-    Qualificação: 0,
-    "Proposta Enviada": 0,
-    Negociação: 0,
-    "Contrato Fechado": 0,
-  };
-
-  for (const n of negocios) {
+  // TR-04.8D.2a: funil por VALOR — agrupa os estágios reais presentes nos
+  // dados (stage é texto livre no CRM), na ordem do processo comercial.
+  const ORDEM_ETAPAS = ["Lead", "Qualificação", "Proposta Enviada", "Negociação"];
+  const porEtapa: Record<string, { valor: number; quantidade: number }> = {};
+  for (const n of abertos) {
     const st = n.stage || "Lead";
-    funilContagem[st] = (funilContagem[st] ?? 0) + 1;
+    if (!porEtapa[st]) porEtapa[st] = { valor: 0, quantidade: 0 };
+    porEtapa[st].valor += numero(n.value);
+    porEtapa[st].quantidade += 1;
   }
-  const funil = Object.entries(funilContagem).map(([stage, value]) => ({ stage, value }));
+  const funilValor: FunilValorEtapa[] = Object.entries(porEtapa)
+    .sort(([a], [b]) => {
+      const ia = ORDEM_ETAPAS.indexOf(a);
+      const ib = ORDEM_ETAPAS.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    })
+    .map(([stage, m]) => ({ stage, valor: m.valor, quantidade: m.quantidade }));
 
-  const canaisMap: Record<string, { spend: number; revenue: number; conversions: number }> = {};
+  const canaisMap: Record<string, { spend: number; impressions: number; clicks: number; revenue: number; conversions: number }> = {};
   for (const c of campanhas) {
     const plat = c.platform || "Meta Ads";
     if (!canaisMap[plat]) {
-      canaisMap[plat] = { spend: 0, revenue: 0, conversions: 0 };
+      canaisMap[plat] = { spend: 0, impressions: 0, clicks: 0, revenue: 0, conversions: 0 };
     }
     canaisMap[plat].spend += numero(c.spend);
+    canaisMap[plat].impressions += numero(c.impressions);
+    canaisMap[plat].clicks += numero(c.clicks);
     canaisMap[plat].revenue += numero(c.revenue);
     canaisMap[plat].conversions += numero(c.conversions);
   }
@@ -312,7 +367,7 @@ async function coletarDadosReais(
   // ZERO fallback demo: fonte vazia é vazio honesto; fonte com erro é
   // comunicada pelo widget correspondente (nunca mock, nunca zero falso).
   return {
-    dados: { kpis, funil, canais, atividadesRecentes, receitaClientes },
+    dados: { kpis, oportunidadesAbertas: abertos.length, pipelineAberto, ticketMedioAberto, funilValor, canais, atividadesRecentes, receitaClientes },
     erros,
   };
 }
@@ -324,7 +379,7 @@ const quickActions = [
   { label: "IA Studio", description: "Gerar copy e roteiros", href: "/ia-studio", icon: Bot, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
 ];
 
-const trendIcon = { up: ArrowUpRight, down: ArrowDownRight, neutral: Minus } as const;
+
 
 // TR-04.8D.1: máquina de estados explícita — LOADING / READY / PARTIAL /
 // ERROR / DEMO. Mock só é alcançável dentro de DEMO (sem Supabase).
@@ -340,10 +395,15 @@ export function DashboardView() {
   const supabase = useMemo(() => getSupabaseBrowser(), []);
   // TR-04.8D.1: nasce em LOADING — nenhum mock aparece antes do dado real.
   const [painel, setPainel] = useState<Painel>({ estado: "loading" });
+  // TR-04.8D.2a: hora REAL do término do carregamento (nunca simulação).
+  const [atualizadoEm, setAtualizadoEm] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     if (!supabase) {
       setPainel({ estado: "demo", dados: montarDadosDemo() });
+      setAtualizadoEm(
+        new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      );
       return;
     }
     setPainel({ estado: "loading" });
@@ -353,6 +413,9 @@ export function DashboardView() {
         setPainel({ estado: "erro" }); // ERROR: nenhuma fonte respondeu
       } else {
         setPainel({ estado: "pronto", dados, erros }); // READY ou PARTIAL
+        setAtualizadoEm(
+          new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+        );
       }
     } catch (err) {
       // Rejeição explícita: nunca skeleton eterno, nunca demo disfarçada.
@@ -370,8 +433,8 @@ export function DashboardView() {
     return (
       <div className="space-y-6" aria-busy="true" aria-label="Carregando painel">
         <div className="h-10 w-72 animate-pulse rounded-lg bg-white/10" />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {["k1", "k2", "k3", "k4"].map((chave) => (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          {["k1", "k2", "k3", "k4", "k5", "k6"].map((chave) => (
             <Skeleton key={chave} className="h-32 w-full rounded-2xl" />
           ))}
         </div>
@@ -413,9 +476,10 @@ export function DashboardView() {
   ].filter((fonte): fonte is string => fonte !== null);
   const temErroParcial = fontesFalhas.length > 0;
 
-  const maxEtapa = Math.max(1, ...dados.funil.map((e) => e.value));
+  const maxFunilValor = Math.max(1, ...dados.funilValor.map((e) => e.valor));
   const maxReceitaCliente = Math.max(1, ...dados.receitaClientes.map((c) => c.valor));
-  const maxCanalSpend = Math.max(1, ...dados.canais.map((c) => c.spend));
+  // TR-04.8D.2a: escala única p/ comparar investido × retorno no mesmo eixo.
+  const maxCanal = Math.max(1, ...dados.canais.flatMap((c) => [c.spend, c.revenue]));
 
   return (
     <>
@@ -430,7 +494,7 @@ export function DashboardView() {
             )}
             {!modoDemo && !temErroParcial && (
               <Badge variant="outline" className="border-success/40 bg-success/10 text-success text-xs">
-                Dados Reais Sincronizados
+                Dados Reais
               </Badge>
             )}
             {temErroParcial && (
@@ -439,11 +503,23 @@ export function DashboardView() {
               </Badge>
             )}
           </div>
+          {/* TR-04.8D.2a: sem afirmar sincronização contínua — só a hora real
+              em que este carregamento terminou. */}
           <p className="text-sm text-muted-foreground">
-            Visão unificada da operação comercial, conversões em tempo real e eficiência de campanhas.
+            Visão unificada da operação comercial, conversões e eficiência de campanhas.
+            {atualizadoEm && <> Atualizado às {atualizadoEm}.</>}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void carregar()}
+            aria-label="Recarregar dados do painel"
+            className="gap-1.5"
+          >
+            <RefreshCw className="size-3.5" /> Recarregar
+          </Button>
           <Link href="/orquestrador">
             <Button className="gap-2 font-semibold shadow-[0_0_20px_rgba(59,130,246,0.3)]">
               <Sparkles className="size-4" />
@@ -486,14 +562,19 @@ export function DashboardView() {
         </div>
       )}
 
-      {/* KPI Cards com Glow e Infográficos em miniatura */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* TR-04.8D.2a: Pulso do Negócio — 6 KPIs, número forte, sem trend. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {dados.kpis.map((metric) => {
           const config = kpiConfig[metric.label] ?? kpiConfig["Receita do mês"];
-          const TrendIcon = metric.trend ? trendIcon[metric.trend] : null;
           // TR-04.8D.1: KPI de fonte falha não vira zero — vira indisponível.
+          // Mapeamento por fonte real de cada KPI (2a): deals alimentam os 2
+          // KPIs comerciais; clients alimenta MRR; campaigns, os demais.
           const erroFonte =
-            metric.label === "Receita do mês" ? erros.clientes : erros.campanhas;
+            metric.label === "Oportunidades abertas" || metric.label === "Pipeline aberto"
+              ? erros.negocios
+              : metric.label === "MRR" || metric.label === "Receita do mês"
+                ? erros.clientes
+                : erros.campanhas;
           return (
             <Card key={metric.label} className="card-glow relative overflow-hidden group">
               <div className="absolute -right-6 -bottom-6 size-24 rounded-full bg-primary/5 blur-2xl transition-all group-hover:bg-primary/15" />
@@ -506,19 +587,16 @@ export function DashboardView() {
                 </div>
                 {erroFonte ? (
                   <>
-                    <p className="mt-3 text-2xl font-bold tracking-tight text-muted-foreground md:text-3xl">—</p>
+                    <p className="mt-3 text-2xl font-bold tracking-tight text-muted-foreground tabular-nums md:text-3xl">—</p>
                     <p className="mt-2 text-xs text-destructive">
                       Indisponível — falha na consulta. Detalhe técnico: {erroFonte}
                     </p>
                   </>
                 ) : (
                   <>
-                    <p className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">{metric.value}</p>
-                    {metric.change && (
-                      <div className="mt-2 flex items-center gap-1.5 text-xs">
-                        {TrendIcon && <TrendIcon className="size-3.5 text-success" />}
-                        <span className="text-muted-foreground">{metric.change}</span>
-                      </div>
+                    <p className="mt-3 text-2xl font-bold tracking-tight tabular-nums md:text-3xl">{metric.value}</p>
+                    {metric.sub && (
+                      <p className="mt-2 text-xs text-muted-foreground">{metric.sub}</p>
                     )}
                   </>
                 )}
@@ -554,9 +632,9 @@ export function DashboardView() {
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
               <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <BarChart3 className="size-4 text-primary" /> Receita do Mês por Cliente
+                <BarChart3 className="size-4 text-primary" /> MRR por Cliente
               </CardTitle>
-              <CardDescription>Top clientes geradores de receita na base</CardDescription>
+              <CardDescription>Maiores receitas mensais recorrentes da base (clients.mrr)</CardDescription>
             </div>
             <Link href="/clientes">
               <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">Ver todos</Button>
@@ -595,14 +673,14 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        {/* Funil de Conversão Comercial */}
+        {/* TR-04.8D.2a: Funil Comercial por VALOR (R$) — deals reais. */}
         <Card className="lg:col-span-6 card-glow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
               <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <Target className="size-4 text-success" /> Funil de Conversão Comercial
+                <Target className="size-4 text-success" /> Funil Comercial
               </CardTitle>
-              <CardDescription>Volume de negócios em cada etapa do pipeline</CardDescription>
+              <CardDescription>Valor em aberto por etapa (negócios não fechados)</CardDescription>
             </div>
             <Link href="/crm">
               <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">Ver CRM</Button>
@@ -614,28 +692,55 @@ export function DashboardView() {
                 Negociações indisponíveis — o funil não pode ser exibido (isso não
                 é zero). Detalhe técnico: {erros.negocios}
               </p>
-            ) : dados.funil.every((etapa) => etapa.value === 0) ? (
+            ) : dados.oportunidadesAbertas === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
-                Nenhuma negociação registrada ainda. O funil enche lá no CRM.
+                Nenhuma oportunidade aberta. Crie negócios no CRM e o funil
+                aparece aqui com o valor real de cada etapa.
               </p>
             ) : (
-            dados.funil.map((etapa) => {
-              const pct = Math.max(6, Math.round((etapa.value / maxEtapa) * 100));
-              return (
-                <div key={etapa.stage} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs font-medium">
-                    <span className="text-muted-foreground">{etapa.stage}</span>
-                    <span className="font-bold text-foreground">{etapa.value} negociações</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden">
-                    <div
-                      style={{ width: `${pct}%` }}
-                      className="h-full rounded-full bg-gradient-to-r from-success/80 to-success transition-all duration-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                    />
-                  </div>
+            <>
+              <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/50 bg-surface/40 p-3 text-center">
+                <div>
+                  <p className="text-[11px] text-muted-foreground">Abertas</p>
+                  <p className="text-sm font-bold tabular-nums">{dados.oportunidadesAbertas}</p>
                 </div>
-              );
-            })
+                <div>
+                  <p className="text-[11px] text-muted-foreground">Pipeline aberto</p>
+                  <p className="text-sm font-bold tabular-nums text-success">{formatBRL(dados.pipelineAberto)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">Ticket médio</p>
+                  <p className="text-sm font-bold tabular-nums">
+                    {dados.ticketMedioAberto === null ? "—" : formatBRL(dados.ticketMedioAberto)}
+                  </p>
+                </div>
+              </div>
+              {dados.funilValor.map((etapa) => {
+                const pct = Math.max(4, Math.round((etapa.valor / maxFunilValor) * 100));
+                return (
+                  <div key={etapa.stage} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-medium">
+                      <span className="text-muted-foreground">{etapa.stage}</span>
+                      <span className="font-bold text-foreground tabular-nums">
+                        {formatBRL(etapa.valor)}
+                        <span className="ml-1.5 font-normal text-muted-foreground">
+                          ({etapa.quantidade} {etapa.quantidade === 1 ? "negócio" : "negócios"})
+                        </span>
+                      </span>
+                    </div>
+                    <div
+                      className="h-2 w-full rounded-full bg-muted/60 overflow-hidden"
+                      title={`${etapa.stage}: ${formatBRL(etapa.valor)} em ${etapa.quantidade} negócio(s)`}
+                    >
+                      <div
+                        style={{ width: `${pct}%` }}
+                        className="h-full rounded-full bg-gradient-to-r from-success/80 to-success transition-all duration-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </>
             )}
           </CardContent>
         </Card>
@@ -643,13 +748,13 @@ export function DashboardView() {
 
       {/* Campanhas por Canal & Atividades Recentes */}
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Desempenho por Canal */}
+        {/* TR-04.8D.2a: Performance por Canal — descritivo, sem recomendação. */}
         <Card className="lg:col-span-6 card-glow">
           <CardHeader>
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <PieChart className="size-4 text-ai" /> Eficiência por Canal de Anúncios
+              <PieChart className="size-4 text-ai" /> Performance por Canal
             </CardTitle>
-            <CardDescription>Investimento e retorno gerado por plataforma</CardDescription>
+            <CardDescription>Como os canais estão performando — investido, retorno e eficiência (dados reais das campanhas)</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 pt-2">
             {erros.campanhas ? (
@@ -664,28 +769,91 @@ export function DashboardView() {
             ) : (
             dados.canais.map((canal) => {
               const corBarra = coresPlataforma[canal.platform] || "bg-primary";
-              const roiCanal = canal.spend > 0 ? (canal.revenue / canal.spend).toFixed(1) : "0";
+              const roi = canal.spend > 0 ? canal.revenue / canal.spend : null;
+              const roiTexto = roi === null ? "—" : `${roi.toFixed(1).replace(".", ",")}x`;
+              // Correção 8D.2a: ROI do canal é DESCRITIVO e visualmente neutro —
+              // não há meta de ROI por canal que justifique semáforo aqui. O
+              // semáforo real (roas vs roas_meta) entra na 8D.2b.
+              // Denominador zero ⇒ "—", nunca zero falso.
+              const ctr = canal.impressions > 0 ? formatPercent((canal.clicks / canal.impressions) * 100) : "—";
+              const cpc = canal.clicks > 0 ? brl2(canal.spend / canal.clicks) : "—";
+              const cpa = canal.conversions > 0 ? formatBRL(canal.spend / canal.conversions) : "—";
+              const pctSpend = canal.spend > 0 ? Math.max(2, Math.round((canal.spend / maxCanal) * 100)) : 0;
+              const pctRetorno = canal.revenue > 0 ? Math.max(2, Math.round((canal.revenue / maxCanal) * 100)) : 0;
               return (
-                <div key={canal.platform} className="space-y-2 rounded-xl border border-border/50 bg-surface/40 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("size-3 rounded-full", corBarra)} />
-                      <span className="font-semibold text-sm">{canal.platform}</span>
+                <div key={canal.platform} className="space-y-2.5 rounded-xl border border-border/50 bg-surface/40 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={cn("size-3 shrink-0 rounded-full", corBarra)} />
+                      <span className="truncate text-sm font-semibold">{canal.platform}</span>
                     </div>
-                    <span className="text-xs font-bold text-success">{roiCanal}x ROI</span>
+                    <span
+                      className="shrink-0 text-xs font-bold tabular-nums text-foreground"
+                      title="ROI = retorno ÷ investido"
+                    >
+                      {roiTexto} ROI
+                    </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs pt-1">
-                    <div>
-                      <p className="text-muted-foreground">Investido</p>
-                      <p className="font-medium text-foreground">{formatBRL(canal.spend)}</p>
+                  <div
+                    className="space-y-1.5"
+                    role="img"
+                    aria-label={`${canal.platform}: investido ${formatBRL(canal.spend)}, retorno ${formatBRL(canal.revenue)}, ${formatNumber(canal.conversions)} conversões, ROI ${roiTexto}`}
+                  >
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="w-16 shrink-0 text-muted-foreground">Investido</span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted/60">
+                        <div
+                          style={{ width: `${pctSpend}%` }}
+                          className="h-full rounded-full bg-primary/60 transition-all duration-500"
+                        />
+                      </div>
+                      <span className="w-20 shrink-0 text-right font-medium tabular-nums">{formatBRL(canal.spend)}</span>
                     </div>
-                    <div>
-                      <p className="text-muted-foreground">Retorno</p>
-                      <p className="font-medium text-foreground">{formatBRL(canal.revenue)}</p>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="w-16 shrink-0 text-muted-foreground">Retorno</span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted/60">
+                        <div
+                          style={{ width: `${pctRetorno}%` }}
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-ai shadow-[0_0_8px_rgba(59,130,246,0.35)] transition-all duration-500"
+                        />
+                      </div>
+                      <span className="w-20 shrink-0 text-right font-medium tabular-nums">{formatBRL(canal.revenue)}</span>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 pt-0.5 text-xs">
                     <div>
                       <p className="text-muted-foreground">Conversões</p>
-                      <p className="font-medium text-foreground">{formatNumber(canal.conversions)}</p>
+                      <p className="font-medium tabular-nums text-foreground">{formatNumber(canal.conversions)}</p>
+                    </div>
+                    <div
+                      title={
+                        canal.impressions > 0
+                          ? `CTR = cliques ÷ impressões (${formatNumber(canal.clicks)} ÷ ${formatNumber(canal.impressions)})`
+                          : "Sem impressões registradas neste canal"
+                      }
+                    >
+                      <p className="text-muted-foreground">CTR</p>
+                      <p className="font-medium tabular-nums text-foreground">{ctr}</p>
+                    </div>
+                    <div
+                      title={
+                        canal.clicks > 0
+                          ? `CPC = investido ÷ cliques (${formatBRL(canal.spend)} ÷ ${formatNumber(canal.clicks)})`
+                          : "Sem cliques registrados neste canal"
+                      }
+                    >
+                      <p className="text-muted-foreground">CPC</p>
+                      <p className="font-medium tabular-nums text-foreground">{cpc}</p>
+                    </div>
+                    <div
+                      title={
+                        canal.conversions > 0
+                          ? `CPA = investido ÷ conversões (${formatBRL(canal.spend)} ÷ ${formatNumber(canal.conversions)})`
+                          : "Sem conversões registradas neste canal"
+                      }
+                    >
+                      <p className="text-muted-foreground">CPA</p>
+                      <p className="font-medium tabular-nums text-foreground">{cpa}</p>
                     </div>
                   </div>
                 </div>
