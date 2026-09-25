@@ -59,7 +59,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL, formatCompact } from "@/lib/format";
-import { campaigns, clients } from "@/lib/mock-data";
+import { campaigns } from "@/lib/mock-data";
 import { iaService } from "@/lib/services/ia-service";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -183,6 +183,7 @@ function demoParaCampanha(item: MockCampanha): CampanhaReal {
 async function coletarTudo(): Promise<{
   campanhas: CampanhaReal[];
   clientes: string[];
+  clientesErro: string | null;
 } | null> {
   const supabase = getSupabaseBrowser();
   if (!supabase) return null;
@@ -194,11 +195,16 @@ async function coletarTudo(): Promise<{
 
   if (resCampanhas.error) return null; // cai no modo demo; selo fica visível
 
+  // TR-04.8A: erro na lista de clientes NÃO vira "zero clientes" silencioso —
+  // campanhas seguem disponíveis (degradação honesta) e a falha fica visível.
   return {
     campanhas: ((resCampanhas.data ?? []) as LinhaCampanha[]).map(campanhaDaLinha),
-    clientes: ((resClientes.data ?? []) as { company: string | null }[])
-      .map((linha) => linha.company ?? "")
-      .filter(Boolean),
+    clientes: resClientes.error
+      ? []
+      : ((resClientes.data ?? []) as { company: string | null }[])
+          .map((linha) => linha.company ?? "")
+          .filter(Boolean),
+    clientesErro: resClientes.error ? resClientes.error.message : null,
   };
 }
 
@@ -251,6 +257,8 @@ export function CampanhasView() {
   const [clientes, setClientes] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [modoDemo, setModoDemo] = useState(false);
+  // TR-04.8A: falha real na consulta de clientes (distinguível de "zero clientes")
+  const [clientesErro, setClientesErro] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<string>("Todas");
@@ -291,10 +299,14 @@ export function CampanhasView() {
       if (resultado === null) {
         setModoDemo(true);
         setLista(campaigns.map(demoParaCampanha));
-        setClientes(clients.map((c) => c.company));
+        // TR-04.8A: modo demo sem empresas fictícias — select de cliente fica
+        // apenas com "Sem cliente"; o selo de demonstração permanece.
+        setClientes([]);
+        setClientesErro(null);
       } else {
         setLista(resultado.campanhas);
         setClientes(resultado.clientes);
+        setClientesErro(resultado.clientesErro);
       }
       setCarregando(false);
     });
@@ -1093,6 +1105,19 @@ Entregue EXATAMENTE nesta estrutura, sem introdução nem conclusão:
           </div>
         </CardContent>
       </Card>
+
+      {/* TR-04.8A: falha na lista de clientes — visível, sem inventar dados */}
+      {clientesErro && (
+        <div
+          role="alert"
+          className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+        >
+          <p className="text-sm text-amber-300">
+            Falha ao carregar a lista de clientes: {clientesErro}. As campanhas seguem
+            disponíveis, mas o filtro por cliente está indisponível.
+          </p>
+        </div>
+      )}
 
       {filtered.length > 0 ? (
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
