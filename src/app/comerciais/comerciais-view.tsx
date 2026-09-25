@@ -51,7 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { clients, commercials } from "@/lib/mock-data";
+import { commercials } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { CommercialStatus, ThumbnailTone } from "@/types";
@@ -184,6 +184,7 @@ function demoParaComercial(item: MockComercial): ComercialReal {
 async function coletarTudo(): Promise<{
   lista: ComercialReal[];
   clientes: string[];
+  clientesErro: string | null;
 } | null> {
   const supabase = getSupabaseBrowser();
   if (!supabase) return null;
@@ -195,11 +196,16 @@ async function coletarTudo(): Promise<{
 
   if (resComerciais.error) return null; // cai no modo demo; selo fica visível
 
+  // TR-04.8C: erro na lista de clientes NÃO vira "zero clientes" silencioso —
+  // comerciais seguem disponíveis (degradação honesta) e a falha fica visível.
   return {
     lista: ((resComerciais.data ?? []) as LinhaComercial[]).map(comercialDaLinha),
-    clientes: ((resClientes.data ?? []) as { company: string | null }[])
-      .map((linha) => linha.company ?? "")
-      .filter(Boolean),
+    clientes: resClientes.error
+      ? []
+      : ((resClientes.data ?? []) as { company: string | null }[])
+          .map((linha) => linha.company ?? "")
+          .filter(Boolean),
+    clientesErro: resClientes.error ? resClientes.error.message : null,
   };
 }
 
@@ -211,6 +217,8 @@ export function ComerciaisView() {
   const [clientes, setClientes] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [modoDemo, setModoDemo] = useState(false);
+  // TR-04.8C: falha real na consulta de clientes (distinguível de "zero clientes")
+  const [clientesErro, setClientesErro] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [client, setClient] = useState("Todos");
@@ -240,10 +248,14 @@ export function ComerciaisView() {
       if (resultado === null) {
         setModoDemo(true);
         setLista(commercials.map(demoParaComercial));
-        setClientes(clients.map((c) => c.company));
+        // TR-04.8C: modo demo sem empresas fictícias — select de cliente fica
+        // apenas com "Sem cliente"; o selo de demonstração permanece.
+        setClientes([]);
+        setClientesErro(null);
       } else {
         setLista(resultado.lista);
         setClientes(resultado.clientes);
+        setClientesErro(resultado.clientesErro);
       }
       setCarregando(false);
     });
@@ -717,6 +729,19 @@ export function ComerciaisView() {
           >
             <X className="size-4" />
           </button>
+        </div>
+      )}
+
+      {/* TR-04.8C: falha na lista de clientes — visível, sem inventar dados */}
+      {clientesErro && (
+        <div
+          role="alert"
+          className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+        >
+          <p className="text-sm text-amber-300">
+            Falha ao carregar a lista de clientes: {clientesErro}. Os comerciais seguem
+            disponíveis, mas o filtro por cliente está indisponível.
+          </p>
         </div>
       )}
 
