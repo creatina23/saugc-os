@@ -2,6 +2,16 @@
 // sem conhecimento da máquina de estados Truth. Código movido 1:1.
 import type { ContagemRotulo } from "./types";
 
+// TR-04.8D.2c-2 (Correção 1): número ESTRITO p/ o motor de attention —
+// ausência (null/undefined/""/NaN/Infinity/valor inválido) vira NaN, NUNCA 0.
+// O motor (src/lib/attention.ts) usa Number.isFinite: NaN impede R2 de
+// afirmar "0 conversões" sem prova numérica real de zero.
+export function numeroEstrito(valor: unknown): number {
+  if (valor === null || valor === undefined || valor === "") return NaN;
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 export function numero(valor: unknown): number {
   if (typeof valor === "number" && Number.isFinite(valor)) return valor;
   if (typeof valor === "string") {

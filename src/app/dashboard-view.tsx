@@ -41,7 +41,16 @@ import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
+// TR-04.8D.2c-2: motor PURO de attention (regras R1–R4/R6) + painel.
+import {
+  calcularSinais,
+  type BriefingParaSinais,
+  type CampanhaParaSinais,
+  type ComercialParaSinais,
+} from "@/lib/attention";
+
 import { AssetsCategoria } from "@/components/dashboard/assets-categoria";
+import { AttentionPanel } from "@/components/dashboard/attention-panel";
 import { AtualizacoesRecentes } from "@/components/dashboard/atualizacoes-recentes";
 import { CadenciaRegistros } from "@/components/dashboard/cadencia";
 import { FunilComercial } from "@/components/dashboard/funil-comercial";
@@ -62,7 +71,7 @@ import type {
   RoasMeta,
   TopCampanha,
 } from "@/components/dashboard/types";
-import { contarPorRotulo, dataCurta, MESES, numero } from "@/components/dashboard/utils";
+import { contarPorRotulo, dataCurta, MESES, numero, numeroEstrito } from "@/components/dashboard/utils";
 
 interface LinhaCliente {
   id: string;
@@ -87,10 +96,22 @@ interface LinhaCampanha {
   created_at: string | null;
 }
 
-// TR-04.8D.2b: linhas mínimas das novas fontes (read-only)
-interface LinhaStatus {
+// TR-04.8D.2b: linhas mínimas das novas fontes (read-only).
+// TR-04.8D.2c-2: briefings/commercials recebem title+deadline (motor de
+// attention). deadline é DATA CIVIL "YYYY-MM-DD" (input type="date") ou null.
+interface LinhaBriefing {
   id: string;
+  title: string | null;
   status: string | null;
+  deadline: string | null;
+  created_at: string | null;
+}
+
+interface LinhaComercial {
+  id: string;
+  title: string | null;
+  status: string | null;
+  deadline: string | null;
   created_at: string | null;
 }
 
@@ -127,6 +148,11 @@ interface DadosDashboard {
   topCampanhas: TopCampanha[] | null;
   cadencia: MesCadencia[] | null;
   assetsPorCategoria: ContagemRotulo[];
+  // TR-04.8D.2c-2: linhas normalizadas p/ o motor de attention (src/lib/
+  // attention.ts). Regras vivem SÓ no motor; aqui apenas preparação de dados.
+  campanhasParaSinais: CampanhaParaSinais[];
+  briefingsParaSinais: BriefingParaSinais[];
+  commercialsParaSinais: ComercialParaSinais[];
 }
 
 function montarDadosDemo(): DadosDashboard {
@@ -205,6 +231,24 @@ function montarDadosDemo(): DadosDashboard {
     topCampanhas: null, // mock é agregado por plataforma, não campanhas
     cadencia: null, // mock não tem created_at
     assetsPorCategoria,
+    // TR-04.8D.2c-2 (demo selada): o motor de attention só recebe o que os
+    // mocks sustentam. Mock NÃO tem campanhas individuais → array vazio.
+    // Mocks de briefing/comercial têm status, mas o deadline do mock é TEXTO
+    // de exibição ("12 ago 2026"), não data civil ISO → null honesto (motor
+    // não gera R3/R4; painel exibe "Não disponível na demonstração.").
+    campanhasParaSinais: [],
+    briefingsParaSinais: briefingsMock.map((b) => ({
+      id: b.id,
+      titulo: b.title,
+      status: b.status,
+      deadline: null,
+    })),
+    commercialsParaSinais: commercialsMock.map((c) => ({
+      id: c.id,
+      titulo: c.title,
+      status: c.status,
+      deadline: null,
+    })),
   };
 }
 
@@ -227,8 +271,9 @@ async function coletarDadosReais(
     supabase.from("clients").select("id, name, company, status, mrr, created_at"),
     supabase.from("campaigns").select("id, name, platform, status, spend, impressions, clicks, revenue, conversions, roas_meta, created_at"),
     supabase.from("deals").select("id, title, stage, value, created_at"),
-    supabase.from("briefings").select("id, status, created_at"),
-    supabase.from("commercials").select("id, status, created_at"),
+    // TR-04.8D.2c-2: +title/deadline (somente o que o motor de attention usa)
+    supabase.from("briefings").select("id, title, status, deadline, created_at"),
+    supabase.from("commercials").select("id, title, status, deadline, created_at"),
     supabase.from("assets").select("id, category, created_at"),
   ]);
 
@@ -244,8 +289,8 @@ async function coletarDadosReais(
   const clientes = (cli.data ?? []) as LinhaCliente[];
   const campanhas = (cam.data ?? []) as LinhaCampanha[];
   const negocios = (dea.data ?? []) as LinhaDeal[];
-  const briefings = (bri.data ?? []) as LinhaStatus[];
-  const commercials = (com.data ?? []) as LinhaStatus[];
+  const briefings = (bri.data ?? []) as LinhaBriefing[];
+  const commercials = (com.data ?? []) as LinhaComercial[];
   const assetsLista = (ass.data ?? []) as LinhaAsset[];
 
   const receitaMes = clientes.reduce((acc, c) => acc + numero(c.mrr), 0);
@@ -450,6 +495,35 @@ async function coletarDadosReais(
     ["Video Ads", "Hook Clips", "B-Roll", "Product Photos"]
   );
 
+  // TR-04.8D.2c-2: preparação p/ o motor de attention. Nomes seguem as
+  // convenções existentes ("Sem nome"/"Sem título"). Regras ficam SÓ no motor.
+  // Correção 1 (Operational Truth): conversions usa numeroEstrito — ausência
+  // (null/undefined/""/inválido) vira NaN e o motor NÃO gera R2 ("0 conversões"
+  // exige prova numérica de zero). Os demais campos mantêm numero(): ausência
+  // de spend/revenue/roas_meta vira 0 e apenas SILENCIA R1/R2 (spend>0 e
+  // meta>0 são pré-condições) — nenhum fato é afirmado a partir do zero.
+  const campanhasParaSinais: CampanhaParaSinais[] = campanhas.map((c) => ({
+    id: c.id,
+    nome: c.name || "Sem nome",
+    status: c.status ?? "",
+    spend: numero(c.spend),
+    revenue: numero(c.revenue),
+    conversions: numeroEstrito(c.conversions),
+    roasMeta: numero(c.roas_meta),
+  }));
+  const briefingsParaSinais: BriefingParaSinais[] = briefings.map((b) => ({
+    id: b.id,
+    titulo: b.title || "Sem título",
+    status: b.status ?? "",
+    deadline: typeof b.deadline === "string" ? b.deadline : null,
+  }));
+  const commercialsParaSinais: ComercialParaSinais[] = commercials.map((c) => ({
+    id: c.id,
+    titulo: c.title || "Sem título",
+    status: c.status ?? "",
+    deadline: typeof c.deadline === "string" ? c.deadline : null,
+  }));
+
   // ZERO fallback demo: fonte vazia é vazio honesto; fonte com erro é
   // comunicada pelo widget correspondente (nunca mock, nunca zero falso).
   return {
@@ -469,6 +543,9 @@ async function coletarDadosReais(
       topCampanhas,
       cadencia: meses,
       assetsPorCategoria,
+      campanhasParaSinais,
+      briefingsParaSinais,
+      commercialsParaSinais,
     },
     erros,
   };
@@ -482,6 +559,18 @@ const quickActions = [
 ];
 
 
+
+// TR-04.8D.2c-2: data civil "YYYY-MM-DD" montada com as partes LOCAIS do
+// Date do navegador (o dashboard é client component) — a convenção é a data
+// civil do ambiente do usuário, a mesma usada por deadline (input type="date").
+// NUNCA toISOString(): converte para UTC e pode deslocar o dia em fusos
+// negativos (dívida DATE-01). Sem fuso hardcodado.
+function hojeIsoLocal(): string {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
 
 // TR-04.8D.1: máquina de estados explícita — LOADING / READY / PARTIAL /
 // ERROR / DEMO. Mock só é alcançável dentro de DEMO (sem Supabase).
@@ -550,6 +639,8 @@ export function DashboardView() {
             <Skeleton key={chave} className="h-32 w-full rounded-2xl" />
           ))}
         </div>
+        {/* TR-04.8D.2c-2: skeleton do Attention na mesma posição do real */}
+        <Skeleton className="h-28 w-full rounded-2xl" />
         <div className="grid gap-8 lg:grid-cols-12">
           <Skeleton className="h-72 w-full rounded-2xl lg:col-span-6" />
           <Skeleton className="h-72 w-full rounded-2xl lg:col-span-6" />
@@ -608,6 +699,24 @@ export function DashboardView() {
     erros.briefings ? "briefings" : null,
     erros.commercials ? "comerciais" : null,
   ].filter((f): f is string => f !== null);
+
+  // TR-04.8D.2c-2: sinais REAIS calculados pelo motor puro (src/lib/
+  // attention.ts). O orquestrador só fornece dados normalizados, a data
+  // civil de hoje e as fontes que falharam (R6). Nenhuma regra aqui.
+  const sinais = calcularSinais({
+    hojeIso: hojeIsoLocal(),
+    campanhas: dados.campanhasParaSinais,
+    briefings: dados.briefingsParaSinais,
+    commercials: dados.commercialsParaSinais,
+    fontesIndisponiveis: [
+      erros.clientes ? { fonte: "clientes", mensagem: erros.clientes } : null,
+      erros.campanhas ? { fonte: "campanhas", mensagem: erros.campanhas } : null,
+      erros.negocios ? { fonte: "negócios", mensagem: erros.negocios } : null,
+      erros.briefings ? { fonte: "briefings", mensagem: erros.briefings } : null,
+      erros.commercials ? { fonte: "comerciais", mensagem: erros.commercials } : null,
+      erros.assets ? { fonte: "assets", mensagem: erros.assets } : null,
+    ].filter((f): f is { fonte: string; mensagem: string } => f !== null),
+  });
 
   return (
     <>
@@ -704,6 +813,12 @@ export function DashboardView() {
                 : erros.campanhas;
           return <KpiTile key={metric.label} metric={metric} erro={erroFonte} />;
         })}
+      </div>
+
+      {/* TR-04.8D.2c-2: O QUE MERECE ATENÇÃO — posição aprovada:
+          Header → KPIs → Attention → Ações rápidas → demais grupos. */}
+      <div className="mt-8">
+        <AttentionPanel sinais={sinais} modoDemo={modoDemo} analiseParcial={temErroParcial} />
       </div>
 
       {/* Ações Rápidas */}
