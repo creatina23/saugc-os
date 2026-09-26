@@ -1,36 +1,31 @@
 "use client";
 
 // Dashboard — painel verdadeiro (016a) com Infográficos Premium Supremo
+// TR-04.8D.2c-0: ORQUESTRADOR da tela — máquina de estados, coleta das 6
+// fontes (Operational Truth), header/badges/skeleton e composição do layout.
+// Blocos visuais vivem em src/components/dashboard/ (extração 1:1 — zero
+// mudança funcional ou visual).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  Activity,
   Bot,
-  Briefcase,
-  CircleDollarSign,
   FileText,
-  Image,
   Megaphone,
+  RefreshCw,
   Sparkles,
-  Target,
-  TrendingUp,
   Users,
   Video,
-  Wallet,
-  Activity,
   Zap,
-  BarChart3,
-  PieChart,
-  RefreshCw,
-  type LucideIcon,
 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatBRL, formatNumber, formatPercent } from "@/lib/format";
+import { formatBRL, formatNumber } from "@/lib/format";
 import {
   activityLog,
   assets as assetsMock,
@@ -46,87 +41,28 @@ import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-const kpiConfig: Record<string, { icon: LucideIcon; tone: string }> = {
-  "Receita do mês": { icon: Wallet, tone: "bg-primary/15 text-primary shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
-  MRR: { icon: Wallet, tone: "bg-primary/15 text-primary shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
-  Conversões: { icon: Target, tone: "bg-success/15 text-success shadow-[0_0_15px_rgba(16,185,129,0.2)]" },
-  "Campanhas ativas": { icon: Megaphone, tone: "bg-ai/15 text-ai shadow-[0_0_15px_rgba(139,92,246,0.2)]" },
-  "ROI Médio": { icon: TrendingUp, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
-  "ROI Global": { icon: TrendingUp, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
-  "Oportunidades abertas": { icon: Briefcase, tone: "bg-success/15 text-success shadow-[0_0_15px_rgba(16,185,129,0.2)]" },
-  "Pipeline aberto": { icon: CircleDollarSign, tone: "bg-ai/15 text-ai shadow-[0_0_15px_rgba(139,92,246,0.2)]" },
-};
-
-const activityConfig: Record<string, { icon: LucideIcon; tone: string }> = {
-  deal: { icon: Target, tone: "bg-primary/15 text-primary" },
-  campaign: { icon: Megaphone, tone: "bg-ai/15 text-ai" },
-  client: { icon: Users, tone: "bg-success/15 text-success" },
-  prompt: { icon: Sparkles, tone: "bg-warning/15 text-warning" },
-};
-
-const coresPlataforma: Record<string, string> = {
-  "Meta Ads": "bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.4)]",
-  "Google Ads": "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]",
-  TikTok: "bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.4)]",
-};
-
-// TR-04.8D.2b: cor por status conhecido (mesma semântica dos módulos);
-// status desconhecido recebe cor neutra — a informação nunca depende só da
-// cor (legenda com nome + contagem sempre visível).
-const CORES_STATUS: Record<string, string> = {
-  Ativa: "bg-success",
-  Aprovado: "bg-success",
-  Pausada: "bg-warning",
-  "Em Aprovação": "bg-warning",
-  Revisão: "bg-warning",
-  Produção: "bg-primary",
-  Rascunho: "bg-muted-foreground",
-  "Sem status": "bg-border",
-  "Sem categoria": "bg-border",
-};
-const COR_STATUS_NEUTRA = "bg-muted-foreground/60";
-
-// TR-04.8D.2b: REGRA DO SISTEMA (documentada na própria UI, não é verdade
-// universal): ROAS real ÷ meta ≥ 100% = "Na meta"; 70–99% = "Abaixo da meta";
-// < 70% = "Muito abaixo". Sem meta válida ou sem investido: sem classificação.
-function classificarRoas(roas: number, meta: number): { rotulo: string; classe: string } {
-  const pct = roas / meta;
-  if (pct >= 1) return { rotulo: "Na meta", classe: "text-success" };
-  if (pct >= 0.7) return { rotulo: "Abaixo da meta", classe: "text-warning" };
-  return { rotulo: "Muito abaixo", classe: "text-destructive" };
-}
-
-interface ReceitaCliente {
-  id: string;
-  nome: string;
-  valor: number;
-}
-
-function numero(valor: unknown): number {
-  if (typeof valor === "number" && Number.isFinite(valor)) return valor;
-  if (typeof valor === "string") {
-    const limpo = valor.replace(/[^\d.,-]/g, "").replace(",", ".");
-    const n = parseFloat(limpo);
-    return Number.isFinite(n) ? n : 0;
-  }
-  const n = Number(valor);
-  return Number.isFinite(n) ? n : 0;
-}
-
-// TR-04.8D.1: data curta real para as atualizações derivadas ("12 ago 2026")
-const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-
-function dataCurta(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-// TR-04.8D.2a: BRL com centavos p/ CPC (formatBRL arredonda para inteiro).
-function brl2(valor: number): string {
-  return `R$ ${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { AssetsCategoria } from "@/components/dashboard/assets-categoria";
+import { AtualizacoesRecentes } from "@/components/dashboard/atualizacoes-recentes";
+import { CadenciaRegistros } from "@/components/dashboard/cadencia";
+import { FunilComercial } from "@/components/dashboard/funil-comercial";
+import { KpiTile } from "@/components/dashboard/kpi-tile";
+import { MrrClientes } from "@/components/dashboard/mrr-clientes";
+import { PerformanceCanal } from "@/components/dashboard/performance-canal";
+import { RoasVsMeta } from "@/components/dashboard/roas-vs-meta";
+import { StatusCard } from "@/components/dashboard/status-card";
+import { TopInvestimento } from "@/components/dashboard/top-investimento";
+import type {
+  Atividade,
+  CanalPerformance,
+  ContagemRotulo,
+  FunilValorEtapa,
+  Kpi,
+  MesCadencia,
+  ReceitaCliente,
+  RoasMeta,
+  TopCampanha,
+} from "@/components/dashboard/types";
+import { contarPorRotulo, dataCurta, MESES, numero } from "@/components/dashboard/utils";
 
 interface LinhaCliente {
   id: string;
@@ -170,67 +106,6 @@ interface LinhaDeal {
   stage: string | null;
   value: unknown;
   created_at: string | null;
-}
-
-// TR-04.8D.2a: KPI sem "trend" — subtexto apenas factual (fonte/cálculo).
-interface Kpi {
-  label: string;
-  value: string;
-  sub?: string;
-}
-
-// TR-04.8D.2a: funil por VALOR (R$) — dados reais de deals.value/stage.
-interface FunilValorEtapa {
-  stage: string;
-  valor: number;
-  quantidade: number;
-}
-
-interface CanalPerformance {
-  platform: string;
-  spend: number;
-  impressions: number;
-  clicks: number;
-  revenue: number;
-  conversions: number;
-}
-
-interface Atividade {
-  id: string;
-  type: string;
-  message: string;
-  timestamp: string;
-}
-
-// TR-04.8D.2b: contagem real por status/categoria (sem categoria inventada)
-interface ContagemRotulo {
-  rotulo: string;
-  quantidade: number;
-}
-
-// TR-04.8D.2b: ROAS real vs meta — somente campanhas com meta válida.
-// roasReal = null quando spend = 0 (ROAS "—", sem classificação).
-interface RoasMeta {
-  id: string;
-  nome: string;
-  roasReal: number | null;
-  meta: number;
-}
-
-interface TopCampanha {
-  id: string;
-  nome: string;
-  spend: number;
-  impressions: number;
-  clicks: number;
-  conversions: number;
-  revenue: number;
-}
-
-interface MesCadencia {
-  chave: string;
-  rotulo: string;
-  total: number;
 }
 
 interface DadosDashboard {
@@ -344,31 +219,6 @@ type FonteErro = {
   commercials: string | null;
   assets: string | null;
 };
-
-// TR-04.8D.2b: agrupa contagens por rótulo real (status/categoria). Rótulo
-// vazio/null vira "Sem categoria"/"Sem status" factual — nunca inventa.
-function contarPorRotulo(
-  linhas: (string | null)[],
-  rotuloVazio: string,
-  ordemPreferida?: string[]
-): ContagemRotulo[] {
-  const mapa = new Map<string, number>();
-  for (const raw of linhas) {
-    const rotulo = (raw ?? "").trim() || rotuloVazio;
-    mapa.set(rotulo, (mapa.get(rotulo) ?? 0) + 1);
-  }
-  const ordem = ordemPreferida ?? [];
-  return [...mapa.entries()]
-    .map(([rotulo, quantidade]) => ({ rotulo, quantidade }))
-    .sort((a, b) => {
-      const ia = ordem.indexOf(a.rotulo);
-      const ib = ordem.indexOf(b.rotulo);
-      if (ia !== -1 || ib !== -1) {
-        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-      }
-      return b.quantidade - a.quantidade || a.rotulo.localeCompare(b.rotulo);
-    });
-}
 
 async function coletarDadosReais(
   supabase: SupabaseClient
@@ -633,88 +483,6 @@ const quickActions = [
 
 
 
-// TR-04.8D.2b: cartão de status operacional (reutilizado por campanhas,
-// briefings e comerciais — mesma anatomia, erro/vazio próprios por fonte).
-function StatusCard({
-  titulo,
-  icone: Icone,
-  itens,
-  erro,
-  textoVazio,
-}: {
-  titulo: string;
-  icone: LucideIcon;
-  itens: ContagemRotulo[] | null;
-  erro: string | null;
-  textoVazio: string;
-}) {
-  const total = itens?.reduce((acc, i) => acc + i.quantidade, 0) ?? 0;
-  return (
-    <Card className="lg:col-span-4 card-glow">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold flex items-center gap-2">
-          <Icone className="size-4 text-primary" /> {titulo}
-        </CardTitle>
-        <CardDescription>
-          {itens === null
-            ? "Não disponível na demonstração"
-            : erro
-              ? "Fonte indisponível neste momento"
-              : `${total} registro${total === 1 ? "" : "s"} na base`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 pt-2">
-        {itens === null ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            Não disponível na demonstração — o dataset demo não inclui esses
-            dados. Conecte o Supabase para ver os números reais.
-          </p>
-        ) : erro ? (
-          <p role="alert" className="py-6 text-center text-sm text-destructive">
-            Fonte indisponível — isso não é zero. Detalhe técnico: {erro}
-          </p>
-        ) : itens.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">{textoVazio}</p>
-        ) : (
-          <>
-            <div
-              className="flex h-3 w-full overflow-hidden rounded-full bg-muted/60"
-              role="img"
-              aria-label={`${titulo}: ${itens
-                .map((i) => `${i.rotulo} ${i.quantidade}`)
-                .join(", ")} — total ${total}`}
-            >
-              {itens.map((i) => (
-                <div
-                  key={i.rotulo}
-                  style={{ width: `${(i.quantidade / Math.max(1, total)) * 100}%` }}
-                  className={cn("h-full", CORES_STATUS[i.rotulo] ?? COR_STATUS_NEUTRA)}
-                  title={`${i.rotulo}: ${i.quantidade}`}
-                />
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
-              {itens.map((i) => (
-                <span key={i.rotulo} className="flex items-center gap-1.5">
-                  <span
-                    className={cn("size-2.5 rounded-full", CORES_STATUS[i.rotulo] ?? COR_STATUS_NEUTRA)}
-                    aria-hidden="true"
-                  />
-                  <span className="text-muted-foreground">{i.rotulo}</span>
-                  <span className="font-semibold tabular-nums">{i.quantidade}</span>
-                </span>
-              ))}
-              <span className="ml-auto text-muted-foreground">
-                Total <span className="font-semibold tabular-nums text-foreground">{total}</span>
-              </span>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 // TR-04.8D.1: máquina de estados explícita — LOADING / READY / PARTIAL /
 // ERROR / DEMO. Mock só é alcançável dentro de DEMO (sem Supabase).
 type Painel =
@@ -832,22 +600,14 @@ export function DashboardView() {
   ].filter((fonte): fonte is string => fonte !== null);
   const temErroParcial = fontesFalhas.length > 0;
 
-  const maxFunilValor = Math.max(1, ...dados.funilValor.map((e) => e.valor));
-  const maxReceitaCliente = Math.max(1, ...dados.receitaClientes.map((c) => c.valor));
-  // TR-04.8D.2a: escala única p/ comparar investido × retorno no mesmo eixo.
-  const maxCanal = Math.max(1, ...dados.canais.flatMap((c) => [c.spend, c.revenue]));
-  // TR-04.8D.2b
-  const maxCadencia = dados.cadencia
-    ? Math.max(1, ...dados.cadencia.map((m) => m.total))
-    : 1;
-  const maxAssets = Math.max(1, ...dados.assetsPorCategoria.map((c) => c.quantidade));
+  // TR-04.8D.2c-0: máximos de escala vivem dentro de cada componente.
+  // O orquestrador só prepara o que depende de `erros` (fontes da cadência).
   const fontesCadenciaFalhas = [
     erros.clientes ? "clientes" : null,
     erros.campanhas ? "campanhas" : null,
     erros.briefings ? "briefings" : null,
     erros.commercials ? "comerciais" : null,
   ].filter((f): f is string => f !== null);
-  const cadenciaTotalmenteFalha = fontesCadenciaFalhas.length === 4;
 
   return (
     <>
@@ -933,7 +693,6 @@ export function DashboardView() {
       {/* TR-04.8D.2a: Pulso do Negócio — 6 KPIs, número forte, sem trend. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {dados.kpis.map((metric) => {
-          const config = kpiConfig[metric.label] ?? kpiConfig["Receita do mês"];
           // TR-04.8D.1: KPI de fonte falha não vira zero — vira indisponível.
           // Mapeamento por fonte real de cada KPI (2a): deals alimentam os 2
           // KPIs comerciais; clients alimenta MRR; campaigns, os demais.
@@ -943,34 +702,7 @@ export function DashboardView() {
               : metric.label === "MRR" || metric.label === "Receita do mês"
                 ? erros.clientes
                 : erros.campanhas;
-          return (
-            <Card key={metric.label} className="card-glow relative overflow-hidden group">
-              <div className="absolute -right-6 -bottom-6 size-24 rounded-full bg-primary/5 blur-2xl transition-all group-hover:bg-primary/15" />
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">{metric.label}</p>
-                  <div className={cn("flex size-9 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-110", config.tone)}>
-                    <config.icon className="size-4" />
-                  </div>
-                </div>
-                {erroFonte ? (
-                  <>
-                    <p className="mt-3 text-2xl font-bold tracking-tight text-muted-foreground tabular-nums md:text-3xl">—</p>
-                    <p className="mt-2 text-xs text-destructive">
-                      Indisponível — falha na consulta. Detalhe técnico: {erroFonte}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="mt-3 text-2xl font-bold tracking-tight tabular-nums md:text-3xl">{metric.value}</p>
-                    {metric.sub && (
-                      <p className="mt-2 text-xs text-muted-foreground">{metric.sub}</p>
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          );
+          return <KpiTile key={metric.label} metric={metric} erro={erroFonte} />;
         })}
       </div>
 
@@ -995,281 +727,24 @@ export function DashboardView() {
 
       {/* Infográficos Premium & Analytics */}
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Receita por Cliente (Infográfico de Barras Proporcional) */}
-        <Card className="lg:col-span-6 card-glow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <BarChart3 className="size-4 text-primary" /> MRR por Cliente
-              </CardTitle>
-              <CardDescription>Maiores receitas mensais recorrentes da base (clients.mrr)</CardDescription>
-            </div>
-            <Link href="/clientes">
-              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">Ver todos</Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-4">
-            {erros.clientes ? (
-              <p role="alert" className="text-sm text-destructive py-8 text-center">
-                Não consegui carregar os clientes — indisponível agora (isso não é
-                zero). Detalhe técnico: {erros.clientes}
-              </p>
-            ) : dados.receitaClientes.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">
-                Nenhum cliente cadastrado ainda. Cadastre clientes com receita
-                mensal e este gráfico ganha vida.
-              </p>
-            ) : (
-              dados.receitaClientes.map((c) => {
-                const pct = Math.max(8, Math.round((c.valor / maxReceitaCliente) * 100));
-                return (
-                  <div key={c.id} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium truncate max-w-[200px]">{c.nome}</span>
-                      <span className="font-semibold text-primary">{formatBRL(c.valor)}</span>
-                    </div>
-                    <div className="h-2.5 w-full rounded-full bg-muted/60 overflow-hidden p-0.5">
-                      <div
-                        style={{ width: `${pct}%` }}
-                        className="h-full rounded-full bg-gradient-to-r from-primary to-ai transition-all duration-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        {/* TR-04.8D.2a: Funil Comercial por VALOR (R$) — deals reais. */}
-        <Card className="lg:col-span-6 card-glow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <Target className="size-4 text-success" /> Funil Comercial
-              </CardTitle>
-              <CardDescription>Valor em aberto por etapa (negócios não fechados)</CardDescription>
-            </div>
-            <Link href="/crm">
-              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">Ver CRM</Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-4">
-            {erros.negocios ? (
-              <p role="alert" className="text-sm text-destructive py-8 text-center">
-                Negociações indisponíveis — o funil não pode ser exibido (isso não
-                é zero). Detalhe técnico: {erros.negocios}
-              </p>
-            ) : dados.oportunidadesAbertas === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">
-                Nenhuma oportunidade aberta. Crie negócios no CRM e o funil
-                aparece aqui com o valor real de cada etapa.
-              </p>
-            ) : (
-            <>
-              <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/50 bg-surface/40 p-3 text-center">
-                <div>
-                  <p className="text-[11px] text-muted-foreground">Abertas</p>
-                  <p className="text-sm font-bold tabular-nums">{dados.oportunidadesAbertas}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground">Pipeline aberto</p>
-                  <p className="text-sm font-bold tabular-nums text-success">{formatBRL(dados.pipelineAberto)}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground">Ticket médio</p>
-                  <p className="text-sm font-bold tabular-nums">
-                    {dados.ticketMedioAberto === null ? "—" : formatBRL(dados.ticketMedioAberto)}
-                  </p>
-                </div>
-              </div>
-              {dados.funilValor.map((etapa) => {
-                const pct = Math.max(4, Math.round((etapa.valor / maxFunilValor) * 100));
-                return (
-                  <div key={etapa.stage} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs font-medium">
-                      <span className="text-muted-foreground">{etapa.stage}</span>
-                      <span className="font-bold text-foreground tabular-nums">
-                        {formatBRL(etapa.valor)}
-                        <span className="ml-1.5 font-normal text-muted-foreground">
-                          ({etapa.quantidade} {etapa.quantidade === 1 ? "negócio" : "negócios"})
-                        </span>
-                      </span>
-                    </div>
-                    <div
-                      className="h-2 w-full rounded-full bg-muted/60 overflow-hidden"
-                      title={`${etapa.stage}: ${formatBRL(etapa.valor)} em ${etapa.quantidade} negócio(s)`}
-                    >
-                      <div
-                        style={{ width: `${pct}%` }}
-                        className="h-full rounded-full bg-gradient-to-r from-success/80 to-success transition-all duration-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </>
-            )}
-          </CardContent>
-        </Card>
+        <MrrClientes clientes={dados.receitaClientes} erro={erros.clientes} />
+        <FunilComercial
+          oportunidadesAbertas={dados.oportunidadesAbertas}
+          pipelineAberto={dados.pipelineAberto}
+          ticketMedioAberto={dados.ticketMedioAberto}
+          funilValor={dados.funilValor}
+          erro={erros.negocios}
+        />
       </div>
 
       {/* Campanhas por Canal & Atividades Recentes */}
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* TR-04.8D.2a: Performance por Canal — descritivo, sem recomendação. */}
-        <Card className="lg:col-span-6 card-glow">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <PieChart className="size-4 text-ai" /> Performance por Canal
-            </CardTitle>
-            <CardDescription>Como os canais estão performando — investido, retorno e eficiência (dados reais das campanhas)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5 pt-2">
-            {erros.campanhas ? (
-              <p role="alert" className="text-sm text-destructive py-8 text-center">
-                Campanhas indisponíveis — o desempenho por canal não pode ser
-                exibido (isso não é zero). Detalhe técnico: {erros.campanhas}
-              </p>
-            ) : dados.canais.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">
-                Nenhuma campanha cadastrada ainda. Crie a primeira em Campanhas.
-              </p>
-            ) : (
-            dados.canais.map((canal) => {
-              const corBarra = coresPlataforma[canal.platform] || "bg-primary";
-              const roi = canal.spend > 0 ? canal.revenue / canal.spend : null;
-              const roiTexto = roi === null ? "—" : `${roi.toFixed(1).replace(".", ",")}x`;
-              // Correção 8D.2a: ROI do canal é DESCRITIVO e visualmente neutro —
-              // não há meta de ROI por canal que justifique semáforo aqui. O
-              // semáforo real (roas vs roas_meta) entra na 8D.2b.
-              // Denominador zero ⇒ "—", nunca zero falso.
-              const ctr = canal.impressions > 0 ? formatPercent((canal.clicks / canal.impressions) * 100) : "—";
-              const cpc = canal.clicks > 0 ? brl2(canal.spend / canal.clicks) : "—";
-              const cpa = canal.conversions > 0 ? formatBRL(canal.spend / canal.conversions) : "—";
-              const pctSpend = canal.spend > 0 ? Math.max(2, Math.round((canal.spend / maxCanal) * 100)) : 0;
-              const pctRetorno = canal.revenue > 0 ? Math.max(2, Math.round((canal.revenue / maxCanal) * 100)) : 0;
-              return (
-                <div key={canal.platform} className="space-y-2.5 rounded-xl border border-border/50 bg-surface/40 p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className={cn("size-3 shrink-0 rounded-full", corBarra)} />
-                      <span className="truncate text-sm font-semibold">{canal.platform}</span>
-                    </div>
-                    <span
-                      className="shrink-0 text-xs font-bold tabular-nums text-foreground"
-                      title="ROI = retorno ÷ investido"
-                    >
-                      {roiTexto} ROI
-                    </span>
-                  </div>
-                  <div
-                    className="space-y-1.5"
-                    role="img"
-                    aria-label={`${canal.platform}: investido ${formatBRL(canal.spend)}, retorno ${formatBRL(canal.revenue)}, ${formatNumber(canal.conversions)} conversões, ROI ${roiTexto}`}
-                  >
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <span className="w-16 shrink-0 text-muted-foreground">Investido</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted/60">
-                        <div
-                          style={{ width: `${pctSpend}%` }}
-                          className="h-full rounded-full bg-primary/60 transition-all duration-500"
-                        />
-                      </div>
-                      <span className="w-20 shrink-0 text-right font-medium tabular-nums">{formatBRL(canal.spend)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <span className="w-16 shrink-0 text-muted-foreground">Retorno</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted/60">
-                        <div
-                          style={{ width: `${pctRetorno}%` }}
-                          className="h-full rounded-full bg-gradient-to-r from-primary to-ai shadow-[0_0_8px_rgba(59,130,246,0.35)] transition-all duration-500"
-                        />
-                      </div>
-                      <span className="w-20 shrink-0 text-right font-medium tabular-nums">{formatBRL(canal.revenue)}</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 pt-0.5 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Conversões</p>
-                      <p className="font-medium tabular-nums text-foreground">{formatNumber(canal.conversions)}</p>
-                    </div>
-                    <div
-                      title={
-                        canal.impressions > 0
-                          ? `CTR = cliques ÷ impressões (${formatNumber(canal.clicks)} ÷ ${formatNumber(canal.impressions)})`
-                          : "Sem impressões registradas neste canal"
-                      }
-                    >
-                      <p className="text-muted-foreground">CTR</p>
-                      <p className="font-medium tabular-nums text-foreground">{ctr}</p>
-                    </div>
-                    <div
-                      title={
-                        canal.clicks > 0
-                          ? `CPC = investido ÷ cliques (${formatBRL(canal.spend)} ÷ ${formatNumber(canal.clicks)})`
-                          : "Sem cliques registrados neste canal"
-                      }
-                    >
-                      <p className="text-muted-foreground">CPC</p>
-                      <p className="font-medium tabular-nums text-foreground">{cpc}</p>
-                    </div>
-                    <div
-                      title={
-                        canal.conversions > 0
-                          ? `CPA = investido ÷ conversões (${formatBRL(canal.spend)} ÷ ${formatNumber(canal.conversions)})`
-                          : "Sem conversões registradas neste canal"
-                      }
-                    >
-                      <p className="text-muted-foreground">CPA</p>
-                      <p className="font-medium tabular-nums text-foreground">{cpa}</p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Atualizações Recentes da Operação */}
-        <Card className="lg:col-span-6 card-glow">
-          <CardHeader>
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <Activity className="size-4 text-warning" /> Atualizações Recentes
-              </CardTitle>
-              <CardDescription>Derivadas das datas de criação de clientes e campanhas</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-2">
-            {erros.clientes && erros.campanhas ? (
-              <p role="alert" className="text-sm text-destructive py-8 text-center">
-                Registros indisponíveis — as fontes que alimentam estas
-                atualizações falharam (isso não é vazio).
-              </p>
-            ) : dados.atividadesRecentes.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">
-                Nenhum registro ainda. Clientes e campanhas que você criar
-                aparecem aqui com a data real de cadastro.
-              </p>
-            ) : (
-            dados.atividadesRecentes.map((item) => {
-              const cfg = activityConfig[item.type] ?? activityConfig.deal;
-              return (
-                <div key={item.id} className="flex items-start gap-3 rounded-xl border border-border/40 bg-surface/30 p-3.5 transition-colors hover:border-border">
-                  <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg mt-0.5", cfg.tone)}>
-                    <cfg.icon className="size-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold truncate">{item.message}</p>
-                      <span className="text-[11px] text-muted-foreground">{item.timestamp}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-            )}
-          </CardContent>
-        </Card>
+        <PerformanceCanal canais={dados.canais} erro={erros.campanhas} />
+        <AtualizacoesRecentes
+          atividades={dados.atividadesRecentes}
+          erroClientes={erros.clientes}
+          erroCampanhas={erros.campanhas}
+        />
       </div>
 
       {/* TR-04.8D.2b: STATUS OPERACIONAL — contagens reais por status */}
@@ -1299,280 +774,14 @@ export function DashboardView() {
 
       {/* TR-04.8D.2b: EFICIÊNCIA — ROAS vs meta (regra explícita) + Top 5 */}
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        <Card className="lg:col-span-6 card-glow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <TrendingUp className="size-4 text-primary" /> ROAS vs Meta
-            </CardTitle>
-            <CardDescription>
-              Campanhas com meta definida — ROAS real (receita ÷ investido) comparado à meta
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 pt-2">
-            <p className="rounded-lg border border-border/50 bg-surface/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-              Regra do sistema: <span className="font-semibold text-success">na meta</span> ≥ 100%
-              da meta · <span className="font-semibold text-warning">abaixo</span> 70–99% ·{" "}
-              <span className="font-semibold text-destructive">muito abaixo</span> &lt; 70%. Sem
-              meta ou sem investido não há classificação.
-            </p>
-            {dados.roasMeta === null ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Não disponível na demonstração — o dataset demo não inclui metas
-                de ROAS. Conecte o Supabase para comparar metas reais.
-              </p>
-            ) : erros.campanhas ? (
-              <p role="alert" className="py-6 text-center text-sm text-destructive">
-                Campanhas indisponíveis — a comparação com metas não pode ser exibida
-                (isso não é zero). Detalhe técnico: {erros.campanhas}
-              </p>
-            ) : dados.roasMeta.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Nenhuma campanha com meta de ROAS definida. Defina metas na página
-                Campanhas para compará-las aqui.
-              </p>
-            ) : (
-              dados.roasMeta.map((c) => {
-                const classif =
-                  c.roasReal === null ? null : classificarRoas(c.roasReal, c.meta);
-                return (
-                  <div
-                    key={c.id}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-surface/40 px-3 py-2.5 text-xs"
-                  >
-                    <span className="min-w-0 flex-1 truncate font-medium" title={c.nome}>
-                      {c.nome}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">
-                      ROAS{" "}
-                      <span className="font-semibold text-foreground">
-                        {c.roasReal === null
-                          ? "—"
-                          : `${c.roasReal.toFixed(1).replace(".", ",")}x`}
-                      </span>{" "}
-                      · meta{" "}
-                      <span className="font-semibold text-foreground">
-                        {c.meta.toFixed(1).replace(".", ",")}x
-                      </span>
-                    </span>
-                    {classif ? (
-                      <span className={cn("shrink-0 font-semibold", classif.classe)}>
-                        {classif.rotulo}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 font-medium text-muted-foreground">
-                        Sem investido
-                      </span>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-6 card-glow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <BarChart3 className="size-4 text-ai" /> Top 5 por Investimento
-            </CardTitle>
-            <CardDescription>
-              As 5 campanhas com maior investimento — maior gasto, não necessariamente
-              melhor desempenho
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-2">
-            {dados.topCampanhas === null ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Não disponível na demonstração — o dataset demo não inclui campanhas
-                individuais. Conecte o Supabase para ver as reais.
-              </p>
-            ) : erros.campanhas ? (
-              <p role="alert" className="py-6 text-center text-sm text-destructive">
-                Campanhas indisponíveis — a tabela não pode ser exibida (isso não é
-                zero). Detalhe técnico: {erros.campanhas}
-              </p>
-            ) : dados.topCampanhas.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Nenhuma campanha cadastrada ainda. Crie a primeira em Campanhas.
-              </p>
-            ) : (
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border/50 text-left text-muted-foreground">
-                    <th className="py-2 pr-2 font-medium">Campanha</th>
-                    <th className="py-2 pr-2 text-right font-medium">Investido</th>
-                    <th className="hidden py-2 pr-2 text-right font-medium md:table-cell">CTR</th>
-                    <th className="hidden py-2 pr-2 text-right font-medium md:table-cell">CPC</th>
-                    <th className="py-2 pr-2 text-right font-medium">CPA</th>
-                    <th className="py-2 text-right font-medium">ROAS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dados.topCampanhas.map((c) => {
-                    const ctr =
-                      c.impressions > 0
-                        ? formatPercent((c.clicks / c.impressions) * 100)
-                        : "—";
-                    const cpc = c.clicks > 0 ? brl2(c.spend / c.clicks) : "—";
-                    const cpa = c.conversions > 0 ? formatBRL(c.spend / c.conversions) : "—";
-                    const roas =
-                      c.spend > 0
-                        ? `${(c.revenue / c.spend).toFixed(1).replace(".", ",")}x`
-                        : "—";
-                    return (
-                      <tr key={c.id} className="border-b border-border/30 last:border-0">
-                        <td className="max-w-[140px] truncate py-2 pr-2 font-medium" title={c.nome}>
-                          {c.nome}
-                        </td>
-                        <td className="py-2 pr-2 text-right tabular-nums">{formatBRL(c.spend)}</td>
-                        <td
-                          className="hidden py-2 pr-2 text-right tabular-nums md:table-cell"
-                          title={
-                            c.impressions > 0
-                              ? `CTR = cliques ÷ impressões (${formatNumber(c.clicks)} ÷ ${formatNumber(c.impressions)})`
-                              : "Sem impressões registradas"
-                          }
-                        >
-                          {ctr}
-                        </td>
-                        <td
-                          className="hidden py-2 pr-2 text-right tabular-nums md:table-cell"
-                          title={
-                            c.clicks > 0
-                              ? `CPC = investido ÷ cliques (${formatBRL(c.spend)} ÷ ${formatNumber(c.clicks)})`
-                              : "Sem cliques registrados"
-                          }
-                        >
-                          {cpc}
-                        </td>
-                        <td
-                          className="py-2 pr-2 text-right tabular-nums"
-                          title={
-                            c.conversions > 0
-                              ? `CPA = investido ÷ conversões (${formatBRL(c.spend)} ÷ ${formatNumber(c.conversions)})`
-                              : "Sem conversões registradas"
-                          }
-                        >
-                          {cpa}
-                        </td>
-                        <td
-                          className="py-2 text-right tabular-nums"
-                          title="ROAS = receita ÷ investido"
-                        >
-                          {roas}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
+        <RoasVsMeta linhas={dados.roasMeta} erro={erros.campanhas} />
+        <TopInvestimento campanhas={dados.topCampanhas} erro={erros.campanhas} />
       </div>
 
       {/* TR-04.8D.2b: REGISTROS CRIADOS (cadência real) + ASSETS */}
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        <Card className="lg:col-span-6 card-glow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Activity className="size-4 text-success" /> Registros criados
-            </CardTitle>
-            <CardDescription>
-              Volume de registros criados por mês — clientes, campanhas, briefings e
-              comerciais (últimos 6 meses)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-2">
-            {dados.cadencia === null ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Não disponível na demonstração — o dataset demo não inclui datas de
-                criação. Conecte o Supabase para ver a cadência real.
-              </p>
-            ) : cadenciaTotalmenteFalha ? (
-              <p role="alert" className="py-6 text-center text-sm text-destructive">
-                Todas as fontes desta contagem falharam — nada a exibir (isso não é
-                zero). Use Recarregar.
-              </p>
-            ) : (
-              <>
-                {fontesCadenciaFalhas.length > 0 && (
-                  <p role="alert" className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
-                    Contagem parcial — fonte(s) indisponível(is): {fontesCadenciaFalhas.join(", ")}.
-                    Os totais abaixo podem estar menores que o real.
-                  </p>
-                )}
-                <div
-                  className="flex h-36 items-end gap-2"
-                  role="img"
-                  aria-label={`Registros criados por mês: ${dados.cadencia
-                    .map((m) => `${m.rotulo} ${m.total}`)
-                    .join(", ")}`}
-                >
-                  {dados.cadencia.map((m) => {
-                    const pct = Math.round((m.total / maxCadencia) * 100);
-                    return (
-                      <div key={m.chave} className="flex h-full flex-1 flex-col items-center gap-1">
-                        <span className="text-[10px] font-semibold tabular-nums text-foreground">
-                          {m.total}
-                        </span>
-                        <div className="flex w-full flex-1 items-end">
-                          <div
-                            style={{ height: m.total > 0 ? `${Math.max(6, pct)}%` : "0%" }}
-                            className="w-full rounded-t-md bg-gradient-to-t from-primary/70 to-ai/70 transition-all duration-500"
-                            title={`${m.rotulo}: ${m.total} registro(s) criados`}
-                          />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">{m.rotulo}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  Mês sem registro aparece como 0 — derivado das datas reais de criação.
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-6 card-glow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Image className="size-4 text-ai" /> Assets por Categoria
-            </CardTitle>
-            <CardDescription>Contagem real de arquivos por categoria na biblioteca</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-2">
-            {erros.assets ? (
-              <p role="alert" className="py-6 text-center text-sm text-destructive">
-                Biblioteca indisponível — a contagem não pode ser exibida (isso não é
-                zero). Detalhe técnico: {erros.assets}
-              </p>
-            ) : dados.assetsPorCategoria.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Nenhum asset na biblioteca ainda. Envie arquivos em Assets para vê-los
-                contados aqui.
-              </p>
-            ) : (
-              dados.assetsPorCategoria.map((cat) => (
-                <div key={cat.rotulo} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium">{cat.rotulo}</span>
-                    <span className="font-semibold tabular-nums">{cat.quantidade}</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted/60">
-                    <div
-                      style={{ width: `${Math.max(3, Math.round((cat.quantidade / maxAssets) * 100))}%` }}
-                      className="h-full rounded-full bg-gradient-to-r from-primary to-ai transition-all duration-500"
-                      title={`${cat.rotulo}: ${cat.quantidade} asset(s)`}
-                    />
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+        <CadenciaRegistros meses={dados.cadencia} fontesFalhas={fontesCadenciaFalhas} />
+        <AssetsCategoria categorias={dados.assetsPorCategoria} erro={erros.assets} />
       </div>
     </>
   );
