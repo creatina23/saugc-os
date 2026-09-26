@@ -6,23 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
+// TR-04.8D.2c-3B: paleta movida para status-cores.ts (compartilhada com
+// estado-operacao.tsx) — mesmos valores, zero mudança de comportamento.
+import { CORES_STATUS, COR_STATUS_NEUTRA } from "./status-cores";
 import type { ContagemRotulo } from "./types";
-
-// TR-04.8D.2b: cor por status conhecido (mesma semântica dos módulos);
-// status desconhecido recebe cor neutra — a informação nunca depende só da
-// cor (legenda com nome + contagem sempre visível).
-const CORES_STATUS: Record<string, string> = {
-  Ativa: "bg-success",
-  Aprovado: "bg-success",
-  Pausada: "bg-warning",
-  "Em Aprovação": "bg-warning",
-  Revisão: "bg-warning",
-  Produção: "bg-primary",
-  Rascunho: "bg-muted-foreground",
-  "Sem status": "bg-border",
-  "Sem categoria": "bg-border",
-};
-const COR_STATUS_NEUTRA = "bg-muted-foreground/60";
 
 export function StatusCard({
   titulo,

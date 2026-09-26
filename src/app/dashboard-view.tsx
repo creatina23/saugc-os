@@ -6,7 +6,7 @@
 // Blocos visuais vivem em src/components/dashboard/ (extração 1:1 — zero
 // mudança funcional ou visual).
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -52,12 +52,12 @@ import { AssetsCategoria } from "@/components/dashboard/assets-categoria";
 import { AttentionPanel } from "@/components/dashboard/attention-panel";
 import { AtualizacoesRecentes } from "@/components/dashboard/atualizacoes-recentes";
 import { CadenciaRegistros } from "@/components/dashboard/cadencia";
+import { EstadoOperacao } from "@/components/dashboard/estado-operacao";
 import { FunilComercial } from "@/components/dashboard/funil-comercial";
 import { KpiTile } from "@/components/dashboard/kpi-tile";
 import { MrrClientes } from "@/components/dashboard/mrr-clientes";
 import { PerformanceCanal } from "@/components/dashboard/performance-canal";
 import { RoasVsMeta } from "@/components/dashboard/roas-vs-meta";
-import { StatusCard } from "@/components/dashboard/status-card";
 import { TopInvestimento } from "@/components/dashboard/top-investimento";
 import type {
   Atividade,
@@ -571,6 +571,22 @@ function hojeIsoLocal(): string {
   return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
+// TR-04.8D.2c-3B: heading de seção — sinalização, não conteúdo. h2 real p/
+// navegação por headings; divisor sutil; nenhum card extra.
+function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <section aria-label={titulo} className="mt-10">
+      <div className="flex items-center gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {titulo}
+        </h2>
+        <div aria-hidden="true" className="h-px flex-1 bg-border/60" />
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-12">{children}</div>
+    </section>
+  );
+}
+
 // TR-04.8D.1: máquina de estados explícita — LOADING / READY / PARTIAL /
 // ERROR / DEMO. Mock só é alcançável dentro de DEMO (sem Supabase).
 type Painel =
@@ -838,64 +854,73 @@ export function DashboardView() {
         ))}
       </div>
 
-      {/* Infográficos Premium & Analytics */}
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        <MrrClientes clientes={dados.receitaClientes} erro={erros.clientes} />
-        <FunilComercial
-          oportunidadesAbertas={dados.oportunidadesAbertas}
-          pipelineAberto={dados.pipelineAberto}
-          ticketMedioAberto={dados.ticketMedioAberto}
-          funilValor={dados.funilValor}
-          erro={erros.negocios}
-        />
-      </div>
+      {/* TR-04.8D.2c-3B: ARQUITETURA POR SEÇÕES — Performance & Receita →
+          Funil Comercial → Operação → Base & Contexto. Dados/erros idênticos
+          ao estado anterior; apenas composição e sinalização mudaram. */}
+      <Secao titulo="Performance & Receita">
+        <RoasVsMeta linhas={dados.roasMeta} erro={erros.campanhas} />
+        <TopInvestimento campanhas={dados.topCampanhas} erro={erros.campanhas} />
+        <div className="lg:col-span-12">
+          <MrrClientes clientes={dados.receitaClientes} erro={erros.clientes} />
+        </div>
+      </Secao>
 
-      {/* Campanhas por Canal & Atividades Recentes */}
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
+      <Secao titulo="Funil Comercial">
+        <div className="lg:col-span-12">
+          <FunilComercial
+            oportunidadesAbertas={dados.oportunidadesAbertas}
+            pipelineAberto={dados.pipelineAberto}
+            ticketMedioAberto={dados.ticketMedioAberto}
+            funilValor={dados.funilValor}
+            erro={erros.negocios}
+          />
+        </div>
+      </Secao>
+
+      <Secao titulo="Operação">
         <PerformanceCanal canais={dados.canais} erro={erros.campanhas} />
+        {/* Estado da Operação: 3 grupos, erros/estados independentes por fonte */}
+        <EstadoOperacao
+          grupos={[
+            {
+              chave: "campanhas",
+              rotulo: "Campanhas",
+              icone: Megaphone,
+              itens: dados.statusCampanhas,
+              erro: erros.campanhas,
+              textoVazio: "Nenhuma campanha cadastrada ainda. Crie a primeira em Campanhas.",
+            },
+            {
+              chave: "briefings",
+              rotulo: "Briefings",
+              icone: FileText,
+              itens: dados.statusBriefings,
+              erro: erros.briefings,
+              textoVazio: "Nenhum briefing criado ainda. Crie o primeiro em Briefings.",
+            },
+            {
+              chave: "comerciais",
+              rotulo: "Comerciais",
+              icone: Video,
+              itens: dados.statusComerciais,
+              erro: erros.commercials,
+              textoVazio: "Nenhum comercial criado ainda. Crie o primeiro em Comerciais.",
+            },
+          ]}
+        />
+        <div className="lg:col-span-12">
+          <CadenciaRegistros meses={dados.cadencia} fontesFalhas={fontesCadenciaFalhas} />
+        </div>
+      </Secao>
+
+      <Secao titulo="Base & Contexto">
         <AtualizacoesRecentes
           atividades={dados.atividadesRecentes}
           erroClientes={erros.clientes}
           erroCampanhas={erros.campanhas}
         />
-      </div>
-
-      {/* TR-04.8D.2b: STATUS OPERACIONAL — contagens reais por status */}
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        <StatusCard
-          titulo="Campanhas por Status"
-          icone={Megaphone}
-          itens={dados.statusCampanhas}
-          erro={erros.campanhas}
-          textoVazio="Nenhuma campanha cadastrada ainda. Crie a primeira em Campanhas."
-        />
-        <StatusCard
-          titulo="Briefings por Status"
-          icone={FileText}
-          itens={dados.statusBriefings}
-          erro={erros.briefings}
-          textoVazio="Nenhum briefing criado ainda. Crie o primeiro em Briefings."
-        />
-        <StatusCard
-          titulo="Comerciais por Status"
-          icone={Video}
-          itens={dados.statusComerciais}
-          erro={erros.commercials}
-          textoVazio="Nenhum comercial criado ainda. Crie o primeiro em Comerciais."
-        />
-      </div>
-
-      {/* TR-04.8D.2b: EFICIÊNCIA — ROAS vs meta (regra explícita) + Top 5 */}
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        <RoasVsMeta linhas={dados.roasMeta} erro={erros.campanhas} />
-        <TopInvestimento campanhas={dados.topCampanhas} erro={erros.campanhas} />
-      </div>
-
-      {/* TR-04.8D.2b: REGISTROS CRIADOS (cadência real) + ASSETS */}
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
-        <CadenciaRegistros meses={dados.cadencia} fontesFalhas={fontesCadenciaFalhas} />
         <AssetsCategoria categorias={dados.assetsPorCategoria} erro={erros.assets} />
-      </div>
+      </Secao>
     </>
   );
 }
