@@ -39,7 +39,6 @@ import {
 } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 
 // TR-04.8D.2c-2: motor PURO de attention (regras R1–R4/R6) + painel.
 import {
@@ -821,21 +820,20 @@ export function DashboardView() {
         <AttentionPanel sinais={sinais} modoDemo={modoDemo} analiseParcial={temErroParcial} />
       </div>
 
-      {/* Ações Rápidas */}
-      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Ações Rápidas — TR-04.8D.2c-3A: toolbar operacional compacta.
+          Mesmas 4 ações e destinos; labels autoexplicativos (o title é só
+          complemento). 2×2 no mobile, linha única no desktop; alvo ≥44px.
+          Peso visual deliberadamente menor que o do Attention. */}
+      <div className="mt-6 grid grid-cols-2 gap-3 md:flex md:flex-wrap">
         {quickActions.map((action) => (
-          <Link key={action.label} href={action.href}>
-            <Card className="card-glow h-full transition-all hover:border-primary/50 group cursor-pointer">
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110", action.tone)}>
-                  <action.icon className="size-5" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm group-hover:text-primary transition-colors">{action.label}</p>
-                  <p className="text-xs text-muted-foreground">{action.description}</p>
-                </div>
-              </CardContent>
-            </Card>
+          <Link key={action.label} href={action.href} title={action.description}>
+            <Button
+              variant="outline"
+              className="h-11 w-full justify-start gap-2 px-4 font-medium md:w-auto"
+            >
+              <action.icon className="size-4 text-muted-foreground" />
+              {action.label}
+            </Button>
           </Link>
         ))}
       </div>
