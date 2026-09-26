@@ -69,6 +69,13 @@ export type EvidenciaSinal =
 export interface SinalAtencao {
   /** Estável e único: `${regraId}:${id da entidade (ou fonte, na R6)}`. */
   id: string;
+  /** TR-04.8D.3.2B-0: identificador ESTRUTURAL da entidade (ou fonte, na
+   *  R6) que originou o sinal. Preenchido pelo produtor com o valor real
+   *  que a regra já possui durante a construção — NUNCA derivado por
+   *  parsing de `id`. O `id` composto permanece o identificador estável
+   *  do sinal (`${regraId}:${entityId}`); consumidores não precisam — e
+   *  não devem — reconstruir `entityId` a partir dele. */
+  entityId: string;
   regraId: RegraId;
   nivel: NivelAtencao;
   /** Texto curto e factual (espelha a evidência; não é a fonte de verdade). */
@@ -187,6 +194,7 @@ function sinaisR1(campanhas: CampanhaParaSinais[]): SinalAtencao[] {
     const percentualAbaixo = ((c.roasMeta - roas) / c.roasMeta) * 100;
     sinais.push({
       id: `R1:${c.id}`,
+      entityId: c.id,
       regraId: "R1",
       nivel: "acompanhar",
       titulo: `«${c.nome}» — ROAS ${roasTexto(roas)} contra meta ${roasTexto(c.roasMeta)} (${Math.round(percentualAbaixo)}% abaixo)`,
@@ -213,6 +221,7 @@ function sinaisR2(campanhas: CampanhaParaSinais[]): SinalAtencao[] {
     if (!(Number.isFinite(c.conversions) && c.conversions === 0)) continue;
     sinais.push({
       id: `R2:${c.id}`,
+      entityId: c.id,
       regraId: "R2",
       nivel: "acompanhar",
       titulo: `«${c.nome}» — ${formatBRL(c.spend)} investidos, 0 conversões registradas`,
@@ -238,6 +247,7 @@ function sinaisR3(briefings: BriefingParaSinais[], hojeIso: string): SinalAtenca
     if (b.deadline >= hojeIso) continue; // vence hoje ou no futuro: não vencido
     sinais.push({
       id: `R3:${b.id}`,
+      entityId: b.id,
       regraId: "R3",
       nivel: "prioridade",
       titulo: `Briefing «${b.titulo}» — prazo de ${dataCivilCurta(b.deadline)} vencido, aguardando aprovação`,
@@ -264,6 +274,7 @@ function sinaisR4(commercials: ComercialParaSinais[], hojeIso: string): SinalAte
     if (c.deadline >= hojeIso) continue;
     sinais.push({
       id: `R4:${c.id}`,
+      entityId: c.id,
       regraId: "R4",
       nivel: "prioridade",
       titulo: `Comercial «${c.titulo}» — prazo de ${dataCivilCurta(c.deadline)} vencido, em ${c.status}`,
@@ -283,6 +294,7 @@ function sinaisR4(commercials: ComercialParaSinais[], hojeIso: string): SinalAte
 function sinaisR6(fontes: FonteIndisponivel[]): SinalAtencao[] {
   return fontes.map((f) => ({
     id: `R6:${f.fonte}`,
+    entityId: f.fonte,
     regraId: "R6" as const,
     nivel: "informacao" as const,
     titulo: `Fonte ${f.fonte} indisponível — dados desta fonte não carregados`,
