@@ -15,7 +15,7 @@ export function AssetsCategoria({
 }) {
   const maxAssets = Math.max(1, ...categorias.map((c) => c.quantidade));
   return (
-    <Card className="lg:col-span-6 card-glow">
+    <Card className="lg:col-span-6 self-start card-glow">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
           <Image className="size-4 text-ai" /> Assets por Categoria

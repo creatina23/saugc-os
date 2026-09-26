@@ -29,12 +29,12 @@ export function CadenciaRegistros({
       </CardHeader>
       <CardContent className="pt-2">
         {meses === null ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
+          <p className="py-4 text-center text-sm text-muted-foreground">
             Não disponível na demonstração — o dataset demo não inclui datas de
             criação. Conecte o Supabase para ver a cadência real.
           </p>
         ) : cadenciaTotalmenteFalha ? (
-          <p role="alert" className="py-6 text-center text-sm text-destructive">
+          <p role="alert" className="py-4 text-center text-sm text-destructive">
             Todas as fontes desta contagem falharam — nada a exibir (isso não é
             zero). Use Recarregar.
           </p>
@@ -47,7 +47,7 @@ export function CadenciaRegistros({
               </p>
             )}
             <div
-              className="flex h-36 items-end gap-2"
+              className="flex h-20 items-end gap-2"
               role="img"
               aria-label={`Registros criados por mês: ${meses
                 .map((m) => `${m.rotulo} ${m.total}`)

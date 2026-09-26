@@ -577,10 +577,10 @@ function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
     <section aria-label={titulo} className="mt-10">
       <div className="flex items-center gap-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground/70">
           {titulo}
         </h2>
-        <div aria-hidden="true" className="h-px flex-1 bg-border/60" />
+        <div aria-hidden="true" className="h-px flex-1 bg-border" />
       </div>
       <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-12">{children}</div>
     </section>
@@ -651,7 +651,7 @@ export function DashboardView() {
         <div className="h-10 w-72 animate-pulse rounded-lg bg-white/10" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           {["k1", "k2", "k3", "k4", "k5", "k6"].map((chave) => (
-            <Skeleton key={chave} className="h-32 w-full rounded-2xl" />
+            <Skeleton key={chave} className="h-24 w-full rounded-2xl" />
           ))}
         </div>
         {/* TR-04.8D.2c-2: skeleton do Attention na mesma posição do real */}

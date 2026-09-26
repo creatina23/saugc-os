@@ -39,14 +39,14 @@ export function AtualizacoesRecentes({
           </CardTitle>
           <CardDescription>Derivadas das datas de criação de clientes e campanhas</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 pt-2">
+      <CardContent className="space-y-2.5 pt-2">
         {erroClientes && erroCampanhas ? (
-          <p role="alert" className="text-sm text-destructive py-8 text-center">
+          <p role="alert" className="text-sm text-destructive py-6 text-center">
             Registros indisponíveis — as fontes que alimentam estas
             atualizações falharam (isso não é vazio).
           </p>
         ) : atividades.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">
+          <p className="text-sm text-muted-foreground py-6 text-center">
             Nenhum registro ainda. Clientes e campanhas que você criar
             aparecem aqui com a data real de cadastro.
           </p>
@@ -54,8 +54,8 @@ export function AtualizacoesRecentes({
         atividades.map((item) => {
           const cfg = activityConfig[item.type] ?? activityConfig.deal;
           return (
-            <div key={item.id} className="flex items-start gap-3 rounded-xl border border-border/40 bg-surface/30 p-3.5 transition-colors hover:border-border">
-              <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg mt-0.5", cfg.tone)}>
+            <div key={item.id} className="flex items-start gap-3 rounded-xl border border-border/40 bg-surface/30 p-3 transition-colors hover:border-border">
+              <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg mt-0.5", cfg.tone)}>
                 <cfg.icon className="size-4" />
               </div>
               <div className="flex-1 min-w-0">

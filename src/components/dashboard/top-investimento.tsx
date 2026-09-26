@@ -46,12 +46,12 @@ export function TopInvestimento({
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border/50 text-left text-muted-foreground">
-                <th className="py-2 pr-2 font-medium">Campanha</th>
-                <th className="py-2 pr-2 text-right font-medium">Investido</th>
-                <th className="hidden py-2 pr-2 text-right font-medium md:table-cell">CTR</th>
-                <th className="hidden py-2 pr-2 text-right font-medium md:table-cell">CPC</th>
-                <th className="py-2 pr-2 text-right font-medium">CPA</th>
-                <th className="py-2 text-right font-medium">ROAS</th>
+                <th className="py-1.5 pr-2 font-medium">Campanha</th>
+                <th className="py-1.5 pr-2 text-right font-medium">Investido</th>
+                <th className="hidden py-1.5 pr-2 text-right font-medium md:table-cell">CTR</th>
+                <th className="hidden py-1.5 pr-2 text-right font-medium md:table-cell">CPC</th>
+                <th className="py-1.5 pr-2 text-right font-medium">CPA</th>
+                <th className="py-1.5 text-right font-medium">ROAS</th>
               </tr>
             </thead>
             <tbody>
@@ -68,12 +68,12 @@ export function TopInvestimento({
                     : "—";
                 return (
                   <tr key={c.id} className="border-b border-border/30 last:border-0">
-                    <td className="max-w-[140px] truncate py-2 pr-2 font-medium" title={c.nome}>
+                    <td className="max-w-[140px] truncate py-1.5 pr-2 font-medium" title={c.nome}>
                       {c.nome}
                     </td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{formatBRL(c.spend)}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatBRL(c.spend)}</td>
                     <td
-                      className="hidden py-2 pr-2 text-right tabular-nums md:table-cell"
+                      className="hidden py-1.5 pr-2 text-right tabular-nums md:table-cell"
                       title={
                         c.impressions > 0
                           ? `CTR = cliques ÷ impressões (${formatNumber(c.clicks)} ÷ ${formatNumber(c.impressions)})`
@@ -83,7 +83,7 @@ export function TopInvestimento({
                       {ctr}
                     </td>
                     <td
-                      className="hidden py-2 pr-2 text-right tabular-nums md:table-cell"
+                      className="hidden py-1.5 pr-2 text-right tabular-nums md:table-cell"
                       title={
                         c.clicks > 0
                           ? `CPC = investido ÷ cliques (${formatBRL(c.spend)} ÷ ${formatNumber(c.clicks)})`
@@ -93,7 +93,7 @@ export function TopInvestimento({
                       {cpc}
                     </td>
                     <td
-                      className="py-2 pr-2 text-right tabular-nums"
+                      className="py-1.5 pr-2 text-right tabular-nums"
                       title={
                         c.conversions > 0
                           ? `CPA = investido ÷ conversões (${formatBRL(c.spend)} ÷ ${formatNumber(c.conversions)})`
@@ -103,7 +103,7 @@ export function TopInvestimento({
                       {cpa}
                     </td>
                     <td
-                      className="py-2 text-right tabular-nums"
+                      className="py-1.5 text-right tabular-nums"
                       title="ROAS = receita ÷ investido"
                     >
                       {roas}

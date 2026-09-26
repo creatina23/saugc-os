@@ -30,7 +30,7 @@ export function MrrClientes({
           <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">Ver todos</Button>
         </Link>
       </CardHeader>
-      <CardContent className="space-y-4 pt-4">
+      <CardContent className="space-y-3 pt-2">
         {erro ? (
           <p role="alert" className="text-sm text-destructive py-8 text-center">
             Não consegui carregar os clientes — indisponível agora (isso não é
@@ -48,7 +48,7 @@ export function MrrClientes({
               <div key={c.id} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium truncate max-w-[200px]">{c.nome}</span>
-                  <span className="font-semibold text-primary">{formatBRL(c.valor)}</span>
+                  <span className="font-semibold tabular-nums text-primary">{formatBRL(c.valor)}</span>
                 </div>
                 <div className="h-2.5 w-full rounded-full bg-muted/60 overflow-hidden p-0.5">
                   <div
