@@ -65,7 +65,10 @@ export function AttentionPanel({ sinais, modoDemo = false, analiseParcial = fals
   const semSuporteDemo = modoDemo && sinais.length === 0;
 
   return (
-    <Card>
+    // TR-04.8D.2c-3A: superfície N2 — o único bloco do Dashboard com borda e
+    // fundo primários sutis (premium/sóbrio, sem glow/neon). Todo o conteúdo,
+    // estados e acessibilidade permanecem 1:1.
+    <Card className="border-primary/25 bg-primary/[0.03]">
       <CardContent className="p-5">
         <div className="flex items-center gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
