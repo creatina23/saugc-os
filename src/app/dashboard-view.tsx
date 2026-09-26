@@ -8,11 +8,14 @@ import {
   Bot,
   Briefcase,
   CircleDollarSign,
+  FileText,
+  Image,
   Megaphone,
   Sparkles,
   Target,
   TrendingUp,
   Users,
+  Video,
   Wallet,
   Activity,
   Zap,
@@ -30,8 +33,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatBRL, formatNumber, formatPercent } from "@/lib/format";
 import {
   activityLog,
+  assets as assetsMock,
+  briefings as briefingsMock,
   campaignPerformance,
   clients as clientesMock,
+  commercials as commercialsMock,
   dashboardMetrics,
   deals as dealsMock,
   pipelineValueByStage as funilMock,
@@ -63,6 +69,32 @@ const coresPlataforma: Record<string, string> = {
   "Google Ads": "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]",
   TikTok: "bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.4)]",
 };
+
+// TR-04.8D.2b: cor por status conhecido (mesma semântica dos módulos);
+// status desconhecido recebe cor neutra — a informação nunca depende só da
+// cor (legenda com nome + contagem sempre visível).
+const CORES_STATUS: Record<string, string> = {
+  Ativa: "bg-success",
+  Aprovado: "bg-success",
+  Pausada: "bg-warning",
+  "Em Aprovação": "bg-warning",
+  Revisão: "bg-warning",
+  Produção: "bg-primary",
+  Rascunho: "bg-muted-foreground",
+  "Sem status": "bg-border",
+  "Sem categoria": "bg-border",
+};
+const COR_STATUS_NEUTRA = "bg-muted-foreground/60";
+
+// TR-04.8D.2b: REGRA DO SISTEMA (documentada na própria UI, não é verdade
+// universal): ROAS real ÷ meta ≥ 100% = "Na meta"; 70–99% = "Abaixo da meta";
+// < 70% = "Muito abaixo". Sem meta válida ou sem investido: sem classificação.
+function classificarRoas(roas: number, meta: number): { rotulo: string; classe: string } {
+  const pct = roas / meta;
+  if (pct >= 1) return { rotulo: "Na meta", classe: "text-success" };
+  if (pct >= 0.7) return { rotulo: "Abaixo da meta", classe: "text-warning" };
+  return { rotulo: "Muito abaixo", classe: "text-destructive" };
+}
 
 interface ReceitaCliente {
   id: string;
@@ -115,6 +147,20 @@ interface LinhaCampanha {
   clicks: unknown;
   revenue: unknown;
   conversions: unknown;
+  roas_meta: unknown;
+  created_at: string | null;
+}
+
+// TR-04.8D.2b: linhas mínimas das novas fontes (read-only)
+interface LinhaStatus {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+}
+
+interface LinhaAsset {
+  id: string;
+  category: string | null;
   created_at: string | null;
 }
 
@@ -156,6 +202,37 @@ interface Atividade {
   timestamp: string;
 }
 
+// TR-04.8D.2b: contagem real por status/categoria (sem categoria inventada)
+interface ContagemRotulo {
+  rotulo: string;
+  quantidade: number;
+}
+
+// TR-04.8D.2b: ROAS real vs meta — somente campanhas com meta válida.
+// roasReal = null quando spend = 0 (ROAS "—", sem classificação).
+interface RoasMeta {
+  id: string;
+  nome: string;
+  roasReal: number | null;
+  meta: number;
+}
+
+interface TopCampanha {
+  id: string;
+  nome: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  revenue: number;
+}
+
+interface MesCadencia {
+  chave: string;
+  rotulo: string;
+  total: number;
+}
+
 interface DadosDashboard {
   kpis: Kpi[];
   // TR-04.8D.2a: pulso comercial (deals reais) + funil por valor
@@ -166,6 +243,15 @@ interface DadosDashboard {
   canais: CanalPerformance[];
   atividadesRecentes: Atividade[];
   receitaClientes: ReceitaCliente[];
+  // TR-04.8D.2b: operação + eficiência. null = widget sem suporte honesto no
+  // dataset demo ("Não disponível na demonstração"); [] = vazio real honesto.
+  statusCampanhas: ContagemRotulo[] | null;
+  statusBriefings: ContagemRotulo[];
+  statusComerciais: ContagemRotulo[];
+  roasMeta: RoasMeta[] | null;
+  topCampanhas: TopCampanha[] | null;
+  cadencia: MesCadencia[] | null;
+  assetsPorCategoria: ContagemRotulo[];
 }
 
 function montarDadosDemo(): DadosDashboard {
@@ -203,6 +289,27 @@ function montarDadosDemo(): DadosDashboard {
     timestamp: a.timestamp,
   }));
 
+  // TR-04.8D.2b (demo selada) — ORIGEM AUDITÁVEL: só entra no demo o que
+  // deriva dos mocks existentes. Briefings/comerciais/assets têm status e
+  // categoria nos mocks → derivados honestamente. O mock NÃO tem: status de
+  // campanha, roas_meta, campanhas individuais nem created_at → esses widgets
+  // ficam null = "Não disponível na demonstração" (nunca números inventados).
+  const statusBriefings = contarPorRotulo(
+    briefingsMock.map((b) => b.status),
+    "Sem status",
+    ["Em Aprovação", "Aprovado", "Rascunho"]
+  );
+  const statusComerciais = contarPorRotulo(
+    commercialsMock.map((c) => c.status),
+    "Sem status",
+    ["Rascunho", "Produção", "Revisão", "Aprovado"]
+  );
+  const assetsPorCategoria = contarPorRotulo(
+    assetsMock.map((a) => a.category),
+    "Sem categoria",
+    ["Video Ads", "Hook Clips", "B-Roll", "Product Photos"]
+  );
+
   return {
     kpis: dashboardMetrics.map((m) => ({
       label: m.label,
@@ -216,34 +323,80 @@ function montarDadosDemo(): DadosDashboard {
     canais,
     atividadesRecentes,
     receitaClientes,
+    statusCampanhas: null, // mock não tem status de campanha
+    statusBriefings,
+    statusComerciais,
+    roasMeta: null, // mock não tem roas_meta por campanha
+    topCampanhas: null, // mock é agregado por plataforma, não campanhas
+    cadencia: null, // mock não tem created_at
+    assetsPorCategoria,
   };
 }
 
 // TR-04.8D.1: erro por fonte — res.error nunca vira "zero dados" silencioso.
+// TR-04.8D.2b: 3 novas fontes (briefings, commercials, assets). Uma falhar
+// não derruba as demais — cada widget trata o próprio erro.
 type FonteErro = {
   clientes: string | null;
   campanhas: string | null;
   negocios: string | null;
+  briefings: string | null;
+  commercials: string | null;
+  assets: string | null;
 };
+
+// TR-04.8D.2b: agrupa contagens por rótulo real (status/categoria). Rótulo
+// vazio/null vira "Sem categoria"/"Sem status" factual — nunca inventa.
+function contarPorRotulo(
+  linhas: (string | null)[],
+  rotuloVazio: string,
+  ordemPreferida?: string[]
+): ContagemRotulo[] {
+  const mapa = new Map<string, number>();
+  for (const raw of linhas) {
+    const rotulo = (raw ?? "").trim() || rotuloVazio;
+    mapa.set(rotulo, (mapa.get(rotulo) ?? 0) + 1);
+  }
+  const ordem = ordemPreferida ?? [];
+  return [...mapa.entries()]
+    .map(([rotulo, quantidade]) => ({ rotulo, quantidade }))
+    .sort((a, b) => {
+      const ia = ordem.indexOf(a.rotulo);
+      const ib = ordem.indexOf(b.rotulo);
+      if (ia !== -1 || ib !== -1) {
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      }
+      return b.quantidade - a.quantidade || a.rotulo.localeCompare(b.rotulo);
+    });
+}
 
 async function coletarDadosReais(
   supabase: SupabaseClient
 ): Promise<{ dados: DadosDashboard; erros: FonteErro }> {
-  const [cli, cam, dea] = await Promise.all([
+  const [cli, cam, dea, bri, com, ass] = await Promise.all([
     supabase.from("clients").select("id, name, company, status, mrr, created_at"),
-    supabase.from("campaigns").select("id, name, platform, status, spend, impressions, clicks, revenue, conversions, created_at"),
+    supabase.from("campaigns").select("id, name, platform, status, spend, impressions, clicks, revenue, conversions, roas_meta, created_at"),
     supabase.from("deals").select("id, title, stage, value, created_at"),
+    supabase.from("briefings").select("id, status, created_at"),
+    supabase.from("commercials").select("id, status, created_at"),
+    supabase.from("assets").select("id, category, created_at"),
   ]);
 
   const erros: FonteErro = {
     clientes: cli.error ? cli.error.message : null,
     campanhas: cam.error ? cam.error.message : null,
     negocios: dea.error ? dea.error.message : null,
+    briefings: bri.error ? bri.error.message : null,
+    commercials: com.error ? com.error.message : null,
+    assets: ass.error ? ass.error.message : null,
   };
 
   const clientes = (cli.data ?? []) as LinhaCliente[];
   const campanhas = (cam.data ?? []) as LinhaCampanha[];
   const negocios = (dea.data ?? []) as LinhaDeal[];
+  const briefings = (bri.data ?? []) as LinhaStatus[];
+  const commercials = (com.data ?? []) as LinhaStatus[];
+  const assetsLista = (ass.data ?? []) as LinhaAsset[];
 
   const receitaMes = clientes.reduce((acc, c) => acc + numero(c.mrr), 0);
   const conversoes = campanhas.reduce((acc, c) => acc + numero(c.conversions), 0);
@@ -364,10 +517,109 @@ async function coletarDadosReais(
     .slice(0, 5)
     .map(({ id, type, message, timestamp }) => ({ id, type, message, timestamp }));
 
+  // TR-04.8D.2b: STATUS OPERACIONAL — agrupa os status REAIS presentes nos
+  // dados (nenhuma categoria inventada; ordem conhecida primeiro).
+  const statusCampanhas = contarPorRotulo(
+    campanhas.map((c) => c.status),
+    "Sem status",
+    ["Ativa", "Pausada", "Rascunho"]
+  );
+  const statusBriefings = contarPorRotulo(
+    briefings.map((b) => b.status),
+    "Sem status",
+    ["Em Aprovação", "Aprovado", "Rascunho"]
+  );
+  const statusComerciais = contarPorRotulo(
+    commercials.map((c) => c.status),
+    "Sem status",
+    ["Rascunho", "Produção", "Revisão", "Aprovado"]
+  );
+
+  // TR-04.8D.2b: ROAS REAL vs META — só campanhas com meta válida (> 0).
+  // Meta NUNCA é inventada; sem meta a campanha não entra na classificação.
+  const roasMeta: RoasMeta[] = campanhas
+    .filter((c) => numero(c.roas_meta) > 0)
+    .map((c) => ({
+      id: c.id,
+      nome: c.name || "Sem nome",
+      // spend = 0 ⇒ ROAS "—" (null) — exibido, porém nunca classificado.
+      roasReal: numero(c.spend) > 0 ? numero(c.revenue) / numero(c.spend) : null,
+      meta: numero(c.roas_meta),
+    }))
+    .sort((a, b) => (b.roasReal ?? -1) - (a.roasReal ?? -1));
+
+  // TR-04.8D.2b: TOP 5 POR INVESTIMENTO (spend DESC) — "top" = maior gasto,
+  // não "melhor desempenho".
+  const topCampanhas: TopCampanha[] = [...campanhas]
+    .sort((a, b) => numero(b.spend) - numero(a.spend))
+    .slice(0, 5)
+    .map((c) => ({
+      id: c.id,
+      nome: c.name || "Sem nome",
+      spend: numero(c.spend),
+      impressions: numero(c.impressions),
+      clicks: numero(c.clicks),
+      conversions: numero(c.conversions),
+      revenue: numero(c.revenue),
+    }));
+
+  // TR-04.8D.2b: CADÊNCIA — "Registros criados" por mês (últimos 6, incl. o
+  // atual) a partir de created_at REAL. Mês sem registro = 0 legítimo.
+  const meses: MesCadencia[] = [];
+  const agora = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+    meses.push({
+      chave: `${d.getFullYear()}-${d.getMonth()}`,
+      rotulo: `${MESES[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`,
+      total: 0,
+    });
+  }
+  const indiceMes = new Map(meses.map((m, i) => [m.chave, i]));
+  const fontesCadencia: { linhas: { created_at: string | null }[]; falhou: boolean }[] = [
+    { linhas: clientes, falhou: erros.clientes !== null },
+    { linhas: campanhas, falhou: erros.campanhas !== null },
+    { linhas: briefings, falhou: erros.briefings !== null },
+    { linhas: commercials, falhou: erros.commercials !== null },
+  ];
+  for (const fonte of fontesCadencia) {
+    if (fonte.falhou) continue; // fonte falha não contribui — widget avisa
+    for (const linha of fonte.linhas) {
+      if (!linha.created_at) continue;
+      const d = new Date(linha.created_at);
+      if (Number.isNaN(d.getTime())) continue;
+      const idx = indiceMes.get(`${d.getFullYear()}-${d.getMonth()}`);
+      if (idx !== undefined) meses[idx].total += 1;
+    }
+  }
+
+  // TR-04.8D.2b: ASSETS por categoria real; null/vazio = "Sem categoria".
+  const assetsPorCategoria = contarPorRotulo(
+    assetsLista.map((a) => a.category),
+    "Sem categoria",
+    ["Video Ads", "Hook Clips", "B-Roll", "Product Photos"]
+  );
+
   // ZERO fallback demo: fonte vazia é vazio honesto; fonte com erro é
   // comunicada pelo widget correspondente (nunca mock, nunca zero falso).
   return {
-    dados: { kpis, oportunidadesAbertas: abertos.length, pipelineAberto, ticketMedioAberto, funilValor, canais, atividadesRecentes, receitaClientes },
+    dados: {
+      kpis,
+      oportunidadesAbertas: abertos.length,
+      pipelineAberto,
+      ticketMedioAberto,
+      funilValor,
+      canais,
+      atividadesRecentes,
+      receitaClientes,
+      statusCampanhas,
+      statusBriefings,
+      statusComerciais,
+      roasMeta,
+      topCampanhas,
+      cadencia: meses,
+      assetsPorCategoria,
+    },
     erros,
   };
 }
@@ -381,6 +633,88 @@ const quickActions = [
 
 
 
+// TR-04.8D.2b: cartão de status operacional (reutilizado por campanhas,
+// briefings e comerciais — mesma anatomia, erro/vazio próprios por fonte).
+function StatusCard({
+  titulo,
+  icone: Icone,
+  itens,
+  erro,
+  textoVazio,
+}: {
+  titulo: string;
+  icone: LucideIcon;
+  itens: ContagemRotulo[] | null;
+  erro: string | null;
+  textoVazio: string;
+}) {
+  const total = itens?.reduce((acc, i) => acc + i.quantidade, 0) ?? 0;
+  return (
+    <Card className="lg:col-span-4 card-glow">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Icone className="size-4 text-primary" /> {titulo}
+        </CardTitle>
+        <CardDescription>
+          {itens === null
+            ? "Não disponível na demonstração"
+            : erro
+              ? "Fonte indisponível neste momento"
+              : `${total} registro${total === 1 ? "" : "s"} na base`}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 pt-2">
+        {itens === null ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Não disponível na demonstração — o dataset demo não inclui esses
+            dados. Conecte o Supabase para ver os números reais.
+          </p>
+        ) : erro ? (
+          <p role="alert" className="py-6 text-center text-sm text-destructive">
+            Fonte indisponível — isso não é zero. Detalhe técnico: {erro}
+          </p>
+        ) : itens.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">{textoVazio}</p>
+        ) : (
+          <>
+            <div
+              className="flex h-3 w-full overflow-hidden rounded-full bg-muted/60"
+              role="img"
+              aria-label={`${titulo}: ${itens
+                .map((i) => `${i.rotulo} ${i.quantidade}`)
+                .join(", ")} — total ${total}`}
+            >
+              {itens.map((i) => (
+                <div
+                  key={i.rotulo}
+                  style={{ width: `${(i.quantidade / Math.max(1, total)) * 100}%` }}
+                  className={cn("h-full", CORES_STATUS[i.rotulo] ?? COR_STATUS_NEUTRA)}
+                  title={`${i.rotulo}: ${i.quantidade}`}
+                />
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+              {itens.map((i) => (
+                <span key={i.rotulo} className="flex items-center gap-1.5">
+                  <span
+                    className={cn("size-2.5 rounded-full", CORES_STATUS[i.rotulo] ?? COR_STATUS_NEUTRA)}
+                    aria-hidden="true"
+                  />
+                  <span className="text-muted-foreground">{i.rotulo}</span>
+                  <span className="font-semibold tabular-nums">{i.quantidade}</span>
+                </span>
+              ))}
+              <span className="ml-auto text-muted-foreground">
+                Total <span className="font-semibold tabular-nums text-foreground">{total}</span>
+              </span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // TR-04.8D.1: máquina de estados explícita — LOADING / READY / PARTIAL /
 // ERROR / DEMO. Mock só é alcançável dentro de DEMO (sem Supabase).
 type Painel =
@@ -389,7 +723,14 @@ type Painel =
   | { estado: "erro" }
   | { estado: "pronto"; dados: DadosDashboard; erros: FonteErro };
 
-const SEM_ERROS: FonteErro = { clientes: null, campanhas: null, negocios: null };
+const SEM_ERROS: FonteErro = {
+  clientes: null,
+  campanhas: null,
+  negocios: null,
+  briefings: null,
+  commercials: null,
+  assets: null,
+};
 
 export function DashboardView() {
   const supabase = useMemo(() => getSupabaseBrowser(), []);
@@ -409,7 +750,10 @@ export function DashboardView() {
     setPainel({ estado: "loading" });
     try {
       const { dados, erros } = await coletarDadosReais(supabase);
-      if (erros.clientes && erros.campanhas && erros.negocios) {
+      const todasFalharam =
+        erros.clientes && erros.campanhas && erros.negocios &&
+        erros.briefings && erros.commercials && erros.assets;
+      if (todasFalharam) {
         setPainel({ estado: "erro" }); // ERROR: nenhuma fonte respondeu
       } else {
         setPainel({ estado: "pronto", dados, erros }); // READY ou PARTIAL
@@ -437,6 +781,15 @@ export function DashboardView() {
           {["k1", "k2", "k3", "k4", "k5", "k6"].map((chave) => (
             <Skeleton key={chave} className="h-32 w-full rounded-2xl" />
           ))}
+        </div>
+        <div className="grid gap-8 lg:grid-cols-12">
+          <Skeleton className="h-72 w-full rounded-2xl lg:col-span-6" />
+          <Skeleton className="h-72 w-full rounded-2xl lg:col-span-6" />
+        </div>
+        <div className="grid gap-8 lg:grid-cols-12">
+          <Skeleton className="h-40 w-full rounded-2xl lg:col-span-4" />
+          <Skeleton className="h-40 w-full rounded-2xl lg:col-span-4" />
+          <Skeleton className="h-40 w-full rounded-2xl lg:col-span-4" />
         </div>
         <div className="grid gap-8 lg:grid-cols-12">
           <Skeleton className="h-72 w-full rounded-2xl lg:col-span-6" />
@@ -473,6 +826,9 @@ export function DashboardView() {
     erros.clientes ? "clientes" : null,
     erros.campanhas ? "campanhas" : null,
     erros.negocios ? "negociações" : null,
+    erros.briefings ? "briefings" : null,
+    erros.commercials ? "comerciais" : null,
+    erros.assets ? "assets" : null,
   ].filter((fonte): fonte is string => fonte !== null);
   const temErroParcial = fontesFalhas.length > 0;
 
@@ -480,6 +836,18 @@ export function DashboardView() {
   const maxReceitaCliente = Math.max(1, ...dados.receitaClientes.map((c) => c.valor));
   // TR-04.8D.2a: escala única p/ comparar investido × retorno no mesmo eixo.
   const maxCanal = Math.max(1, ...dados.canais.flatMap((c) => [c.spend, c.revenue]));
+  // TR-04.8D.2b
+  const maxCadencia = dados.cadencia
+    ? Math.max(1, ...dados.cadencia.map((m) => m.total))
+    : 1;
+  const maxAssets = Math.max(1, ...dados.assetsPorCategoria.map((c) => c.quantidade));
+  const fontesCadenciaFalhas = [
+    erros.clientes ? "clientes" : null,
+    erros.campanhas ? "campanhas" : null,
+    erros.briefings ? "briefings" : null,
+    erros.commercials ? "comerciais" : null,
+  ].filter((f): f is string => f !== null);
+  const cadenciaTotalmenteFalha = fontesCadenciaFalhas.length === 4;
 
   return (
     <>
@@ -899,6 +1267,309 @@ export function DashboardView() {
                 </div>
               );
             })
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* TR-04.8D.2b: STATUS OPERACIONAL — contagens reais por status */}
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <StatusCard
+          titulo="Campanhas por Status"
+          icone={Megaphone}
+          itens={dados.statusCampanhas}
+          erro={erros.campanhas}
+          textoVazio="Nenhuma campanha cadastrada ainda. Crie a primeira em Campanhas."
+        />
+        <StatusCard
+          titulo="Briefings por Status"
+          icone={FileText}
+          itens={dados.statusBriefings}
+          erro={erros.briefings}
+          textoVazio="Nenhum briefing criado ainda. Crie o primeiro em Briefings."
+        />
+        <StatusCard
+          titulo="Comerciais por Status"
+          icone={Video}
+          itens={dados.statusComerciais}
+          erro={erros.commercials}
+          textoVazio="Nenhum comercial criado ainda. Crie o primeiro em Comerciais."
+        />
+      </div>
+
+      {/* TR-04.8D.2b: EFICIÊNCIA — ROAS vs meta (regra explícita) + Top 5 */}
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <Card className="lg:col-span-6 card-glow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <TrendingUp className="size-4 text-primary" /> ROAS vs Meta
+            </CardTitle>
+            <CardDescription>
+              Campanhas com meta definida — ROAS real (receita ÷ investido) comparado à meta
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 pt-2">
+            <p className="rounded-lg border border-border/50 bg-surface/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              Regra do sistema: <span className="font-semibold text-success">na meta</span> ≥ 100%
+              da meta · <span className="font-semibold text-warning">abaixo</span> 70–99% ·{" "}
+              <span className="font-semibold text-destructive">muito abaixo</span> &lt; 70%. Sem
+              meta ou sem investido não há classificação.
+            </p>
+            {dados.roasMeta === null ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Não disponível na demonstração — o dataset demo não inclui metas
+                de ROAS. Conecte o Supabase para comparar metas reais.
+              </p>
+            ) : erros.campanhas ? (
+              <p role="alert" className="py-6 text-center text-sm text-destructive">
+                Campanhas indisponíveis — a comparação com metas não pode ser exibida
+                (isso não é zero). Detalhe técnico: {erros.campanhas}
+              </p>
+            ) : dados.roasMeta.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhuma campanha com meta de ROAS definida. Defina metas na página
+                Campanhas para compará-las aqui.
+              </p>
+            ) : (
+              dados.roasMeta.map((c) => {
+                const classif =
+                  c.roasReal === null ? null : classificarRoas(c.roasReal, c.meta);
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-surface/40 px-3 py-2.5 text-xs"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-medium" title={c.nome}>
+                      {c.nome}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      ROAS{" "}
+                      <span className="font-semibold text-foreground">
+                        {c.roasReal === null
+                          ? "—"
+                          : `${c.roasReal.toFixed(1).replace(".", ",")}x`}
+                      </span>{" "}
+                      · meta{" "}
+                      <span className="font-semibold text-foreground">
+                        {c.meta.toFixed(1).replace(".", ",")}x
+                      </span>
+                    </span>
+                    {classif ? (
+                      <span className={cn("shrink-0 font-semibold", classif.classe)}>
+                        {classif.rotulo}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 font-medium text-muted-foreground">
+                        Sem investido
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-6 card-glow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <BarChart3 className="size-4 text-ai" /> Top 5 por Investimento
+            </CardTitle>
+            <CardDescription>
+              As 5 campanhas com maior investimento — maior gasto, não necessariamente
+              melhor desempenho
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {dados.topCampanhas === null ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Não disponível na demonstração — o dataset demo não inclui campanhas
+                individuais. Conecte o Supabase para ver as reais.
+              </p>
+            ) : erros.campanhas ? (
+              <p role="alert" className="py-6 text-center text-sm text-destructive">
+                Campanhas indisponíveis — a tabela não pode ser exibida (isso não é
+                zero). Detalhe técnico: {erros.campanhas}
+              </p>
+            ) : dados.topCampanhas.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhuma campanha cadastrada ainda. Crie a primeira em Campanhas.
+              </p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border/50 text-left text-muted-foreground">
+                    <th className="py-2 pr-2 font-medium">Campanha</th>
+                    <th className="py-2 pr-2 text-right font-medium">Investido</th>
+                    <th className="hidden py-2 pr-2 text-right font-medium md:table-cell">CTR</th>
+                    <th className="hidden py-2 pr-2 text-right font-medium md:table-cell">CPC</th>
+                    <th className="py-2 pr-2 text-right font-medium">CPA</th>
+                    <th className="py-2 text-right font-medium">ROAS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dados.topCampanhas.map((c) => {
+                    const ctr =
+                      c.impressions > 0
+                        ? formatPercent((c.clicks / c.impressions) * 100)
+                        : "—";
+                    const cpc = c.clicks > 0 ? brl2(c.spend / c.clicks) : "—";
+                    const cpa = c.conversions > 0 ? formatBRL(c.spend / c.conversions) : "—";
+                    const roas =
+                      c.spend > 0
+                        ? `${(c.revenue / c.spend).toFixed(1).replace(".", ",")}x`
+                        : "—";
+                    return (
+                      <tr key={c.id} className="border-b border-border/30 last:border-0">
+                        <td className="max-w-[140px] truncate py-2 pr-2 font-medium" title={c.nome}>
+                          {c.nome}
+                        </td>
+                        <td className="py-2 pr-2 text-right tabular-nums">{formatBRL(c.spend)}</td>
+                        <td
+                          className="hidden py-2 pr-2 text-right tabular-nums md:table-cell"
+                          title={
+                            c.impressions > 0
+                              ? `CTR = cliques ÷ impressões (${formatNumber(c.clicks)} ÷ ${formatNumber(c.impressions)})`
+                              : "Sem impressões registradas"
+                          }
+                        >
+                          {ctr}
+                        </td>
+                        <td
+                          className="hidden py-2 pr-2 text-right tabular-nums md:table-cell"
+                          title={
+                            c.clicks > 0
+                              ? `CPC = investido ÷ cliques (${formatBRL(c.spend)} ÷ ${formatNumber(c.clicks)})`
+                              : "Sem cliques registrados"
+                          }
+                        >
+                          {cpc}
+                        </td>
+                        <td
+                          className="py-2 pr-2 text-right tabular-nums"
+                          title={
+                            c.conversions > 0
+                              ? `CPA = investido ÷ conversões (${formatBRL(c.spend)} ÷ ${formatNumber(c.conversions)})`
+                              : "Sem conversões registradas"
+                          }
+                        >
+                          {cpa}
+                        </td>
+                        <td
+                          className="py-2 text-right tabular-nums"
+                          title="ROAS = receita ÷ investido"
+                        >
+                          {roas}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* TR-04.8D.2b: REGISTROS CRIADOS (cadência real) + ASSETS */}
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <Card className="lg:col-span-6 card-glow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Activity className="size-4 text-success" /> Registros criados
+            </CardTitle>
+            <CardDescription>
+              Volume de registros criados por mês — clientes, campanhas, briefings e
+              comerciais (últimos 6 meses)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {dados.cadencia === null ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Não disponível na demonstração — o dataset demo não inclui datas de
+                criação. Conecte o Supabase para ver a cadência real.
+              </p>
+            ) : cadenciaTotalmenteFalha ? (
+              <p role="alert" className="py-6 text-center text-sm text-destructive">
+                Todas as fontes desta contagem falharam — nada a exibir (isso não é
+                zero). Use Recarregar.
+              </p>
+            ) : (
+              <>
+                {fontesCadenciaFalhas.length > 0 && (
+                  <p role="alert" className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                    Contagem parcial — fonte(s) indisponível(is): {fontesCadenciaFalhas.join(", ")}.
+                    Os totais abaixo podem estar menores que o real.
+                  </p>
+                )}
+                <div
+                  className="flex h-36 items-end gap-2"
+                  role="img"
+                  aria-label={`Registros criados por mês: ${dados.cadencia
+                    .map((m) => `${m.rotulo} ${m.total}`)
+                    .join(", ")}`}
+                >
+                  {dados.cadencia.map((m) => {
+                    const pct = Math.round((m.total / maxCadencia) * 100);
+                    return (
+                      <div key={m.chave} className="flex h-full flex-1 flex-col items-center gap-1">
+                        <span className="text-[10px] font-semibold tabular-nums text-foreground">
+                          {m.total}
+                        </span>
+                        <div className="flex w-full flex-1 items-end">
+                          <div
+                            style={{ height: m.total > 0 ? `${Math.max(6, pct)}%` : "0%" }}
+                            className="w-full rounded-t-md bg-gradient-to-t from-primary/70 to-ai/70 transition-all duration-500"
+                            title={`${m.rotulo}: ${m.total} registro(s) criados`}
+                          />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">{m.rotulo}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Mês sem registro aparece como 0 — derivado das datas reais de criação.
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-6 card-glow">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Image className="size-4 text-ai" /> Assets por Categoria
+            </CardTitle>
+            <CardDescription>Contagem real de arquivos por categoria na biblioteca</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-2">
+            {erros.assets ? (
+              <p role="alert" className="py-6 text-center text-sm text-destructive">
+                Biblioteca indisponível — a contagem não pode ser exibida (isso não é
+                zero). Detalhe técnico: {erros.assets}
+              </p>
+            ) : dados.assetsPorCategoria.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhum asset na biblioteca ainda. Envie arquivos em Assets para vê-los
+                contados aqui.
+              </p>
+            ) : (
+              dados.assetsPorCategoria.map((cat) => (
+                <div key={cat.rotulo} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium">{cat.rotulo}</span>
+                    <span className="font-semibold tabular-nums">{cat.quantidade}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted/60">
+                    <div
+                      style={{ width: `${Math.max(3, Math.round((cat.quantidade / maxAssets) * 100))}%` }}
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-ai transition-all duration-500"
+                      title={`${cat.rotulo}: ${cat.quantidade} asset(s)`}
+                    />
+                  </div>
+                </div>
+              ))
             )}
           </CardContent>
         </Card>
