@@ -47,9 +47,14 @@ import {
   type CampanhaParaSinais,
   type ComercialParaSinais,
 } from "@/lib/attention";
+// TR-04.8D.3.3.1B: motor PURO de prioridades (consome os sinais) — cálculo
+// direto no render, sem memo. O wiring (try/catch) mora neste arquivo.
+import { calcularPrioridades } from "@/lib/priority";
+import type { PriorityV1 } from "@/lib/priority-types";
 
 import { AssetsCategoria } from "@/components/dashboard/assets-categoria";
 import { AttentionPanel } from "@/components/dashboard/attention-panel";
+import { CommandCenter } from "@/components/dashboard/command-center";
 import { AtualizacoesRecentes } from "@/components/dashboard/atualizacoes-recentes";
 import { CadenciaRegistros } from "@/components/dashboard/cadencia";
 import { EstadoOperacao } from "@/components/dashboard/estado-operacao";
@@ -589,11 +594,22 @@ function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
 
 // TR-04.8D.1: máquina de estados explícita — LOADING / READY / PARTIAL /
 // ERROR / DEMO. Mock só é alcançável dentro de DEMO (sem Supabase).
+// TR-04.8D.3.3.1B: `calculadoEm` (ISO-8601) pertence ao CICLO DE CARGA —
+// nasce no mesmo instante físico `fim` que origina `atualizadoEm`, mas é
+// campo distinto com semântica própria ("momento do cálculo da análise",
+// insumo do Priority Engine). Nenhum `new Date()` é criado no render.
 type Painel =
   | { estado: "loading" }
-  | { estado: "demo"; dados: DadosDashboard }
+  | { estado: "demo"; dados: DadosDashboard; calculadoEm: string }
   | { estado: "erro" }
-  | { estado: "pronto"; dados: DadosDashboard; erros: FonteErro };
+  | { estado: "pronto"; dados: DadosDashboard; erros: FonteErro; calculadoEm: string };
+
+// TR-04.8D.3.3.1B: resultado do Priority Engine como união discriminada.
+// "ok" com array vazio = vazio legítimo; "erro" = cálculo indisponível.
+// Não existe estado "erro + vazio legítimo" — são variantes disjuntas.
+type ResultadoPrioridades =
+  | { readonly estado: "ok"; readonly prioridades: readonly PriorityV1[] }
+  | { readonly estado: "erro" };
 
 const SEM_ERROS: FonteErro = {
   clientes: null,
@@ -613,9 +629,14 @@ export function DashboardView() {
 
   const carregar = useCallback(async () => {
     if (!supabase) {
-      setPainel({ estado: "demo", dados: montarDadosDemo() });
+      const fim = new Date();
+      setPainel({
+        estado: "demo",
+        dados: montarDadosDemo(),
+        calculadoEm: fim.toISOString(),
+      });
       setAtualizadoEm(
-        new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+        fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
       );
       return;
     }
@@ -628,9 +649,12 @@ export function DashboardView() {
       if (todasFalharam) {
         setPainel({ estado: "erro" }); // ERROR: nenhuma fonte respondeu
       } else {
-        setPainel({ estado: "pronto", dados, erros }); // READY ou PARTIAL
+        const fim = new Date();
+        // READY ou PARTIAL — um único instante: calculadoEm (ISO, cálculo)
+        // e atualizadoEm (display pt-BR) derivam do mesmo `fim`.
+        setPainel({ estado: "pronto", dados, erros, calculadoEm: fim.toISOString() });
         setAtualizadoEm(
-          new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+          fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
         );
       }
     } catch (err) {
@@ -733,6 +757,29 @@ export function DashboardView() {
     ].filter((f): f is { fonte: string; mensagem: string } => f !== null),
   });
 
+  // TR-04.8D.3.3.1B: fluxo explícito dados → sinais → prioridades. Ambos
+  // os engines são PUROS e determinísticos — cálculo direto no render,
+  // sem memo e sem array de dependências escondido. `calculadoEm` vem do
+  // estado (ciclo de carga), nunca de new Date() aqui: createdAt é
+  // propriedade da análise, não do render. try/catch SOMENTE do Priority
+  // Engine: o Attention (sinais acima) permanece fora e independente;
+  // falha do Priority não derruba o dashboard nem vira vazio legítimo.
+  let resultadoPrioridades: ResultadoPrioridades;
+  try {
+    resultadoPrioridades = {
+      estado: "ok",
+      prioridades: calcularPrioridades({
+        sinais,
+        calculadoEm: painel.calculadoEm,
+      }),
+    };
+  } catch (error) {
+    // Erro TÉCNICO fica no console (zero observabilidade nova nesta
+    // unidade); a UI recebe apenas a verdade operacional via estado.
+    console.error("[CommandCenter] Falha ao calcular prioridades:", error);
+    resultadoPrioridades = { estado: "erro" };
+  }
+
   return (
     <>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-8">
@@ -834,6 +881,23 @@ export function DashboardView() {
           Header → KPIs → Attention → Ações rápidas → demais grupos. */}
       <div className="mt-8">
         <AttentionPanel sinais={sinais} modoDemo={modoDemo} analiseParcial={temErroParcial} />
+      </div>
+
+      {/* TR-04.8D.3.3.1B: CENTRAL DE PRIORIDADES — posição congelada:
+          Header → KPIs → Attention → Command Center → Ações. Recebe o
+          resultado JÁ calculado; erroCalculo é flag booleano (nenhuma
+          mensagem técnica do engine chega à UI). Attention não se move. */}
+      <div className="mt-6">
+        <CommandCenter
+          prioridades={
+            resultadoPrioridades.estado === "ok"
+              ? resultadoPrioridades.prioridades
+              : []
+          }
+          erroCalculo={resultadoPrioridades.estado === "erro"}
+          modoDemo={modoDemo}
+          analiseParcial={temErroParcial}
+        />
       </div>
 
       {/* Ações Rápidas — TR-04.8D.2c-3A: toolbar operacional compacta.

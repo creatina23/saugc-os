@@ -18,8 +18,12 @@
 //   pattern matching permitido é o discriminante `tipo` da evidência —
 //   APRESENTAÇÃO factual de números crus, não reimplementação de regra.
 //   Este arquivo não contém "R1:"…"R6:" nem os reasons oficiais.
-// - Erros do engine não são tratados aqui (o componente recebe o
-//   resultado pronto — try/catch pertence ao wiring 3.3.1B).
+// - Erros do engine: o try/catch mora no wiring (3.3.1B, dashboard-view).
+//   Este componente NÃO recebe mensagem técnica (nunca error.message) —
+//   recebe apenas o flag booleano `erroCalculo` e exibe a verdade
+//   operacional aprovada: "o cálculo não pôde ser concluído".
+//   O flag tem precedência sobre demo/vazio/lista: com erro, `prioridades`
+//   é ignorada e o estado de vazio legítimo NUNCA é exibido.
 //
 // Dívida declarada: os mapas visuais de classe (badge/borda) repetem os
 // tokens do attention-panel por decisão de não tocar naquele arquivo.
@@ -193,12 +197,19 @@ interface CommandCenterProps {
   modoDemo: boolean;
   /** Há fontes com falha → cobertura parcial (nunca afirmar completude). */
   analiseParcial: boolean;
+  /** Flag booleano do wiring (3.3.1B): o cálculo do Priority Engine FALHOU.
+   *  Sem mensagem técnica por contrato — o componente exibe apenas a
+   *  verdade operacional aprovada. Quando true, este estado tem
+   *  precedência e substitui demo/vazio/lista (vazio legítimo nunca é
+   *  exibido junto de erro). Default: false (presente somente no erro). */
+  erroCalculo?: boolean;
 }
 
 export function CommandCenter({
   prioridades,
   modoDemo,
   analiseParcial,
+  erroCalculo = false,
 }: CommandCenterProps) {
   // Estado LOCAL exclusivamente de disclosure (L2 e "mostrar restantes").
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
@@ -364,7 +375,19 @@ export function CommandCenter({
           </p>
         )}
 
-        {semSuporteDemo ? (
+        {erroCalculo ? (
+          // Erro HONESTO do cálculo (3.3.1B): a verdade operacional —
+          // nunca a mensagem técnica do engine (fica no console do wiring).
+          // `prioridades` é ignorada aqui: erro NÃO é vazio legítimo.
+          <div className="mt-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-6 text-center">
+            <p className="text-sm font-medium text-destructive">
+              O cálculo de prioridades não pôde ser concluído nesta análise.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              O painel de atenção continua disponível acima. Você pode recarregar o painel para tentar de novo.
+            </p>
+          </div>
+        ) : semSuporteDemo ? (
           <p className="mt-4 rounded-xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground">
             Não disponível na demonstração.
           </p>
