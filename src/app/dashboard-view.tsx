@@ -611,6 +611,54 @@ type ResultadoPrioridades =
   | { readonly estado: "ok"; readonly prioridades: readonly PriorityV1[] }
   | { readonly estado: "erro" };
 
+// TR-04.8D.3.4.8 — CONTROLE DE RECONCILIAÇÃO SILENCIOSA (guarda mínima).
+// Máximo 1 re-verificação em andamento + máximo 1 pendente. Sem fila
+// genérica, sem biblioteca, sem event bus, sem polling. A serialização
+// garante que NUNCA existam duas consultas paralelas e que resposta
+// antiga não sobrescreva estado mais novo: a carga pendente só acontece
+// DEPOIS, lendo o servidor novamente — o último resultado aplicado é
+// sempre o da consulta mais recente. Exportada somente para testes
+// (uso de produção: o useMemo no DashboardView).
+export function criarControladorReconciliacao(opcoes: {
+  /** Consulta as fontes reais e aplica o resultado; resolve "falha" se
+   *  nenhuma fonte respondeu. Exceptions também significam falha de
+   *  atualização — NUNCA de execução. */
+  coletar: () => Promise<"ok" | "falha">;
+  aoIniciar: () => void;
+  aoTerminar: () => void;
+  aoFalhar: () => void;
+}): () => void {
+  let emAndamento = false;
+  let pendente = false;
+  const executar = () => {
+    emAndamento = true;
+    opcoes.aoIniciar();
+    void (async () => {
+      let resultado: "ok" | "falha";
+      try {
+        resultado = await opcoes.coletar();
+      } catch (err) {
+        console.error("Erro ao atualizar os dados do painel:", err);
+        resultado = "falha";
+      }
+      if (resultado === "falha") opcoes.aoFalhar();
+      emAndamento = false;
+      opcoes.aoTerminar();
+      if (pendente) {
+        pendente = false;
+        executar();
+      }
+    })();
+  };
+  return () => {
+    if (emAndamento) {
+      pendente = true;
+      return;
+    }
+    executar();
+  };
+}
+
 const SEM_ERROS: FonteErro = {
   clientes: null,
   campanhas: null,
@@ -626,6 +674,50 @@ export function DashboardView() {
   const [painel, setPainel] = useState<Painel>({ estado: "loading" });
   // TR-04.8D.2a: hora REAL do término do carregamento (nunca simulação).
   const [atualizadoEm, setAtualizadoEm] = useState<string | null>(null);
+
+  // READY ou PARTIAL — um único instante: calculadoEm (ISO, cálculo) e
+  // atualizadoEm (display pt-BR) derivam do mesmo `fim`. Compartilhado
+  // entre a carga normal e a reconciliação silenciosa (8D.3.4.8) — zero
+  // duplicação de "como aplicar dados bons".
+  const aplicarDadosProntos = useCallback(
+    (dados: DadosDashboard, erros: FonteErro) => {
+      const fim = new Date();
+      setPainel({ estado: "pronto", dados, erros, calculadoEm: fim.toISOString() });
+      setAtualizadoEm(
+        fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      );
+    },
+    []
+  );
+  // 8D.3.4.8 — estado da reconciliação: separado do estado da EXECUÇÃO
+  // (que vive no CommandCenter com o Receipt). Falha aqui NÃO vira erro
+  // global de tela: vira aviso honesto com retry (banner abaixo dos KPIs).
+  const [reconciliando, setReconciliando] = useState(false);
+  const [reconciliacaoFalhou, setReconciliacaoFalhou] = useState(false);
+  // Instância única por sessão montada: carga silenciosa que NÃO vira
+  // "loading" nem "erro" global — consulta as fontes reais e aplica.
+  // Desligada quando não há Supabase (demo nunca reconcilia).
+  const pedirReconciliacao = useMemo(() => {
+    if (!supabase) return null;
+    return criarControladorReconciliacao({
+      aoIniciar: () => setReconciliando(true),
+      aoTerminar: () => setReconciliando(false),
+      aoFalhar: () => setReconciliacaoFalhou(true),
+      coletar: async (): Promise<"ok" | "falha"> => {
+        const { dados, erros } = await coletarDadosReais(supabase);
+        const todasFalharam =
+          erros.clientes && erros.campanhas && erros.negocios &&
+          erros.briefings && erros.commercials && erros.assets;
+        if (todasFalharam) return "falha";
+        aplicarDadosProntos(dados, erros);
+        setReconciliacaoFalhou(false);
+        return "ok";
+      },
+    });
+  }, [supabase, aplicarDadosProntos]);
+  const aoConfirmarAcao = useCallback(() => {
+    pedirReconciliacao?.();
+  }, [pedirReconciliacao]);
 
   const carregar = useCallback(async () => {
     if (!supabase) {
@@ -649,20 +741,14 @@ export function DashboardView() {
       if (todasFalharam) {
         setPainel({ estado: "erro" }); // ERROR: nenhuma fonte respondeu
       } else {
-        const fim = new Date();
-        // READY ou PARTIAL — um único instante: calculadoEm (ISO, cálculo)
-        // e atualizadoEm (display pt-BR) derivam do mesmo `fim`.
-        setPainel({ estado: "pronto", dados, erros, calculadoEm: fim.toISOString() });
-        setAtualizadoEm(
-          fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-        );
+        aplicarDadosProntos(dados, erros);
       }
     } catch (err) {
       // Rejeição explícita: nunca skeleton eterno, nunca demo disfarçada.
       console.error("Erro ao carregar dados do dashboard:", err);
       setPainel({ estado: "erro" });
     }
-  }, [supabase]);
+  }, [supabase, aplicarDadosProntos]);
 
   useEffect(() => {
     void carregar();
@@ -861,6 +947,29 @@ export function DashboardView() {
         </div>
       )}
 
+      {/* TR-04.8D.3.4.8 — Recibo confirmado + atualização da tela falhou:
+          a alteração ESTÁ feita (prova viva no Command Center); só a
+          re-verificação das fontes deu errado. Honesto e com retry —
+          NUNCA vira erro global nem apaga o sucesso da execução. */}
+      {reconciliacaoFalhou && painel.estado === "pronto" && (
+        <div className="mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+          <p className="mr-auto">
+            {reconciliando
+              ? "Tentando atualizar os dados novamente…"
+              : "A alteração foi concluída, mas não conseguimos atualizar os dados na tela. Tente atualizar novamente."}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={aoConfirmarAcao}
+            disabled={reconciliando}
+            aria-label="Tentar atualizar os dados do painel novamente"
+          >
+            <RefreshCw /> Atualizar agora
+          </Button>
+        </div>
+      )}
+
       {/* TR-04.8D.2a: Pulso do Negócio — 6 KPIs, número forte, sem trend. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {dados.kpis.map((metric) => {
@@ -887,6 +996,10 @@ export function DashboardView() {
           Header → KPIs → Attention → Command Center → Ações. Recebe o
           resultado JÁ calculado; erroCalculo é flag booleano (nenhuma
           mensagem técnica do engine chega à UI). Attention não se move. */}
+      {/* 8D.3.4.7 — identidade humana: os MESMOS dados que já alimentam o
+          motor (com nome/título reais, sem consulta nova) viram o mapa
+          id → nome. Ausente = fallback honesto no componente, nunca
+          inventado. */}
       <div className="mt-6">
         <CommandCenter
           prioridades={
@@ -897,6 +1010,20 @@ export function DashboardView() {
           erroCalculo={resultadoPrioridades.estado === "erro"}
           modoDemo={modoDemo}
           analiseParcial={temErroParcial}
+          onAcaoConfirmada={aoConfirmarAcao}
+          reconciliando={reconciliando}
+          reconciliacaoFalhou={reconciliacaoFalhou}
+          nomesEntidades={{
+            campaigns: Object.fromEntries(
+              dados.campanhasParaSinais.map((c) => [c.id, c.nome])
+            ),
+            briefings: Object.fromEntries(
+              dados.briefingsParaSinais.map((b) => [b.id, b.titulo])
+            ),
+            commercials: Object.fromEntries(
+              dados.commercialsParaSinais.map((c) => [c.id, c.titulo])
+            ),
+          }}
         />
       </div>
 

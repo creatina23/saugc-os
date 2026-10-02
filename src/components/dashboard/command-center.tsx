@@ -29,7 +29,7 @@
 // internal-execution DISPONÍVEIS como ação executável MEDIANTE
 // confirmação humana explícita. Truth por construção aqui também:
 // - apresentar a candidata NUNCA executa nada (nenhum POST antes do
-//   clique em "Confirmar execução");
+//   clique em "Confirmar alteração");
 // - a UI não toca Supabase nem monta URL/corpo: delega ao adaptador
 //   src/lib/actions/executar-candidata.ts, que fala com a Action Layer
 //   server-side (rota já confirmada em produção);
@@ -37,6 +37,15 @@
 //   confirmed = confirmado · already_satisfied = já estava satisfeito
 //   (não é nova execução) · failed = falha real; ausência de resposta =
 //   "não foi possível confirmar", nunca sucesso.
+//
+// HUMANIZAÇÃO (8D.3.4.7): a SUPERFÍCIE fala a língua do negócio — os
+// termos internos (Action Layer, Receipt, engine, UUID...) ficam no
+// código e nos relatórios, nunca na tela; a Verdade Operacional NÃO é
+// suavizada (disponível ≠ executada, confirmação ≠ sucesso, incerteza
+// declarada). Nomes humanos (título da campanha/briefing/comercial) têm
+// prioridade sobre o identificador técnico; quando ausentes, cai o
+// fallback honesto — nome NUNCA é inventado. Termos profissionais úteis
+// ganham explicação sob demanda via <TermoInfo> + glossário central.
 //
 // Dívida declarada: os mapas visuais de classe (badge/borda) repetem os
 // tokens do attention-panel por decisão de não tocar naquele arquivo.
@@ -51,7 +60,9 @@ import { ArrowRight, ChevronDown, Compass } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { TermoInfo } from "@/components/ui/termo-info";
 import { executarCandidata } from "@/lib/actions/executar-candidata";
+import type { RespostaCandidata } from "@/lib/actions/executar-candidata";
 import type { ReceiptAcao } from "@/lib/actions/receipt";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -60,10 +71,10 @@ import type {
   ClassePrioridade,
   EvidenciaPrioridade,
   FonteEntidade,
-  OrigemPrioridade,
   PriorityV1,
   ReferenciaEntidade,
 } from "@/lib/priority-types";
+import type { ReactNode } from "react";
 
 // Limite APRESENTACIONAL inicial (padrão da casa, ver attention-panel).
 // O array recebido nunca é modificado nem reordenado — apenas fatiado para
@@ -175,52 +186,143 @@ function fmtCalculadoEm(iso: string): string {
 // campos crus, sem verbos causais e sem interpretação. Exhaustividade em
 // tempo de compilação: se a union crescer sem render, tsc falha aqui.
 
-function fatosDaEvidencia(evidencia: EvidenciaPrioridade): string[] {
+interface FatoApresentado {
+  texto: string;
+  /** Slug do glossário quando o fato usa termo profissional real — a
+   *  explicação vem de <TermoInfo>, NUNCA hardcoded aqui. */
+  glossario?: string;
+}
+
+function fatosDaEvidencia(evidencia: EvidenciaPrioridade): FatoApresentado[] {
   switch (evidencia.tipo) {
     case "roas-abaixo-meta":
       return [
-        `Investido: ${fmtBrl(evidencia.spend)}`,
-        `Receita registrada: ${fmtBrl(evidencia.revenue)}`,
-        `ROAS real: ${fmtRoas(evidencia.roas)}`,
-        `Meta configurada: ${fmtRoas(evidencia.meta)}`,
-        `Distância da meta: ${fmtPct(evidencia.percentualAbaixo)} abaixo`,
+        { texto: `Investido: ${fmtBrl(evidencia.spend)}` },
+        { texto: `Receita registrada: ${fmtBrl(evidencia.revenue)}` },
+        { texto: `ROAS real: ${fmtRoas(evidencia.roas)}`, glossario: "roas" },
+        { texto: `Meta configurada: ${fmtRoas(evidencia.meta)}` },
+        { texto: `Distância da meta: ${fmtPct(evidencia.percentualAbaixo)} abaixo` },
       ];
     case "investimento-sem-conversao":
       return [
-        `Investido: ${fmtBrl(evidencia.spend)}`,
-        `Conversões registradas: ${fmtInteiro(evidencia.conversions)}`,
+        { texto: `Investido: ${fmtBrl(evidencia.spend)}` },
+        {
+          texto: `Conversões registradas: ${fmtInteiro(evidencia.conversions)}`,
+          glossario: "conversao",
+        },
       ];
     case "prazo-vencido":
       return [
-        `Prazo: ${fmtDataCivil(evidencia.deadline)}`,
-        `Status registrado: ${evidencia.status}`,
-        `Vencido há: ${evidencia.diasVencido} dia${evidencia.diasVencido === 1 ? "" : "s"}`,
+        { texto: `Prazo: ${fmtDataCivil(evidencia.deadline)}` },
+        { texto: `Status registrado: ${evidencia.status}` },
+        {
+          texto: `Vencido há: ${evidencia.diasVencido} dia${evidencia.diasVencido === 1 ? "" : "s"}`,
+        },
       ];
     case "fonte-indisponivel":
       return [
-        `Fonte: ${evidencia.fonte}`,
-        `Mensagem real: ${evidencia.mensagem}`,
+        { texto: `Fonte: ${evidencia.fonte}` },
+        { texto: `Mensagem real: ${evidencia.mensagem}` },
       ];
     case "orcamento-consumido":
       // Contrato suportado (3.1A) — NENHUM produtor no V1. Render pronto
       // para o dia em que uma regra aprovada o emitir.
       return [
-        `Orçamento configurado: ${fmtBrl(evidencia.budget)}`,
-        `Investido: ${fmtBrl(evidencia.spend)}`,
-        `Consumido: ${fmtPct(evidencia.percentualConsumido)} do orçamento`,
+        { texto: `Orçamento configurado: ${fmtBrl(evidencia.budget)}` },
+        { texto: `Investido: ${fmtBrl(evidencia.spend)}` },
+        { texto: `Consumido: ${fmtPct(evidencia.percentualConsumido)} do orçamento` },
       ];
     default: {
       const exaustivo: never = evidencia;
-      return [String(exaustivo)];
+      return [{ texto: String(exaustivo) }];
     }
   }
 }
 
-function rotuloDaOrigem(origem: OrigemPrioridade): string {
-  // Union discriminada do contrato: IA carrega motor obrigatório; rules não.
-  return origem.engine === "ai"
-    ? `Origem: IA · ${origem.motor} · ${origem.version}`
-    : `Origem: motor de regras · ${origem.version}`;
+// ------------- "Por que estou vendo isso?" — a CAUSA, não o motor ------
+// (8D.3.4.7) O usuário precisa entender a causa da prioridade, não a
+// implementação. Frase montada SOMENTE dos fatos da evidência (mesmos
+// números do bloco "Fatos" logo abaixo — nada inventado, nada escondido).
+// O detalhe técnico da origem (engine/versão) segue no contrato e nos
+// relatórios, fora da superfície.
+// Exportada exclusivamente para testabilidade do texto da causa (o uso
+// de produção é este arquivo); o contrato do componente não muda.
+export function porQueEstouVendo(
+  prioridade: PriorityV1,
+  nomeHumano: string | undefined
+): ReactNode {
+  const evidencia = prioridade.evidencias[0];
+  const sujeito =
+    prioridade.entidade !== null
+      ? prioridade.entidade.fonte === "campaigns"
+        ? "A campanha"
+        : prioridade.entidade.fonte === "briefings"
+          ? "O briefing"
+          : "O comercial"
+      : null;
+  const alvo = nomeHumano !== undefined ? <> «{nomeHumano}»</> : null;
+  switch (evidencia?.tipo) {
+    case "prazo-vencido":
+      return (
+        <>
+          {sujeito}
+          {alvo} está em {evidencia.status} e o prazo venceu há{" "}
+          {evidencia.diasVencido} dia{evidencia.diasVencido === 1 ? "" : "s"}.
+        </>
+      );
+    case "roas-abaixo-meta":
+      return (
+        <>
+          {sujeito ?? "A campanha"}
+          {alvo} está retornando {fmtPct(evidencia.percentualAbaixo)} abaixo
+          da meta que você definiu (retorno real de {fmtRoas(evidencia.roas)}{" "}
+          contra meta de {fmtRoas(evidencia.meta)}
+          <TermoInfo slug="roas" />).
+        </>
+      );
+    case "investimento-sem-conversao":
+      return (
+        <>
+          {sujeito ?? "A campanha"}
+          {alvo} já investiu {fmtBrl(evidencia.spend)} e até agora nenhuma
+          conversão
+          <TermoInfo slug="conversao" /> foi registrada.
+        </>
+      );
+    case "fonte-indisponivel":
+      return (
+        <>
+          Não foi possível ler agora os dados de {evidencia.fonte}. Isso não
+          significa que estejam vazios — apenas que a leitura falhou.
+        </>
+      );
+    case "orcamento-consumido":
+      return (
+        <>
+          {sujeito ?? "A campanha"}
+          {alvo} já consumiu {fmtPct(evidencia.percentualConsumido)} do
+          orçamento configurado ({fmtBrl(evidencia.spend)} de{" "}
+          {fmtBrl(evidencia.budget)}).
+        </>
+      );
+    default:
+      // Sem evidência: a frase oficial do engine, já escrita para humanos.
+      return prioridade.reason;
+  }
+}
+
+// ----------------- Decisão de reconciliação (8D.3.4.8) -----------------
+// Condição EXATA e única autorizada pela missão: Receipt de sucesso real
+// (confirmed). already_satisfied ⇒ nada mudou no servidor ⇒ recarregar
+// seria teatro. failed/erro/ausência ⇒ nada a re-verificar por este
+// caminho. Reconciliação NÃO é execução e NÃO é Outcome: é re-verificação
+// do estado da fonte real após uma execução comprovada.
+// Exportada exclusivamente para testes (mesmo precedente de porQueEstouVendo);
+// o gatilho imperativo é um único ponto, em confirmarAcao — NUNCA efeito.
+export function deveReconciliar(resposta: RespostaCandidata): boolean {
+  return (
+    resposta.tipo === "receipt" && resposta.receipt.resultado === "confirmed"
+  );
 }
 
 // ------------------------------- Props ---------------------------------
@@ -239,6 +341,21 @@ interface CommandCenterProps {
    *  precedência e substitui demo/vazio/lista (vazio legítimo nunca é
    *  exibido junto de erro). Default: false (presente somente no erro). */
   erroCalculo?: boolean;
+  /** 8D.3.4.7 — identidade humana (opcional, só apresentação): fonte → id
+   *  → nome legível (título/nome já disponível no wiring). O
+   *  identificador técnico continua sendo a chave interna; aqui ele só
+   *  aparece quando não há nome — e nome ausente NUNCA é inventado. */
+  nomesEntidades?: Partial<Record<FonteEntidade, Record<string, string>>>;
+  /** 8D.3.4.8 — chamado UMA vez, somente após Receipt confirmed, no caminho
+   *  imperativo do evento (nunca em render/efeito). O dono do callback é o
+   *  dashboard (re-verificação silenciosa das fontes reais). */
+  onAcaoConfirmada?: () => void;
+  /** Re-verificação das fontes em andamento (informativo, opcional). */
+  reconciliando?: boolean;
+  /** A alteração foi feita, mas a atualização dos dados falhou — a UI do
+   *  cartão NÃO pode declarar atualização concluída (o banner do painel
+   *  explica). */
+  reconciliacaoFalhou?: boolean;
 }
 
 export function CommandCenter({
@@ -246,13 +363,17 @@ export function CommandCenter({
   modoDemo,
   analiseParcial,
   erroCalculo = false,
+  nomesEntidades,
+  onAcaoConfirmada,
+  reconciliando = false,
+  reconciliacaoFalhou = false,
 }: CommandCenterProps) {
   // Estado LOCAL exclusivamente de disclosure (L2 e "mostrar restantes").
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
   const [mostrarRestantes, setMostrarRestantes] = useState(false);
   // Estado LOCAL do ciclo executável (por id de candidata). Não há efeito
   // ao montar/renderizar: NENHUMA chamada à Action Layer acontece sem o
-  // clique explícito em "Confirmar execução".
+  // clique explícito em "Confirmar alteração".
   const [estadosAcoes, setEstadosAcoes] = useState<Record<string, EstadoAcao>>({});
 
   const definirEstadoAcao = (acaoId: string, estado: EstadoAcao) => {
@@ -267,6 +388,9 @@ export function CommandCenter({
     const resposta = await executarCandidata(acao, entidade);
     if (resposta.tipo === "receipt") {
       definirEstadoAcao(acao.id, { fase: "receipt", receipt: resposta.receipt });
+      // 8D.3.4.8 — gatilho IMPERATIVO e ÚNICO da reconciliação: somente
+      // Receipt confirmed, uma vez por execução confirmada, fora de efeito.
+      if (deveReconciliar(resposta)) onAcaoConfirmada?.();
     } else {
       definirEstadoAcao(acao.id, {
         fase: "erro",
@@ -296,9 +420,19 @@ export function CommandCenter({
     // R6/sistema: entidade null por contrato — a fonte vem da evidência
     // fonte-indisponivel (pattern matching de apresentação, nunca entidade
     // inventada).
+    // 8D.3.4.7 — o nome humano (quando existe no fluxo) é a identidade
+    // PRINCIPAL; o identificador técnico só aparece como fallback.
+    const nomeHumano =
+      prioridade.entidade !== null
+        ? nomesEntidades?.[prioridade.entidade.fonte]?.[
+            prioridade.entidade.id
+          ]
+        : undefined;
     const rotuloEntidade =
       prioridade.entidade !== null
-        ? `${FONTE_ROTULO[prioridade.entidade.fonte]} · ${prioridade.entidade.id}`
+        ? nomeHumano !== undefined
+          ? `${FONTE_ROTULO[prioridade.entidade.fonte]} · ${nomeHumano}`
+          : `${FONTE_ROTULO[prioridade.entidade.fonte]} · ${prioridade.entidade.id}`
         : prioridade.evidencias[0]?.tipo === "fonte-indisponivel"
           ? `Sistema · fonte ${prioridade.evidencias[0].fonte}`
           : "Sistema";
@@ -359,7 +493,15 @@ export function CommandCenter({
             id={regiaoId}
             className="mt-3 rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5"
           >
-            <p className="text-xs font-semibold text-foreground/80">Fatos</p>
+            <p className="text-xs font-semibold text-foreground/80">
+              Por que estou vendo isso?
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {porQueEstouVendo(prioridade, nomeHumano)}
+            </p>
+            <p className="mt-2.5 text-xs font-semibold text-foreground/80">
+              Fatos
+            </p>
             {prioridade.evidencias.map((evidencia, indice) => (
               <ul
                 key={`${prioridade.id}-ev-${indice}`}
@@ -367,16 +509,16 @@ export function CommandCenter({
               >
                 {fatosDaEvidencia(evidencia).map((fato, fatoIndice) => (
                   <li key={`${prioridade.id}-ev-${indice}-f-${fatoIndice}`} className="break-all tabular-nums">
-                    {fato}
+                    {fato.texto}
+                    {fato.glossario !== undefined && (
+                      <TermoInfo slug={fato.glossario} />
+                    )}
                   </li>
                 ))}
               </ul>
             ))}
-            <p className="mt-2.5 text-xs text-muted-foreground">
-              {rotuloDaOrigem(prioridade.origem)}
-            </p>
             {/* Rótulo honesto: momento do CÁLCULO — nunca frescor dos dados. */}
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-2.5 text-xs text-muted-foreground">
               Calculado em {fmtCalculadoEm(prioridade.createdAt)}
             </p>
           </div>
@@ -423,7 +565,7 @@ export function CommandCenter({
                 estadosAcoes[acao.id] ?? { fase: "preparada" };
               const textoErro =
                 estado.fase === "receipt" && estado.receipt.resultado === "failed"
-                  ? (estado.receipt.erro ?? "Erro não informado pela Action Layer.")
+                  ? (estado.receipt.erro ?? "Erro não informado.")
                   : null;
               const botaoBase =
                 "inline-flex h-11 items-center rounded-lg border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
@@ -439,8 +581,8 @@ export function CommandCenter({
                         <span className="font-semibold text-foreground/80">
                           Ação disponível
                         </span>{" "}
-                        — ainda não aconteceu; exige a sua confirmação e a
-                        decisão da Action Layer.
+                        — nada foi alterado ainda; só acontece se você
+                        confirmar.
                       </p>
                       <button
                         type="button"
@@ -456,12 +598,13 @@ export function CommandCenter({
                   {estado.fase === "confirmando" && (
                     <div>
                       <p className="text-xs font-semibold">
-                        Confirmar execução: «{acao.label}»
+                        Confirmar alteração: «{acao.label}»
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Alvo: {rotuloEntidade}. A alteração ainda NÃO
-                        aconteceu — a Action Layer decidirá e devolverá o
-                        comprovante (Receipt) com o resultado real.
+                        Alvo: {rotuloEntidade}. Nenhuma alteração foi feita
+                        ainda. Ao confirmar, o sistema aplica a mudança e
+                        mostra o resultado na hora — se algo não der certo,
+                        você será avisado.
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <button
@@ -471,7 +614,7 @@ export function CommandCenter({
                           }
                           className={cn(botaoBase, "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20")}
                         >
-                          Confirmar execução
+                          Confirmar alteração
                         </button>
                         <button
                           type="button"
@@ -488,14 +631,14 @@ export function CommandCenter({
                   {estado.fase === "executando" && (
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs text-muted-foreground">
-                        Executando na Action Layer… aguarde o comprovante.
+                        Aplicando a alteração… aguarde o resultado.
                       </p>
                       <button
                         type="button"
                         disabled
                         className={cn(botaoBase, "border-border opacity-60")}
                       >
-                        Executando…
+                        Aplicando…
                       </button>
                     </div>
                   )}
@@ -503,13 +646,16 @@ export function CommandCenter({
                     estado.receipt.resultado === "confirmed" && (
                       <div className="rounded-md border border-success/40 bg-success/10 px-3 py-2">
                         <p className="text-xs font-semibold text-success">
-                          Confirmado pela Action Layer.
+                          Status atualizado com sucesso.
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Estado confirmado:{" "}
-                          {estado.receipt.estadoConfirmado ?? "—"}.
-                          Comprovante: {fmtCalculadoEm(estado.receipt.timestamp)}.
-                          Recarregue o painel para atualizar esta análise.
+                          Novo estado:{" "}
+                          {estado.receipt.estadoConfirmado ?? "—"} (
+                          {fmtCalculadoEm(estado.receipt.timestamp)}).{" "}
+                          {reconciliando && "Atualizando os dados do painel…"}
+                          {!reconciliando &&
+                            !reconciliacaoFalhou &&
+                            "Os dados do painel já foram atualizados."}
                         </p>
                       </div>
                     )}
@@ -517,12 +663,12 @@ export function CommandCenter({
                     estado.receipt.resultado === "already_satisfied" && (
                       <div className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2">
                         <p className="text-xs font-semibold text-primary">
-                          Já estava satisfeito.
+                          Já estava tudo certo.
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Nenhuma alteração foi necessária — o estado real já
-                          era o desejado (não conta como nova execução).
-                          Comprovante: {fmtCalculadoEm(estado.receipt.timestamp)}.
+                          {rotuloEntidade} já estava em{" "}
+                          {estado.receipt.estadoConfirmado ?? "o estado desejado"}
+                          . Nenhuma nova alteração foi necessária.
                         </p>
                       </div>
                     )}
@@ -530,7 +676,7 @@ export function CommandCenter({
                     estado.receipt.resultado === "failed" && (
                       <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
                         <p className="text-xs font-semibold text-destructive">
-                          Falhou: {textoErro}
+                          Não foi possível concluir: {textoErro}
                         </p>
                         <button
                           type="button"
@@ -547,8 +693,8 @@ export function CommandCenter({
                     <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
                       <p className="text-xs font-semibold text-destructive">
                         {estado.naoConfirmado
-                          ? "Não foi possível confirmar o resultado."
-                          : "A ação não foi aceita pela Action Layer."}
+                          ? "Não foi possível confirmar o resultado — verifique antes de tentar de novo."
+                          : "A alteração não foi aplicada."}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {estado.erro}
@@ -569,7 +715,7 @@ export function CommandCenter({
             })}
             <p className="mt-2 text-xs text-muted-foreground">
               {acoesExecutaveis.length > 0
-                ? "Execuções pedem a sua confirmação e são decididas pela Action Layer — o comprovante aparece acima."
+                ? "Ações só acontecem depois da sua confirmação — o resultado aparece aqui."
                 : "Abrir o contexto real para verificar — nenhuma ação é executada aqui."}
             </p>
           </div>
