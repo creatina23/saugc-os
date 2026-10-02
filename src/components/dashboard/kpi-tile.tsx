@@ -2,6 +2,7 @@
 // src/app/dashboard-view.tsx. O mapeamento de erro por fonte permanece no
 // orquestrador (dashboard-view); aqui chega pronto como `erro`.
 import { Card, CardContent } from "@/components/ui/card";
+import { TermoInfo } from "@/components/ui/termo-info";
 import { cn } from "@/lib/utils";
 import {
   Briefcase,
@@ -14,6 +15,17 @@ import {
 } from "lucide-react";
 
 import type { Kpi } from "./types";
+
+// 8D.3.4.7 — rótulo visível → slug do glossário (src/lib/glossario.ts).
+// Somente o que aparece DE VERDADE neste widget ganha explicação; termos
+// cotidianos (NÍVEL 0) ficam sem, deliberadamente.
+const GLOSSARIO_DO_KPI: Record<string, string> = {
+  MRR: "mrr",
+  "ROI Médio": "roi",
+  "ROI Global": "roi",
+  Conversões: "conversao",
+  "Pipeline aberto": "pipeline",
+};
 
 const kpiConfig: Record<string, { icon: LucideIcon; tone: string }> = {
   "Receita do mês": { icon: Wallet, tone: "bg-primary/15 text-primary shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
@@ -31,11 +43,17 @@ export function KpiTile({ metric, erro }: { metric: Kpi; erro: string | null }) 
   // TR-04.8D.2c-3A: tile compacto — p-4, ícone menor, sem blur decorativo
   // (o hover de borda sutil vem do card-glow, linguagem existente do produto).
   // Subtexto factual permanece integral e legível (text-xs, sem truncate).
+  // 8D.3.4.7 — sigla profissional fica na superfície; a explicação sob
+  // demanda vem do glossário (somente onde o termo já existe de verdade).
+  const slugGlossario = GLOSSARIO_DO_KPI[metric.label];
   return (
     <Card className="card-glow group">
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">{metric.label}</p>
+          <p className="text-sm text-muted-foreground">
+            {metric.label}
+            {slugGlossario !== undefined && <TermoInfo slug={slugGlossario} />}
+          </p>
           <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg transition-transform duration-300 group-hover:scale-110", config.tone)}>
             <config.icon className="size-4" />
           </div>

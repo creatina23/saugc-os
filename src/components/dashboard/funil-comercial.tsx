@@ -5,6 +5,7 @@ import { Target } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TermoInfo } from "@/components/ui/termo-info";
 import { formatBRL } from "@/lib/format";
 
 import type { FunilValorEtapa } from "./types";
@@ -55,11 +56,17 @@ export function FunilComercial({
               <p className="text-sm font-bold tabular-nums">{oportunidadesAbertas}</p>
             </div>
             <div>
-              <p className="text-[11px] text-muted-foreground">Pipeline aberto</p>
+              <p className="text-[11px] text-muted-foreground">
+                Pipeline aberto
+                <TermoInfo slug="pipeline" />
+              </p>
               <p className="text-sm font-bold tabular-nums text-success">{formatBRL(pipelineAberto)}</p>
             </div>
             <div>
-              <p className="text-[11px] text-muted-foreground">Ticket médio</p>
+              <p className="text-[11px] text-muted-foreground">
+                Ticket médio
+                <TermoInfo slug="ticket-medio" />
+              </p>
               <p className="text-sm font-bold tabular-nums">
                 {ticketMedioAberto === null ? "—" : formatBRL(ticketMedioAberto)}
               </p>
