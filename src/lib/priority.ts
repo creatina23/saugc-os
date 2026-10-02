@@ -50,7 +50,10 @@ import type {
   PriorityV1,
 } from "./priority-types";
 
-export const PRIORITY_ENGINE_VERSION = "priority-1";
+// 8D.3.4.2: bump priority-1 → priority-2 — semântica de mapeamento mudou:
+// R4 com status "Produção" passa a emitir candidata INTERNAL-EXECUTION
+// (piloto da Action Layer) além da navigation já existente.
+export const PRIORITY_ENGINE_VERSION = "priority-2";
 
 export interface EntradaPrioridades {
   /** Sinais produzidos pelo Attention Engine (src/lib/attention.ts). A
@@ -182,6 +185,38 @@ function prioridadeDoSinal(sinal: SinalAtencao, calculadoEm: string): PriorityV1
       href,
       availability: "available",
       requiresConfirmation: false,
+    });
+  }
+
+  // TR-04.8D.3.4.2 — candidata INTERNAL-EXECUTION (piloto da Action
+  // Layer). Condição DETERMINÍSTICA e explicável, sustentada pela
+  // própria evidência da R4: comercial com prazo vencido E status real
+  // "Produção" — o fluxo legítimo é seguir para revisão ("Marcar em
+  // revisão"). Status "Revisão" NÃO emite candidata: já está no destino
+  // (a Action Layer ainda responderia already_satisfied, mas oferecer
+  // no-op não é proposta honesta). R3 usa o mesmo tipo de evidência mas
+  // outro enum de status (briefings) — fora do piloto. Nenhuma regra de
+  // negócio nova é inventada aqui: é a mesma leitura factual da R4.
+  // requiresConfirmation: true (congelado para o piloto): apresentar a
+  // candidata NUNCA executa nada; a execução exige confirmação humana
+  // explícita na UI + decisão da Action Layer server-side.
+  if (
+    sinal.regraId === "R4" &&
+    sinal.evidencia.tipo === "prazo-vencido" &&
+    sinal.evidencia.status === "Produção" &&
+    entidade !== null
+  ) {
+    acoes.push({
+      // Id estável e determinístico (âncora; nunca aleatório/índice).
+      id: `op:commercials:marcar-em-revisao:${sinal.entityId}`,
+      categoria: "internal-execution",
+      label: "Marcar em revisão",
+      availability: "available",
+      requiresConfirmation: true,
+      // NOME simbólico declarativo (contrato): quem interpreta este
+      // identificador e o traduz para a rota concreta é a camada de
+      // execução (adaptador), nunca a UI solta.
+      operacao: "commercials:marcar-em-revisao",
     });
   }
 

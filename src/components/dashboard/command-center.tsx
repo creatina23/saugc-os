@@ -25,6 +25,19 @@
 //   O flag tem precedência sobre demo/vazio/lista: com erro, `prioridades`
 //   é ignorada e o estado de vazio legítimo NUNCA é exibido.
 //
+// ACTION LAYER (8D.3.4.3–6): o L3 passa a renderizar candidatas
+// internal-execution DISPONÍVEIS como ação executável MEDIANTE
+// confirmação humana explícita. Truth por construção aqui também:
+// - apresentar a candidata NUNCA executa nada (nenhum POST antes do
+//   clique em "Confirmar execução");
+// - a UI não toca Supabase nem monta URL/corpo: delega ao adaptador
+//   src/lib/actions/executar-candidata.ts, que fala com a Action Layer
+//   server-side (rota já confirmada em produção);
+// - o que a UI mostra como resultado vem EXCLUSIVAMENTE do Receipt:
+//   confirmed = confirmado · already_satisfied = já estava satisfeito
+//   (não é nova execução) · failed = falha real; ausência de resposta =
+//   "não foi possível confirmar", nunca sucesso.
+//
 // Dívida declarada: os mapas visuais de classe (badge/borda) repetem os
 // tokens do attention-panel por decisão de não tocar naquele arquivo.
 // Extração compartilhada fica para housekeeping autorizado.
@@ -38,6 +51,8 @@ import { ArrowRight, ChevronDown, Compass } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { executarCandidata } from "@/lib/actions/executar-candidata";
+import type { ReceiptAcao } from "@/lib/actions/receipt";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type {
@@ -47,12 +62,33 @@ import type {
   FonteEntidade,
   OrigemPrioridade,
   PriorityV1,
+  ReferenciaEntidade,
 } from "@/lib/priority-types";
 
 // Limite APRESENTACIONAL inicial (padrão da casa, ver attention-panel).
 // O array recebido nunca é modificado nem reordenado — apenas fatiado para
 // exibição, com disclosure honesto das restantes na ordem original.
 const MAX_INICIAL = 5;
+
+// ----------------- Máquina de estado da ação executável ----------------
+// (8D.3.4.3–6 — mínimo necessário para este ciclo; NÃO é a máquina
+// universal da Action Layer, que fica para unidade futura.)
+// preparada → confirmando (consentimento ainda pendente — nada foi
+//   enviado) → executando (POST em voo; clique bloqueado) → receipt
+//   (verdade da Action Layer) | erro (recusa honesta ou resultado NÃO
+//   confirmado — distinguidos pelo flag).
+type EstadoAcao =
+  | { readonly fase: "preparada" }
+  | { readonly fase: "confirmando" }
+  | { readonly fase: "executando" }
+  | { readonly fase: "receipt"; readonly receipt: ReceiptAcao }
+  | {
+      readonly fase: "erro";
+      readonly erro: string;
+      /** true = a resposta não chegou (ausência de resposta ≠ falha
+       *  confirmada): a UI diz "não foi possível confirmar". */
+      readonly naoConfirmado: boolean;
+    };
 
 // Classe em TEXTO sempre (cor nunca é o único canal — acessibilidade).
 const CLASSE_TEXTO: Record<ClassePrioridade, string> = {
@@ -214,6 +250,31 @@ export function CommandCenter({
   // Estado LOCAL exclusivamente de disclosure (L2 e "mostrar restantes").
   const [abertos, setAbertos] = useState<ReadonlySet<string>>(new Set());
   const [mostrarRestantes, setMostrarRestantes] = useState(false);
+  // Estado LOCAL do ciclo executável (por id de candidata). Não há efeito
+  // ao montar/renderizar: NENHUMA chamada à Action Layer acontece sem o
+  // clique explícito em "Confirmar execução".
+  const [estadosAcoes, setEstadosAcoes] = useState<Record<string, EstadoAcao>>({});
+
+  const definirEstadoAcao = (acaoId: string, estado: EstadoAcao) => {
+    setEstadosAcoes((atual) => ({ ...atual, [acaoId]: estado }));
+  };
+
+  const confirmarAcao = async (
+    acao: CandidatoAcao,
+    entidade: ReferenciaEntidade | null
+  ) => {
+    definirEstadoAcao(acao.id, { fase: "executando" });
+    const resposta = await executarCandidata(acao, entidade);
+    if (resposta.tipo === "receipt") {
+      definirEstadoAcao(acao.id, { fase: "receipt", receipt: resposta.receipt });
+    } else {
+      definirEstadoAcao(acao.id, {
+        fase: "erro",
+        erro: resposta.erro,
+        naoConfirmado: resposta.httpStatus === -1,
+      });
+    }
+  };
 
   const alternarL2 = (id: string) => {
     setAbertos((atual) => {
@@ -241,6 +302,16 @@ export function CommandCenter({
         : prioridade.evidencias[0]?.tipo === "fonte-indisponivel"
           ? `Sistema · fonte ${prioridade.evidencias[0].fonte}`
           : "Sistema";
+
+    // Candidatas EXECUTÁVEIS neste contexto: internal-execution (e futuras
+    // suportadas) com availability "available", fora do modo demo. Navigation
+    // segue como Link; o resto permanece no ramo contract-defensivo.
+    const acoesExecutaveis = prioridade.acoes.filter(
+      (acao: CandidatoAcao) =>
+        acao.categoria !== "navigation" &&
+        acao.availability === "available" &&
+        !modoDemo
+    );
 
     return (
       <li
@@ -330,10 +401,10 @@ export function CommandCenter({
                     {acao.label}
                     <ArrowRight aria-hidden="true" className="size-3.5" />
                   </Link>
-                ) : (
-                  // Contract-defensivo: V1 nunca emite não-navigation. Se um
-                  // dia emitir, exibimos honestamente como não executável
-                  // aqui (nunca prometemos execução que não existe).
+                ) : acoesExecutaveis.includes(acao) ? null : (
+                  // Contract-defensivo: não-navigation sem execução imediata
+                  // neste contexto (unavailable/blocked, categoria ainda sem
+                  // suporte, ou modo demo) — nunca prometemos execução.
                   <span
                     key={acao.id}
                     className="inline-flex h-11 items-center rounded-lg border border-dashed border-border/60 px-3 text-xs text-muted-foreground"
@@ -343,8 +414,163 @@ export function CommandCenter({
                 )
               )}
             </div>
+
+            {/* ---------- Ação executável (8D.3.4.3–6) ---------- */}
+            {/* DISPONÍVEL ≠ REALIZADA: nenhum POST antes de "Confirmar
+                execução"; depois disso, a verdade é a do Receipt. */}
+            {acoesExecutaveis.map((acao) => {
+              const estado: EstadoAcao =
+                estadosAcoes[acao.id] ?? { fase: "preparada" };
+              const textoErro =
+                estado.fase === "receipt" && estado.receipt.resultado === "failed"
+                  ? (estado.receipt.erro ?? "Erro não informado pela Action Layer.")
+                  : null;
+              const botaoBase =
+                "inline-flex h-11 items-center rounded-lg border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+              return (
+                <div
+                  key={acao.id}
+                  aria-live="polite"
+                  className="mt-2.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5"
+                >
+                  {estado.fase === "preparada" && (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground/80">
+                          Ação disponível
+                        </span>{" "}
+                        — ainda não aconteceu; exige a sua confirmação e a
+                        decisão da Action Layer.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          definirEstadoAcao(acao.id, { fase: "confirmando" })
+                        }
+                        className={cn(botaoBase, "border-border hover:border-primary/50 hover:text-primary")}
+                      >
+                        {acao.label}
+                      </button>
+                    </div>
+                  )}
+                  {estado.fase === "confirmando" && (
+                    <div>
+                      <p className="text-xs font-semibold">
+                        Confirmar execução: «{acao.label}»
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Alvo: {rotuloEntidade}. A alteração ainda NÃO
+                        aconteceu — a Action Layer decidirá e devolverá o
+                        comprovante (Receipt) com o resultado real.
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void confirmarAcao(acao, prioridade.entidade)
+                          }
+                          className={cn(botaoBase, "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20")}
+                        >
+                          Confirmar execução
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            definirEstadoAcao(acao.id, { fase: "preparada" })
+                          }
+                          className={cn(botaoBase, "border-border hover:border-primary/50 hover:text-primary")}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {estado.fase === "executando" && (
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Executando na Action Layer… aguarde o comprovante.
+                      </p>
+                      <button
+                        type="button"
+                        disabled
+                        className={cn(botaoBase, "border-border opacity-60")}
+                      >
+                        Executando…
+                      </button>
+                    </div>
+                  )}
+                  {estado.fase === "receipt" &&
+                    estado.receipt.resultado === "confirmed" && (
+                      <div className="rounded-md border border-success/40 bg-success/10 px-3 py-2">
+                        <p className="text-xs font-semibold text-success">
+                          Confirmado pela Action Layer.
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Estado confirmado:{" "}
+                          {estado.receipt.estadoConfirmado ?? "—"}.
+                          Comprovante: {fmtCalculadoEm(estado.receipt.timestamp)}.
+                          Recarregue o painel para atualizar esta análise.
+                        </p>
+                      </div>
+                    )}
+                  {estado.fase === "receipt" &&
+                    estado.receipt.resultado === "already_satisfied" && (
+                      <div className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2">
+                        <p className="text-xs font-semibold text-primary">
+                          Já estava satisfeito.
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Nenhuma alteração foi necessária — o estado real já
+                          era o desejado (não conta como nova execução).
+                          Comprovante: {fmtCalculadoEm(estado.receipt.timestamp)}.
+                        </p>
+                      </div>
+                    )}
+                  {estado.fase === "receipt" &&
+                    estado.receipt.resultado === "failed" && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
+                        <p className="text-xs font-semibold text-destructive">
+                          Falhou: {textoErro}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            definirEstadoAcao(acao.id, { fase: "preparada" })
+                          }
+                          className={cn(botaoBase, "mt-2 border-border hover:border-primary/50 hover:text-primary")}
+                        >
+                          Voltar
+                        </button>
+                      </div>
+                    )}
+                  {estado.fase === "erro" && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
+                      <p className="text-xs font-semibold text-destructive">
+                        {estado.naoConfirmado
+                          ? "Não foi possível confirmar o resultado."
+                          : "A ação não foi aceita pela Action Layer."}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {estado.erro}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          definirEstadoAcao(acao.id, { fase: "preparada" })
+                        }
+                        className={cn(botaoBase, "mt-2 border-border hover:border-primary/50 hover:text-primary")}
+                      >
+                        Voltar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <p className="mt-2 text-xs text-muted-foreground">
-              Abrir o contexto real para verificar — nenhuma ação é executada aqui.
+              {acoesExecutaveis.length > 0
+                ? "Execuções pedem a sua confirmação e são decididas pela Action Layer — o comprovante aparece acima."
+                : "Abrir o contexto real para verificar — nenhuma ação é executada aqui."}
             </p>
           </div>
         )}
