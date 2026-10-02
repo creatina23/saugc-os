@@ -53,7 +53,6 @@ import { calcularPrioridades } from "@/lib/priority";
 import type { PriorityV1 } from "@/lib/priority-types";
 
 import { AssetsCategoria } from "@/components/dashboard/assets-categoria";
-import { AttentionPanel } from "@/components/dashboard/attention-panel";
 import { CommandCenter } from "@/components/dashboard/command-center";
 import { AtualizacoesRecentes } from "@/components/dashboard/atualizacoes-recentes";
 import { CadenciaRegistros } from "@/components/dashboard/cadencia";
@@ -986,16 +985,17 @@ export function DashboardView() {
         })}
       </div>
 
-      {/* TR-04.8D.2c-2: O QUE MERECE ATENÇÃO — posição aprovada:
-          Header → KPIs → Attention → Ações rápidas → demais grupos. */}
-      <div className="mt-8">
-        <AttentionPanel sinais={sinais} modoDemo={modoDemo} analiseParcial={temErroParcial} />
-      </div>
+      {/* 8D.3.4.10 — APOSENTAÇÃO do painel velho "O que merece atenção"
+          (8D.2c): sobrepunha a Central de Prioridades na mesma tela com o
+          mesmo sino e a mesma lista de sinais (só navegação). A Central,
+          validada no J7, passa a ser a superfície ÚNICA de atenção do
+          dashboard — navegação E execução num só lugar. Decisão do dono,
+          opção B (sino global de topo: ADIADO). */}
 
       {/* TR-04.8D.3.3.1B: CENTRAL DE PRIORIDADES — posição congelada:
-          Header → KPIs → Attention → Command Center → Ações. Recebe o
+          Header → KPIs → Central de Prioridades → Ações. Recebe o
           resultado JÁ calculado; erroCalculo é flag booleano (nenhuma
-          mensagem técnica do engine chega à UI). Attention não se move. */}
+          mensagem técnica do engine chega à UI). */}
       {/* 8D.3.4.7 — identidade humana: os MESMOS dados que já alimentam o
           motor (com nome/título reais, sem consulta nova) viram o mapa
           id → nome. Ausente = fallback honesto no componente, nunca
