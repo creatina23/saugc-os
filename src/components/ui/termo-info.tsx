@@ -21,8 +21,19 @@
 //
 // Semântica deliberada: explicação disponível quando necessária, some
 // quando não; usuário avançado simplesmente NÃO interage (custo zero).
+//
+// 8D.3.4.9 — a explicação é pintada via PORTAL em <body> com position:
+// fixed. Motivo real (achado em produção pelo dono): os Card usam
+// backdrop-filter, que cria um "contexto de empilhamento" — qualquer
+// popover POSICIONADO DENTRO do cartão ficava TRAPADO e o cartão vizinho
+// pintava POR CIMA dele (a explicação aparecia "por baixo das colunas").
+// Subir z-index dentro do cartão NÃO resolve (a trava vem do contexto);
+// sair do cartão via portal resolve robustamente, com clamp horizontal
+// dentro da viewport (12px de respiro) e giro para cima quando não cabe
+// embaixo (estimativa, sem medição — sem custo de layout).
 
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 import { entradaDoGlossario } from "@/lib/glossario";
 import { cn } from "@/lib/utils";
@@ -38,9 +49,49 @@ export function TermoInfo({ slug, className }: TermoInfoProps) {
   const [fixado, setFixado] = useState(false); // aberto por clique/toque
   const [hover, setHover] = useState(false); // aberto por passagem do mouse
   const raizRef = useRef<HTMLSpanElement>(null);
+  const painelRef = useRef<HTMLSpanElement>(null);
   const idPainel = useId();
+  const [posicionamento, setPosicionamento] = useState<{
+    top: number;
+    left: number;
+    largura: number;
+  } | null>(null);
 
   const visivel = fixado || hover;
+
+  // 8D.3.4.9 — posição do painel em coordenadas de VIEWPORT (o portal vive
+  // em <body>). Recalcula ao rolar/redimensionar para continuar colado
+  // no ⓘ mesmo quando o painel está fixado.
+  useEffect(() => {
+    if (!visivel) {
+      setPosicionamento(null);
+      return;
+    }
+    const calcular = () => {
+      const alvo = raizRef.current;
+      if (alvo === null) return;
+      const rect = alvo.getBoundingClientRect();
+      const largura = Math.min(256, window.innerWidth - 24);
+      const left = Math.min(
+        Math.max(12, rect.left + rect.width / 2 - largura / 2),
+        window.innerWidth - largura - 12
+      );
+      const ALTURA_ESTIMADA = 240;
+      const cabeEmbaixo =
+        rect.bottom + 8 + ALTURA_ESTIMADA <= window.innerHeight - 12;
+      const top = cabeEmbaixo
+        ? rect.bottom + 8
+        : Math.max(12, rect.top - 8 - ALTURA_ESTIMADA);
+      setPosicionamento({ top, left, largura });
+    };
+    calcular();
+    window.addEventListener("scroll", calcular, true);
+    window.addEventListener("resize", calcular);
+    return () => {
+      window.removeEventListener("scroll", calcular, true);
+      window.removeEventListener("resize", calcular);
+    };
+  }, [visivel]);
 
   // Escape + clique/fora fecham o estado FIXADO (o hover se resolve sozinho).
   useEffect(() => {
@@ -52,7 +103,8 @@ export function TermoInfo({ slug, className }: TermoInfoProps) {
       if (
         raizRef.current !== null &&
         evento.target instanceof Node &&
-        !raizRef.current.contains(evento.target)
+        !raizRef.current.contains(evento.target) &&
+        !(painelRef.current?.contains(evento.target) ?? false)
       ) {
         setFixado(false);
       }
@@ -96,11 +148,23 @@ export function TermoInfo({ slug, className }: TermoInfoProps) {
       >
         <Info aria-hidden="true" className="size-3.5" />
       </button>
-      {visivel && (
-        <span
-          id={idPainel}
-          className="absolute left-1/2 top-full z-50 mt-1.5 block w-64 max-w-[70vw] -translate-x-1/2 rounded-xl border border-white/10 bg-gray-900/95 px-3 py-2.5 text-left normal-case shadow-xl backdrop-blur-md"
-        >
+      {visivel &&
+        posicionamento !== null &&
+        createPortal(
+          <span
+            ref={painelRef}
+            id={idPainel}
+            style={{
+              position: "fixed",
+              top: posicionamento.top,
+              left: posicionamento.left,
+              width: posicionamento.largura,
+              zIndex: 100,
+            }}
+            className="block rounded-xl border border-white/10 bg-gray-900/95 px-3 py-2.5 text-left normal-case shadow-xl backdrop-blur-md"
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+          >
           <span className="block text-xs font-semibold text-white">
             {entrada.termo}
             {(entrada.nomeCompleto !== undefined ||
@@ -128,8 +192,9 @@ export function TermoInfo({ slug, className }: TermoInfoProps) {
               {entrada.porQueImporta}
             </span>
           )}
-        </span>
-      )}
+          </span>,
+          document.body
+        )}
     </span>
   );
 }

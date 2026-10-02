@@ -713,11 +713,18 @@ export function CommandCenter({
                 </div>
               );
             })}
-            <p className="mt-2 text-xs text-muted-foreground">
-              {acoesExecutaveis.length > 0
-                ? "Ações só acontecem depois da sua confirmação — o resultado aparece aqui."
-                : "Abrir o contexto real para verificar — nenhuma ação é executada aqui."}
-            </p>
+            {/* 8D.3.4.9 — DEDUP: o recado "só acontece se você confirmar"
+                já mora JUNTO do botão executável ("Ação disponível — nada
+                foi alterado ainda…"). Repeti-lo no rodapé do mesmo bloco
+                era redundância percebida pelo dono. O rodapé só existe
+                quando a prioridade NÃO tem ação executável (só navegação):
+                aí explica para que serve aquela superfície. */}
+            {acoesExecutaveis.length === 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Abrir o contexto real para verificar — nenhuma ação é
+                executada aqui.
+              </p>
+            )}
           </div>
         )}
       </li>
