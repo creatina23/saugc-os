@@ -7,6 +7,11 @@
 
 import type { DiagnosticoEtapa } from "../orquestrador/pipeline";
 
+export type VereditoAuditoriaEpistemica =
+  | "APROVADO"
+  | "APROVADO_COM_AJUSTES"
+  | "BLOQUEADO_POR_EVIDENCIA";
+
 export interface EtapaOrquestracao {
   id: string;
   agente: string;
@@ -17,6 +22,8 @@ export interface EtapaOrquestracao {
   iteracao?: number;
   erro?: string; // P0.1 — mensagem honesta de falha (sem conteúdo simulado)
   diagnostico?: DiagnosticoEtapa; // P2-1 — camada 2 (detalhe técnico colapsável)
+  /** P4: veredito publicável DETERMINÍSTICO (Claim Guard, não o LLM) */
+  veredito?: VereditoAuditoriaEpistemica;
 }
 
 export interface PipelineResultado {

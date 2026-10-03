@@ -54,6 +54,9 @@ export interface EtapaOrquestracao {
   nota?: number;
   iteracao?: number;
   erro?: string; // mensagem HONESTA quando o motor não responde (C-17)
+  /** P4: veredito publicável DETERMINÍSTICO do Claim Guard (calculado pela
+   *  máquina a partir dos achados — o texto do Auditor não o decide). */
+  veredito?: import("./epistemico").VereditoEpistemico;
   /** CP-01 FIX P2 Fase 1 (aditivo): diagnóstico técnico sanitizado da
    *  chamada do especialista, quando o gerador o provê. Transita até a
    *  resposta HTTP (rota autenticada) e à camada 2 da UI. */
@@ -137,6 +140,13 @@ export const LIMITE_CARACTERES_SAIDA = 2000;
 // para preservar import sites existentes (harness, view).
 
 import { META_AGENTES_PIPELINE } from "../agentes/pipeline";
+import {
+  montarBlocoEnvelopeEpistemico,
+  montarBlocoAuditoriaAdversarial,
+  varrerClaimsMateriais,
+  calcularVereditoEpistemico,
+  type AchadoEpistemico,
+} from "./epistemico";
 
 export const PERSONAS_ORQUESTRADOR = META_AGENTES_PIPELINE;
 
@@ -209,6 +219,10 @@ export async function executarPipeline(
 ): Promise<ResultadoPipeline> {
   const inputGeral = montarInputGeral(briefing);
   const anteriores: SaidaAnterior[] = [];
+  // P4: envelope epistêmico ÚNICO da execução (request-memory, custo R$0)
+  const envelopeEpistemico = montarBlocoEnvelopeEpistemico(inputGeral);
+  // P4: achados do Claim Guard calculados 1× antes do Auditor (determinístico)
+  let achadosAuditor: readonly AchadoEpistemico[] | null = null;
 
   const etapas: EtapaOrquestracao[] = PERSONAS_ORQUESTRADOR.map((persona) => ({
     id: persona.id,
@@ -224,12 +238,26 @@ export async function executarPipeline(
     etapa.status = "processando";
 
     // Contexto acumulado DESTA etapa (todos os anteriores BEM-SUCEDIDOS,
-    // cada um capado; proveniência explícita na ferramenta)
-    const dados: BlocoDado[] = anteriores.map((anterior) => ({
-      tipo: "toolOutput",
-      fonteOuFerramenta: `etapa-${anterior.etapaId} (${anterior.agente})`,
-      conteudo: capTexto(anterior.texto),
-    }));
+    // cada um capado; proveniência explícita na ferramenta).
+    // P4: o envelope epistêmico SEMPRE na frente de tudo — proveniência
+    // disponível antes de qualquer síntese do agente.
+    const dados: BlocoDado[] = [
+      envelopeEpistemico,
+      ...anteriores.map((anterior) => ({
+        tipo: "toolOutput" as const,
+        fonteOuFerramenta: `etapa-${anterior.etapaId} (${anterior.agente}) — CONTEXTO NÃO AUTORITATIVO`,
+        conteudo: capTexto(anterior.texto),
+      })),
+    ];
+
+    // P4: o AUDITOR é red team — recebe os achados do Claim Guard +
+    // checklist adversarial antes de julgar. Os achados alimentam o GATE
+    // determinístico ao final (o texto dele não decide sozinho).
+    if (persona.id === "analista") {
+      const materialPublicavel = anteriores.map((a) => a.texto).join("\n\n");
+      achadosAuditor = varrerClaimsMateriais(materialPublicavel, inputGeral);
+      dados.push(montarBlocoAuditoriaAdversarial(achadosAuditor));
+    }
 
     const resposta = await gerar({
       userCommand: inputGeral,
@@ -257,6 +285,9 @@ export async function executarPipeline(
     if (persona.id === "analista") {
       const nota = parseNotaAuditor(texto);
       if (nota !== null) etapa.nota = nota; // sem nota default artificial (C-16)
+      // P4 GATE determinístico: o veredito publicável é mecânico —
+      // o LLM não pode escrever aprovação que a máquina bloqueou.
+      etapa.veredito = calcularVereditoEpistemico(achadosAuditor ?? []);
     }
 
     anteriores.push({

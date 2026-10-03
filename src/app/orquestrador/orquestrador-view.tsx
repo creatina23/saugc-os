@@ -274,6 +274,24 @@ export function OrquestradorView() {
                     {typeof etapa.nota === "number" && (
                       <p className="text-[11px] font-semibold text-primary">Nota do auditor: {etapa.nota}/10</p>
                     )}
+                    {etapa.veredito && (
+                      <p
+                        className={
+                          etapa.veredito === "BLOQUEADO_POR_EVIDENCIA"
+                            ? "text-[11px] font-semibold text-red-600"
+                            : etapa.veredito === "APROVADO_COM_AJUSTES"
+                              ? "text-[11px] font-semibold text-amber-600"
+                              : "text-[11px] font-semibold text-emerald-600"
+                        }
+                      >
+                        Veredito de publicação (gate epistêmico):{" "}
+                        {etapa.veredito === "BLOQUEADO_POR_EVIDENCIA"
+                          ? "BLOQUEADO — há claims materiais sem sustentação no briefing; não publicar sem evidência dos itens acima"
+                          : etapa.veredito === "APROVADO_COM_AJUSTES"
+                            ? "APROVADO COM AJUSTES — claims declarativos precisam ser qualificados antes de publicar"
+                            : "APROVADO — nenhum claim material detectado além do autorizado no briefing"}
+                      </p>
+                    )}
                   </section>
                 );
               })}
