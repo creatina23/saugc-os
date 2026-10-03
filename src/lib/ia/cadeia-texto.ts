@@ -29,15 +29,38 @@
 
 export type CategoriaFalhaCascata =
   | "SKIPPED_NO_KEY"
+  /** P2 Fase 2: provider pulado POR SAÚDE efêmera desta execução
+   *  (quota/indisponibilidade já demonstrada nesta request). Não é
+   *  mascaramento de falha de rede — é decisão registrada. */
+  | "SKIPPED_PROVIDER_COOLDOWN"
   | "HTTP_401"
   | "HTTP_403"
   | "HTTP_404_MODEL"
+  /** P2 Fase 2: 402 = Payment Required (semântica canônica do status —
+   *  não distinguimos crédito vs quota vs assinatura; isso é o que o
+   *  status, sozinho, permite afirmar sem inventar significado). */
+  | "HTTP_402_PAYMENT_REQUIRED"
   | "HTTP_429_QUOTA"
   | "HTTP_4XX"
   | "HTTP_5XX"
   | "TIMEOUT"
   | "NETWORK_ERROR"
-  | "INVALID_RESPONSE";
+  | "INVALID_RESPONSE"
+  /** P2 Fase 2: categoria agregada quando TODOS falharam com tentativas
+   *  reais — as categorias individuais permanecem em tentativas[]. */
+  | "ALL_PROVIDERS_UNAVAILABLE";
+
+/** P2 Fase 2 — SAÚDE EFÊMERA por execução (memória viva SÓ durante a
+ *  request). CUSTO R$0: sem banco, sem KV, sem persistência, sem serviço
+ *  externo. Criada por execução do Orquestrador (criarGeradorReal) e
+ *  descartada com ela; /api/ia não a usa (cada geração é independente). */
+export type SaudeProvider =
+  | "healthy"
+  | "temporary_failure"
+  | "quota_limited"
+  | "unavailable_for_run";
+
+export type SaudeExecucao = Map<string, SaudeProvider>;
 
 export type TentativaCascata = {
   provider: string; // "Gemini" | "Groq" | "OpenRouter" | "Cerebras"
@@ -70,6 +93,9 @@ export type OpcoesCascata = {
   /** Deadline (ms) global DESTA chamada: cada tentativa herda o teto
    *  restante (mínimo 5s). Default: 240s (orçamento P1, ver §9 do FIX). */
   prazoMs?: number;
+  /** P2 Fase 2: saúde efêmera da execução (ver SaudeExecucao). Ausente =
+   *  comportamento clássico (cada chamada independente). */
+  saude?: SaudeExecucao;
 };
 
 const MODELO_RESERVA = "gemini-2.0-flash";
@@ -128,6 +154,51 @@ function criarOrcamento(prazoMs: number) {
 
 type Orcamento = ReturnType<typeof criarOrcamento>;
 
+// ---------- Política mínima de resiliência (P2 Fase 2) ----------
+//
+// Baseada na evidência REAL de produção (smoke P2 F1): Gemini 503, Groq
+// 429, OpenRouter 429, Cerebras 402 — esgotamento de free tiers, NÃO
+// timeout/deadline. Sem aumentar timeout, sem loops longos:
+//
+//  • 5xx (transitório): até 1 retentativa com espera curta determinística
+//    (ESPERA_5XX_MS), respeitando o orçamento da etapa.
+//  • 429 + Retry-After PEQUENO (≤ TETO_RETRY_AFTER_MS): espera o indicado
+//    e faz 1 retentativa; Retry-After ausente ou grande → NÃO espera, e o
+//    provider entra em quota_limited (efêmero desta execução): as etapas
+//    seguintes o SKIPAM com categoria explícita SKIPPED_PROVIDER_COOLDOWN.
+//  • 402 (Payment Required): não melhora com retry imediato →
+//    unavailable_for_run imediato nesta execução.
+//  • Marcação centralizada em gerarTextoCascata (camadas só relatam a
+//    categoria — decisão de saúde mora num lugar só, fácil de auditar).
+const ESPERA_5XX_MS = 1200;
+const TETO_RETRY_AFTER_MS = 5000;
+const MARGEM_SEGURANCA_MS = 500;
+
+/** Lê Retry-After (segundos → ms). Ausente/inválido → null (não esperar). */
+function lerRetryAfterMs(resposta: Response): number | null {
+  const bruto = resposta.headers.get("retry-after");
+  if (!bruto) return null;
+  const segundos = Number(bruto);
+  if (!Number.isFinite(segundos) || segundos <= 0) return null;
+  return Math.round(segundos * 1000);
+}
+
+/** Espera curta determinística, sempre limitada pelo orçamento restante. */
+async function esperarRespeitando(ms: number, orc: Orcamento): Promise<void> {
+  const disponivel = Math.max(0, orc.restanteMs() - MARGEM_SEGURANCA_MS);
+  const alvo = Math.min(ms, disponivel);
+  if (alvo > 0) await new Promise((resolver) => setTimeout(resolver, alvo));
+}
+
+/** true = Retry-After vale esperar (pequeno e cabe no orçamento). */
+function valeEsperarRetryAfter(raMs: number | null, orc: Orcamento): raMs is number {
+  return (
+    raMs !== null &&
+    raMs <= TETO_RETRY_AFTER_MS &&
+    orc.restanteMs() > raMs + 2 * MARGEM_SEGURANCA_MS
+  );
+}
+
 // ---------- Tipos e helpers ----------
 
 type ParteGemini = { text?: string };
@@ -180,6 +251,7 @@ function categorizarStatus(status: number): CategoriaFalhaCascata {
   if (status === 401) return "HTTP_401";
   if (status === 403) return "HTTP_403";
   if (status === 404 || status === 410) return "HTTP_404_MODEL";
+  if (status === 402) return "HTTP_402_PAYMENT_REQUIRED";
   if (status === 429) return "HTTP_429_QUOTA";
   if (status >= 500) return "HTTP_5XX";
   return "HTTP_4XX";
@@ -268,6 +340,8 @@ async function gerarViaGemini(
 ): Promise<TentativaInterna> {
   let ultimoStatus: number | null = null;
   let ultimaCategoria: CategoriaFalhaCascata = "HTTP_4XX";
+  let retentou5xx = false; // P2-2: no máximo 1 retry p/ erro transitório 5xx
+  let retentou429 = false; // P2-2: no máximo 1 retry p/ 429 c/ Retry-After pequeno
 
   for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa += 1) {
     if (orc.esgotado()) {
@@ -344,6 +418,24 @@ async function gerarViaGemini(
         );
         continue;
       }
+      // P2 Fase 2: 5xx transitório → 1 retentativa com espera curta.
+      if (resposta.status >= 500 && !retentou5xx && orc.restanteMs() > ESPERA_5XX_MS + 5000) {
+        retentou5xx = true;
+        console.log(`[motor-ia] Gemini 5xx transitório — 1 retentativa em ${ESPERA_5XX_MS}ms`);
+        await esperarRespeitando(ESPERA_5XX_MS, orc);
+        continue;
+      }
+      // P2 Fase 2: 429 → só espera se Retry-After PEQUENO couber no orçamento.
+      if (resposta.status === 429 && !retentou429) {
+        const raMs = lerRetryAfterMs(resposta);
+        if (valeEsperarRetryAfter(raMs, orc)) {
+          retentou429 = true;
+          console.log(`[motor-ia] Gemini 429 — Retry-After ${raMs}ms respeitado (1 retentativa)`);
+          await esperarRespeitando(raMs, orc);
+          continue;
+        }
+        console.log(`[motor-ia] Gemini 429 — sem Retry-After compatível (ausente ou grande): NÃO esperar`);
+      }
       break; // demais erros: desfila pra reserva
     } catch (excecao) {
       console.error("[motor-ia] Exceção ao chamar o Gemini:", excecao);
@@ -418,6 +510,8 @@ async function gerarViaCompativel(
   rotulo: string,
   orc: Orcamento
 ): Promise<TentativaInterna> {
+  let retentou5xx = false; // P2-2
+  let retentou429 = false; // P2-2
   for (let tentativa = 0; tentativa < 2; tentativa += 1) {
     if (orc.esgotado()) {
       return { ok: false, status: null, categoria: "TIMEOUT" };
@@ -464,6 +558,26 @@ async function gerarViaCompativel(
         const cache = cacheModelosCompativeis.get(env) ?? [];
         cacheModelosCompativeis.set(env, cache.filter((m) => m !== modelo));
         continue;
+      }
+      // P2 Fase 2: 5xx transitório → 1 retentativa com espera curta.
+      if (resposta.status >= 500 && !retentou5xx && orc.restanteMs() > ESPERA_5XX_MS + 5000) {
+        retentou5xx = true;
+        console.log(`[motor-ia] ${rotulo} 5xx transitório — 1 retentativa em ${ESPERA_5XX_MS}ms`);
+        await esperarRespeitando(ESPERA_5XX_MS, orc);
+        tentativa -= 1;
+        continue;
+      }
+      // P2 Fase 2: 429 → Retry-After pequeno ou nada.
+      if (resposta.status === 429 && !retentou429) {
+        const raMs = lerRetryAfterMs(resposta);
+        if (valeEsperarRetryAfter(raMs, orc)) {
+          retentou429 = true;
+          console.log(`[motor-ia] ${rotulo} 429 — Retry-After ${raMs}ms respeitado (1 retentativa)`);
+          await esperarRespeitando(raMs, orc);
+          tentativa -= 1;
+          continue;
+        }
+        console.log(`[motor-ia] ${rotulo} 429 — sem Retry-After compatível: NÃO esperar`);
       }
       return {
         ok: false,
@@ -544,7 +658,10 @@ async function chamarOpenRouter(
   temperatura: number,
   maxTokens: number,
   orc: Orcamento
-): Promise<{ ok: true; texto: string } | { ok: false; status: number; categoria: CategoriaFalhaCascata }> {
+): Promise<
+  | { ok: true; texto: string }
+  | { ok: false; status: number; categoria: CategoriaFalhaCascata; retryAfterMs: number | null }
+> {
   try {
     const resposta = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -570,17 +687,18 @@ async function chamarOpenRouter(
         ok: false,
         status: resposta.status,
         categoria: categorizarStatus(resposta.status),
+        retryAfterMs: lerRetryAfterMs(resposta),
       };
     }
     const texto = textoDeRespostaOpenAI(dados);
     if (!texto) {
       anotarDetalheIA(dados);
-      return { ok: false, status: 502, categoria: "INVALID_RESPONSE" };
+      return { ok: false, status: 502, categoria: "INVALID_RESPONSE", retryAfterMs: null };
     }
     return { ok: true, texto };
   } catch (excecao) {
     console.error(`[motor-ia] Exceção no OpenRouter ${modelo}`);
-    return { ok: false, status: 0, categoria: categorizarExcecao(excecao) };
+    return { ok: false, status: 0, categoria: categorizarExcecao(excecao), retryAfterMs: null };
   }
 }
 
@@ -595,6 +713,8 @@ async function gerarViaOpenRouterFree(
   let candidatos = await descobrirFreeOpenRouter(chave, orc);
   if (!candidatos.length) return { ok: false, status: null, categoria: "HTTP_404_MODEL" };
 
+  let retentou5xx = false; // P2-2
+  let retentou429 = false; // P2-2
   for (let tentativa = 0; tentativa < 3 && tentativa < candidatos.length; tentativa += 1) {
     if (orc.esgotado()) {
       return { ok: false, status: null, categoria: "TIMEOUT" };
@@ -620,6 +740,21 @@ async function gerarViaOpenRouterFree(
       candidatos = (await descobrirFreeOpenRouter(chave, orc)).filter((m) => m !== modelo);
       if (!candidatos.length) break;
       tentativa -= 1; // reposiciona pro próximo vivo
+    } else if (resultado.ok === false && resultado.status >= 500 && !retentou5xx && orc.restanteMs() > ESPERA_5XX_MS + 5000) {
+      // P2 Fase 2: 5xx transitório → 1 retentativa com espera curta
+      retentou5xx = true;
+      console.log(`[motor-ia] OpenRouter 5xx transitório — 1 retentativa em ${ESPERA_5XX_MS}ms`);
+      await esperarRespeitando(ESPERA_5XX_MS, orc);
+      tentativa -= 1;
+    } else if (resultado.ok === false && resultado.status === 429 && !retentou429 && valeEsperarRetryAfter(resultado.retryAfterMs, orc)) {
+      // P2 Fase 2: 429 → só espera se Retry-After PEQUENO couber no orçamento
+      retentou429 = true;
+      console.log(`[motor-ia] OpenRouter 429 — Retry-After ${resultado.retryAfterMs}ms respeitado (1 retentativa)`);
+      await esperarRespeitando(resultado.retryAfterMs ?? 0, orc);
+      tentativa -= 1;
+    } else if (resultado.ok === false && resultado.status === 429 && !retentou429) {
+      console.log(`[motor-ia] OpenRouter 429 — sem Retry-After compatível: NÃO esperar`);
+      return { ok: false, status: resultado.status, categoria: resultado.categoria };
     } else if (resultado.ok === false) {
       return { ok: false, status: resultado.status, categoria: resultado.categoria };
     }
@@ -660,11 +795,36 @@ export async function gerarTextoCascata(
   );
 
   const tentativas: TentativaCascata[] = [];
+
+  // P2 Fase 2: saúde efêmera por EXECUÇÃO (apenas memória deste request; ZERO persistência).
+  // Categoria da falha → estado do provider, nesta execução apenas:
+  const categoriaParaSaude = (categoria: CategoriaFalhaCascata): SaudeProvider | null => {
+    if (categoria === "HTTP_429_QUOTA") return "quota_limited"; // quota esgotada: re-martelar é inútil
+    if (categoria === "HTTP_402_PAYMENT_REQUIRED") return "unavailable_for_run"; // "Payment Required" (não reutilizável nesta execução)
+    if (categoria === "HTTP_5XX") return "temporary_failure"; // transitório: próxima etapa pode tentar de novo
+    return null;
+  };
+  const providerEmCooldown = (provider: string): boolean => {
+    const saude = opcoes.saude;
+    if (!saude) return false;
+    const estado = saude.get(provider);
+    return estado === "quota_limited" || estado === "unavailable_for_run";
+  };
   const registrarTentativa = (
     provider: string,
     inicioEtapa: number,
-    resultado: TentativaInterna | { skip: true }
+    resultado: TentativaInterna | { skip: true } | { cooldown: true }
   ) => {
+    if ("cooldown" in resultado) {
+      tentativas.push({
+        provider,
+        redeHouve: false,
+        duracaoMs: 0,
+        categoria: "SKIPPED_PROVIDER_COOLDOWN",
+        status: null,
+      });
+      return;
+    }
     if ("skip" in resultado) {
       tentativas.push({
         provider,
@@ -676,6 +836,7 @@ export async function gerarTextoCascata(
       return;
     }
     if (resultado.ok === true) {
+      opcoes.saude?.set(provider, "healthy");
       tentativas.push({
         provider,
         redeHouve: true,
@@ -685,6 +846,8 @@ export async function gerarTextoCascata(
       });
       return;
     }
+    const novoEstado = categoriaParaSaude(resultado.categoria);
+    if (novoEstado) opcoes.saude?.set(provider, novoEstado);
     tentativas.push({
       provider,
       redeHouve: true,
@@ -696,7 +859,7 @@ export async function gerarTextoCascata(
 
   // 1) Gemini
   const chaveGemini = process.env.GEMINI_API_KEY;
-  if (chaveGemini) {
+  if (chaveGemini && !providerEmCooldown("Gemini")) {
     const t0 = Date.now();
     const r = await gerarViaGemini(chaveGemini, prompt, temperatura, maxTokens, orc);
     registrarTentativa("Gemini", t0, r);
@@ -711,6 +874,9 @@ export async function gerarTextoCascata(
         duracaoMs: Date.now() - inicio,
       };
     }
+  } else if (chaveGemini) {
+    console.log("[motor-ia] Gemini: em cooldown nesta execução — skipando");
+    registrarTentativa("Gemini", 0, { cooldown: true });
   } else {
     console.log("[motor-ia] sem GEMINI_API_KEY — indo direto pros reservas");
     registrarTentativa("Gemini", 0, { skip: true });
@@ -718,7 +884,7 @@ export async function gerarTextoCascata(
 
   // 2) Groq
   const chaveGroq = process.env.GROQ_API_KEY;
-  if (chaveGroq && !orc.esgotado()) {
+  if (chaveGroq && !orc.esgotado() && !providerEmCooldown("Groq")) {
     const t0 = Date.now();
     const r = await gerarViaCompativel(
       "GROQ_API_KEY",
@@ -744,6 +910,9 @@ export async function gerarTextoCascata(
         duracaoMs: Date.now() - inicio,
       };
     }
+  } else if (chaveGroq && providerEmCooldown("Groq")) {
+    console.log("[motor-ia] Groq: em cooldown nesta execução — skipando");
+    registrarTentativa("Groq", 0, { cooldown: true });
   } else {
     if (!chaveGroq) console.log("[motor-ia] Groq: sem GROQ_API_KEY — fora da fila");
     registrarTentativa("Groq", 0, { skip: true });
@@ -751,7 +920,7 @@ export async function gerarTextoCascata(
 
   // 3) OpenRouter (free auto)
   const chaveOpenRouter = process.env.OPENROUTER_API_KEY;
-  if (chaveOpenRouter && !orc.esgotado()) {
+  if (chaveOpenRouter && !orc.esgotado() && !providerEmCooldown("OpenRouter")) {
     const t0 = Date.now();
     const r = await gerarViaOpenRouterFree(chaveOpenRouter, prompt, temperatura, maxTokens, orc);
     registrarTentativa("OpenRouter", t0, r);
@@ -766,6 +935,9 @@ export async function gerarTextoCascata(
         duracaoMs: Date.now() - inicio,
       };
     }
+  } else if (chaveOpenRouter && providerEmCooldown("OpenRouter")) {
+    console.log("[motor-ia] OpenRouter: em cooldown nesta execução — skipando");
+    registrarTentativa("OpenRouter", 0, { cooldown: true });
   } else {
     if (!chaveOpenRouter)
       console.log("[motor-ia] OpenRouter: sem OPENROUTER_API_KEY — fora da fila");
@@ -774,7 +946,7 @@ export async function gerarTextoCascata(
 
   // 4) Cerebras (opcional)
   const chaveCerebras = process.env.CEREBRAS_API_KEY;
-  if (chaveCerebras && !orc.esgotado()) {
+  if (chaveCerebras && !orc.esgotado() && !providerEmCooldown("Cerebras")) {
     const t0 = Date.now();
     const r = await gerarViaCompativel(
       "CEREBRAS_API_KEY",
@@ -800,17 +972,26 @@ export async function gerarTextoCascata(
         duracaoMs: Date.now() - inicio,
       };
     }
+  } else if (chaveCerebras && providerEmCooldown("Cerebras")) {
+    console.log("[motor-ia] Cerebras: em cooldown nesta execução — skipando");
+    registrarTentativa("Cerebras", 0, { cooldown: true });
   } else {
     if (!chaveCerebras)
       console.log("[motor-ia] Cerebras: sem CEREBRAS_API_KEY — fora da fila (opcional)");
     registrarTentativa("Cerebras", 0, { skip: true });
   }
 
-  // Fail-closed: categoria final = última tentativa REAL (ou SKIPPED se nenhuma foi feita)
-  const reais = tentativas.filter((t) => t.categoria !== "SKIPPED_NO_KEY");
-  const categoriaFinal =
-    reais.length > 0
-      ? (reais[reais.length - 1].categoria as CategoriaFalhaCascata)
+  // Fail-closed:
+  //  - houve tentativa real OU skip por cooldown (há chave, mas o provider já
+  //    provou indisponibilidade NESTA execução) → ALL_PROVIDERS_UNAVAILABLE
+  //    (agregado; categorias originais preservadas em `tentativas`)
+  //  - nenhuma chave plantada → SKIPPED_NO_KEY (preserva a compatibilidade
+  //    da rota /api/ia: 503 "nenhuma chave")
+  const houveTentativaReal = tentativas.some((t) => t.redeHouve === true);
+  const houveCooldown = tentativas.some((t) => t.categoria === "SKIPPED_PROVIDER_COOLDOWN");
+  const categoriaFinal: CategoriaFalhaCascata =
+    houveTentativaReal || houveCooldown
+      ? "ALL_PROVIDERS_UNAVAILABLE"
       : "SKIPPED_NO_KEY";
 
   console.error(

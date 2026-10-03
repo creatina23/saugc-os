@@ -186,10 +186,10 @@ export async function POST(request: Request) {
   }
 
   // 4) Todos falharam — confessa em PT-BR com a fila INTEIRA na tela.
-  //    (o resumo só inclui tentativas REAIS — camadas sem chave são skip
-  //    gracioso, como sempre foi nesta rota.)
+  //    (o resumo só inclui tentativas REAIS — camadas sem chave ou puladas
+  //    por cooldown efêmero (P2 Fase 2) não entram no resumo de falhas.)
   const reais = resultado.tentativas.filter(
-    (t) => t.categoria !== "SKIPPED_NO_KEY"
+    (t) => t.redeHouve === true
   );
   const falhas = reais.map(
     (t) => `${t.provider.slice(0, 9)}→${t.status ?? (t.categoria === "TIMEOUT" ? "timeout" : "rede")}`

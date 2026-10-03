@@ -70,6 +70,9 @@ const STATUS_BADGE: Record<EtapaOrquestracao["status"], "outline" | "success" | 
 const ROTULO_CATEGORIA: Record<string, string> = {
   TIMEOUT: "Tempo limite excedido",
   SKIPPED_NO_KEY: "Provedor sem credencial configurada (ignorado)",
+  SKIPPED_PROVIDER_COOLDOWN: "Provedor já falhou nesta execução (pulado conscientemente)",
+  ALL_PROVIDERS_UNAVAILABLE: "Todos os provedores indisponíveis nesta execução",
+  HTTP_402_PAYMENT_REQUIRED: "Provedor exige pagamento (não utilizável nesta execução)",
   HTTP_401: "Credencial não autorizada pelo provedor",
   HTTP_403: "Credencial sem permissão no provedor",
   HTTP_404_MODEL: "Modelo indisponível no provedor (rotação automática)",

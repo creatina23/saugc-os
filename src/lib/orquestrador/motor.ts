@@ -37,7 +37,7 @@
 
 import type { GeradorIA, BlocoDado, DiagnosticoEtapa } from "./pipeline";
 import { gerarTextoCascata } from "../ia/cadeia-texto";
-import type { TentativaCascata } from "../ia/cadeia-texto";
+import type { TentativaCascata, SaudeExecucao } from "../ia/cadeia-texto";
 
 export const INJETAR_BASE_EXCELENCIA_NA_PIPELINE = true;
 
@@ -88,6 +88,13 @@ export function criarGeradorReal(deps: {
 }): GeradorIA {
   const { montar, repertorio } = deps;
   const alvoGlobal = Date.now() + PRAZO_GLOBAL_MS;
+  // P2 Fase 2: saúde efêmera dos providers — memória DESTA execução apenas
+  // (1 Map por request; nasce e morre com criarGeradorReal; ZERO persistência,
+  // ZERO banco/Redis/KV/cache pago; custo R$0). Um provider que provou quota
+  // esgotada (429) ou indisponibilidade não-recuperável (402) é skipado pelas
+  // etapas seguintes com categoria explícita SKIPPED_PROVIDER_COOLDOWN, em vez
+  // de ser re-martelado em todas as camadas.
+  const saudeExecucao: SaudeExecucao = new Map();
 
   return async (entrada) => {
     const inicio = Date.now();
@@ -133,6 +140,7 @@ export function criarGeradorReal(deps: {
       temperatura: 0.8,
       maxTokens: 3000,
       prazoMs: Math.min(PRAZO_POR_ETAPA_MS, restanteGlobal),
+      saude: saudeExecucao, // P2-2: efêmero desta execução (prazo global delimita a vida útil)
     });
 
     // Log estrutural — SEM segredos, SEM prompt, COM a fila por provider
