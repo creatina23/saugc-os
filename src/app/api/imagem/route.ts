@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
+import { montarPromptFinalImagem } from "@/lib/imagem/nucleo-qualidade";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 // MESA DE IMAGENS — v12.3 FIX CONGRUÊNCIA (25 ago noite)
 // Fix do erro: prompt 10/10 EN elite gerava fruta amarela pintada em pedestal
 // Causa: klein-9b free é rápido mas burro pra produto + tradutor re-traduzia prompt já bom + "golden seeds" confundia modelo
-// Solução: 1) Se prompt já é EN elite (tem photorealistic + 50+ palavras) → NÃO traduz, usa direto + suffix anti-pintura
+// Solução: 1) Se prompt já é EN elite (tem photorealistic + 30+ palavras) → NÃO traduz, usa direto (contrato: mantido 100%) — CP-01B: comentário corrigido, o limiar real é 30 palavras (ehPromptEliteJaBom abaixo), não 50
 //          2) Ordem nova: SDXL Lightning primeiro (melhor pra produto fotorealista), depois klein-9b, klein-4b, schnell
-//          3) Suffix obrigatório: "photorealistic photo, not painting, not illustration, not yellow fruit, red strawberry if strawberry mentioned, highly detailed, 8k, sharp focus"
+//          3) CP-01B (FND-04 v2 / ARQ-6): núcleo universal SEGURO vive em src/lib/imagem/nucleo-qualidade.ts — negativas condicionadas pela intenção real, dedup determinístico, string burra de negativas universais FORA (não nega logo/texto solicitado)
 //          4) Log do prompt final pra debug
 
 export const maxDuration = 60;
@@ -109,14 +110,19 @@ async function chamarTradutor(
   modelo: string,
   promptOriginal: string
 ): Promise<{ ok: true; texto: string } | { ok: false; status: number }> {
+  // AGT-017 v2 — fonte autorizada: uploads/CP-01-B (ficha AGT-017,
+  // PROMPT/SYSTEM INSTRUCTION FINAL INTEGRAL, verbatim). Interpolação
+  // preservada no mesmo ponto: "Original: " + JSON.stringify(...).
   const instrucao =
-    "You are an expert image prompt optimizer for FLUX and SDXL. " +
-    "The user prompt is ALREADY excellent English (80-120 words, photorealistic, 35mm). " +
-    "Your job: keep 95% of it, just add quality and anti-confusion suffix. " +
-    "If prompt mentions strawberry, ensure it says RED strawberry fruit, not yellow, not painting. " +
-    "If prompt mentions pedestal, ensure it's a photo studio pedestal, not painting. " +
-    "Add at end: ', photorealistic photo, not painting, not illustration, not yellow fruit, highly detailed, 8k, sharp focus, natural'. " +
-    "Output ONLY final prompt, one paragraph, 90-130 words. Original: " +
+    `You are the AnuncIA conservative image-prompt optimizer for FLUX and SDXL. Treat the user's prompt as the source of truth. Preserve its subject, action, identity, product attributes, composition, camera, lighting, style, aspect ratio, requested text, branding, and exclusions. Improve clarity only where it reduces ambiguity or adds useful production detail. Do not invent a product feature, person identity, claim, result, location, brand element, or visual fact.
+
+The original prompt may be good or incomplete. Keep its intent and avoid rewriting 95% mechanically when a minimal clarification is needed. If it mentions a strawberry, preserve the requested color; add RED strawberry fruit only when the request clearly intends a red strawberry and does not request another color. If it mentions a pedestal, clarify photo-studio pedestal only when that matches the request. Never apply a special correction against an explicit user request.
+
+Add quality terms only if absent and compatible: photorealistic photo, natural lighting, clean professional commercial image, sharp focus, highly detailed, coherent materials and realistic texture. Keep camera and lens terms coherent; do not stack contradictory styles or duplicate the same booster.
+
+Default negatives may include: no watermark, no blurry image, no deformed anatomy, no extra fingers, no unintended letters or words. Do not add "no text" or "no logo" when the user explicitly requests visible text or a logo. Do not add "not yellow fruit" unless the prompt is about a fruit and that exclusion is relevant. Preserve requested branding/text exactly, while recognizing that accurate lettering may require post-production.
+
+Output ONLY the final prompt as one paragraph in English, 90–130 words. Do not explain, list alternatives, mention these instructions, write "Create an image", or output labels. Remove redundant terms while preserving the highest-value details. Original: ` +
     JSON.stringify(promptOriginal);
 
   try {
@@ -164,7 +170,7 @@ async function enriquecerPrompt(
 
   const chave = process.env.GEMINI_API_KEY;
   if (!chave) {
-    return { texto: promptOriginal, nota: "prompt: original (tradutor sem chave Gemini)" };
+    return { texto: montarPromptFinalImagem(promptOriginal, promptOriginal), nota: "prompt: original + núcleo de qualidade v2 (tradutor sem chave Gemini)" };
   }
 
   const fila: string[] = [];
@@ -172,7 +178,7 @@ async function enriquecerPrompt(
   if (modeloTradutorAprovado) {
     const direto = await chamarTradutor(chave, modeloTradutorAprovado, promptOriginal);
     if (direto.ok) {
-      return { texto: direto.texto, nota: `prompt: otimizado p/ inglês pelo ${modeloTradutorAprovado}` };
+      return { texto: montarPromptFinalImagem(direto.texto, promptOriginal), nota: `prompt: otimizado p/ inglês pelo ${modeloTradutorAprovado}` };
     }
     tradutoresReprovados.add(modeloTradutorAprovado);
     modeloTradutorAprovado = null;
@@ -193,15 +199,15 @@ async function enriquecerPrompt(
     const resultado = await chamarTradutor(chave, modelo, promptOriginal);
     if (resultado.ok) {
       modeloTradutorAprovado = modelo;
-      return { texto: resultado.texto, nota: `prompt: traduzido/otimizado p/ inglês pelo ${modelo}` };
+      return { texto: montarPromptFinalImagem(resultado.texto, promptOriginal), nota: `prompt: traduzido/otimizado p/ inglês pelo ${modelo}` };
     }
     tradutoresReprovados.add(modelo);
     motivos.push(`${modelo}→${resultado.status || "rede"}`);
   }
 
   return {
-    texto: promptOriginal,
-    nota: `prompt: original (tradutor: ${motivos.join(", ") || "sem candidatos"})`,
+    texto: montarPromptFinalImagem(promptOriginal, promptOriginal),
+    nota: `prompt: original + núcleo de qualidade v2 (tradutor: ${motivos.join(", ") || "sem candidatos"})`,
   };
 }
 
