@@ -63,6 +63,38 @@ export const orquestradorService = {
     }
   },
 
+  /** CP-01 · ação ARQ-2: cadeia real a partir de um objetivo livre
+   *  (página /orquestrador). Contrato de resposta IDÊNTICO à pipeline. */
+  async orquestrarObjetivo(objetivo: string): Promise<PipelineResultado> {
+    try {
+      const response = await fetch("/api/orquestrador", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao: "orquestrar-objetivo", objetivo }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return {
+          ok: false,
+          etapas: Array.isArray(data.etapas) ? data.etapas : [],
+          erro: data.erro || "Erro ao executar a cadeia do Orquestrador.",
+        };
+      }
+      return {
+        ok: data.ok === true && Array.isArray(data.etapas) ? true : false,
+        etapas: Array.isArray(data.etapas) ? data.etapas : [],
+        erro: data.erro,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro desconhecido";
+      return {
+        ok: false,
+        etapas: [],
+        erro: "Falha de conexão com o Orquestrador: " + message,
+      };
+    }
+  },
+
   async salvarNaOperacao(dados: {
     titulo: string;
     cliente: string;
