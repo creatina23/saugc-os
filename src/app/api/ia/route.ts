@@ -63,7 +63,54 @@ type PedidoIA = {
   prompt?: string;
   temperatura?: number;
   maxTokens?: number;
+  /** CP-01B · ARQ-4 (aditivo): dados/evidências p/ camada 7 do
+   *  compositor. Validado server-side; ausente = comportamento atual. */
+  dados?: DadoExternoPedido[];
 };
+
+type DadoExternoPedido = {
+  tipo?: unknown;
+  fonte?: unknown;
+  conteudo?: unknown;
+};
+
+/** Valida e normaliza dados de evidência (ARQ-4). Conservador:
+ *  qualquer item malformado derruba o pedido com 400 honesto —
+ *  preferível a ignorar evidência em silêncio (C-17). */
+function normalizarDadosExternos(
+  entrada: unknown
+): { ok: true; dados: Parameters<typeof montarPromptCognitivo>[0]["dados"] } | { ok: false; erro: string } {
+  if (entrada === undefined) return { ok: true, dados: undefined };
+  if (!Array.isArray(entrada) || entrada.length > 8) {
+    return { ok: false, erro: "Campo 'dados' deve ser uma lista de até 8 evidências." };
+  }
+  type Bloco = NonNullable<Parameters<typeof montarPromptCognitivo>[0]["dados"]>[number];
+  const saida: Bloco[] = [];
+  for (const item of entrada as DadoExternoPedido[]) {
+    const tipo = item?.tipo;
+    const conteudo = typeof item?.conteudo === "string" ? item.conteudo.trim() : "";
+    if (!conteudo || conteudo.length > 4000) {
+      return { ok: false, erro: "Cada evidência em 'dados' precisa de 'conteudo' válido (até 4.000 caracteres)." };
+    }
+    const fonte = typeof item?.fonte === "string" && item.fonte.trim() ? item.fonte.trim().slice(0, 120) : null;
+    switch (tipo) {
+      case "userSuppliedData":
+        saida.push({ tipo: "userSuppliedData" as const, conteudo });
+        break;
+      case "externalData":
+        if (!fonte) return { ok: false, erro: "Evidência 'externalData' exige 'fonte' (proveniência)." };
+        saida.push({ tipo: "externalData" as const, fonte, conteudo });
+        break;
+      case "toolOutput":
+        if (!fonte) return { ok: false, erro: "Evidência 'toolOutput' exige 'fonte' (ferramenta de origem)." };
+        saida.push({ tipo: "toolOutput" as const, ferramenta: fonte, conteudo });
+        break;
+      default:
+        return { ok: false, erro: "Campo 'dados[].tipo' inválido (use userSuppliedData, externalData ou toolOutput)." };
+    }
+  }
+  return { ok: true, dados: saida.length ? saida : undefined };
+}
 
 type ParteGemini = { text?: string };
 type RespostaGemini = {
@@ -587,12 +634,22 @@ export async function POST(request: Request) {
   // dono): suas duas metades já vivem nas LEIS DA CASA (base-excelencia.ts:81-82)
   // e na Constituição (C-01). Metadata do compositor permanece interno — o
   // contrato HTTP NÃO muda nesta unidade.
+  // ARQ-4 (CP-01B): evidências do chamador entram pela camada 7 do
+  // compositor — rótulo DADO NÃO-AUTORITATIVO (proveniência visível;
+  // nem FND-03 nem o contrato HTTP existente foram alterados — dados é
+  // campo aditivo e opcional).
+  const dadosExternos = normalizarDadosExternos(corpo.dados);
+  if (!dadosExternos.ok) {
+    return NextResponse.json({ erro: dadosExternos.erro }, { status: 400 });
+  }
+
   const { prompt: promptComExcelencia } = montarPromptCognitivo({
     userCommand: prompt,
     selectedRepertoire: {
       ids: ["legacy-base-excelencia"],
       conteudo: BASE_EXCELENCIA,
     },
+    ...(dadosExternos.dados ? { dados: dadosExternos.dados } : {}),
   });
 
   // 3) Monta a fila — cada etapa carrega rótulo pro resumo da verdade

@@ -10,6 +10,17 @@ export type AiResponse = {
 export type AiOptions = {
   temperatura?: number;
   maxTokens?: number;
+  /** CP-01B · ARQ-4 (aditivo): evidências que trafegam pela camada 7 do
+   *  compositor FND-03 na /api/ia (rótulo DADO NÃO-AUTORITATIVO).
+   *  Nenhum outro consumidor é obrigado a usar. */
+  dados?: DadoEvidenciaIA[];
+};
+
+/** Espelho da união DadoNaoAutoritativo do compositor FND-03. */
+export type DadoEvidenciaIA = {
+  tipo: "userSuppliedData" | "externalData" | "toolOutput";
+  fonte?: string; // obrigatória p/ externalData/toolOutput
+  conteudo: string;
 };
 
 export const iaService = {
@@ -18,7 +29,11 @@ export const iaService = {
       const resposta = await fetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, options: opcoes }),
+        body: JSON.stringify({
+          prompt,
+          options: opcoes,
+          ...(opcoes?.dados && opcoes.dados.length > 0 ? { dados: opcoes.dados } : {}),
+        }),
       });
 
       if (!resposta.ok) {
