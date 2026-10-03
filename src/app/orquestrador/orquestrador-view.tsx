@@ -64,6 +64,27 @@ const STATUS_BADGE: Record<EtapaOrquestracao["status"], "outline" | "success" | 
   erro: "warning",
 };
 
+/** CP-01 FIX P2 Fase 1 — Regra de DUPLA CAMADA (camada 1: linguagem
+ *  humana; camada 2: categoria técnica original sempre preservada e
+ *  exibida junto). Glossário mínimo, sem sistema novo. */
+const ROTULO_CATEGORIA: Record<string, string> = {
+  TIMEOUT: "Tempo limite excedido",
+  SKIPPED_NO_KEY: "Provedor sem credencial configurada (ignorado)",
+  HTTP_401: "Credencial não autorizada pelo provedor",
+  HTTP_403: "Credencial sem permissão no provedor",
+  HTTP_404_MODEL: "Modelo indisponível no provedor (rotação automática)",
+  HTTP_429_QUOTA: "Limite temporário do provedor",
+  HTTP_4XX: "Pedido recusado pelo provedor",
+  HTTP_5XX: "Instabilidade temporária do provedor",
+  NETWORK_ERROR: "Falha de conexão com o provedor",
+  INVALID_RESPONSE: "O provedor respondeu, mas sem conteúdo utilizável",
+  SUCCESS: "Atendido pelo provedor",
+};
+
+function rotuloCategoria(categoria: string): string {
+  return ROTULO_CATEGORIA[categoria] ?? "Categoria técnica do provedor";
+}
+
 export function OrquestradorView() {
   const [objetivoNegocio, setObjetivoNegocio] = useState("");
   const [executando, setExecutando] = useState(false);
@@ -195,6 +216,37 @@ export function OrquestradorView() {
                     </header>
                     {etapa.erro && (
                       <p className="text-[11px] text-warning">{etapa.erro}</p>
+                    )}
+                    {etapa.status === "erro" && etapa.diagnostico && (
+                      <details className="rounded-lg border border-border/40 bg-background/40 px-3 py-2 text-[11px]">
+                        <summary className="cursor-pointer select-none font-semibold text-muted-foreground">
+                          Diagnóstico técnico <span className="font-normal text-primary">▸ ver detalhes</span>
+                        </summary>
+                        <div className="mt-2 space-y-1.5">
+                          {etapa.diagnostico.tentativas.map((tentativa, idx) => (
+                            <div key={idx} className="flex flex-wrap items-baseline gap-x-2">
+                              <span className="font-semibold text-foreground">{tentativa.provider}</span>
+                              <span className="font-mono text-warning">{tentativa.categoria}</span>
+                              <span className="text-muted-foreground">— {rotuloCategoria(tentativa.categoria)}</span>
+                              {tentativa.status !== null && (
+                                <span className="font-mono text-muted-foreground">HTTP {tentativa.status}</span>
+                              )}
+                              <span className="font-mono text-muted-foreground">{tentativa.duracaoMs.toLocaleString("pt-BR")} ms</span>
+                            </div>
+                          ))}
+                          <div className="pt-1 border-t border-border/30">
+                            <span className="font-semibold">Resultado final: </span>
+                            <span className="font-mono text-warning">{etapa.diagnostico.categoriaFinal}</span>
+                            <span className="text-muted-foreground"> — {rotuloCategoria(etapa.diagnostico.categoriaFinal)}</span>
+                          </div>
+                          {etapa.diagnostico.fila && (
+                            <div className="font-mono text-muted-foreground break-all">Fila: {etapa.diagnostico.fila}</div>
+                          )}
+                          <div className="font-mono text-muted-foreground">
+                            Duração total: {etapa.diagnostico.duracaoMs.toLocaleString("pt-BR")} ms
+                          </div>
+                        </div>
+                      </details>
                     )}
                     {etapa.resultado && (
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{etapa.resultado}</p>

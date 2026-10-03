@@ -54,6 +54,10 @@ export interface EtapaOrquestracao {
   nota?: number;
   iteracao?: number;
   erro?: string; // mensagem HONESTA quando o motor não responde (C-17)
+  /** CP-01 FIX P2 Fase 1 (aditivo): diagnóstico técnico sanitizado da
+   *  chamada do especialista, quando o gerador o provê. Transita até a
+   *  resposta HTTP (rota autenticada) e à camada 2 da UI. */
+  diagnostico?: DiagnosticoEtapa;
 }
 
 export interface SaidaAnterior {
@@ -72,7 +76,35 @@ export type GeradorIA = (entrada: {
   userCommand: string;
   agentContract: { id: string; versao: string; conteudo: string };
   dados: readonly BlocoDado[];
-}) => Promise<{ readonly texto: string | null; readonly motor: string | null }>;
+}) => Promise<{
+  readonly texto: string | null;
+  readonly motor: string | null;
+  /** CP-01 FIX P2 Fase 1 (aditivo/opcional): diagnóstico técnico
+   *  SANITIZADO da chamada (sucesso OU falha). Geradores antigos/fakes
+   *  que não o retornam continuam compatíveis. Whitelist de campos —
+   *  NUNCA transporta chave, header, prompt, resposta bruta ou PII. */
+  readonly diagnostico?: DiagnosticoEtapa;
+}>;
+
+/** DTO sanitizado mínimo (whitelist) — os ÚNICOS campos de tentativa
+ *  autorizados a atravessar para o frontend. provider/categoria/status/
+ *  ms são labels e números gerados pelo NOSSO código (nunca texto do
+ *  provider, nunca payload, nunca credencial). */
+export interface TentativaDiagnostico {
+  readonly provider: string;
+  readonly redeHouve: boolean;
+  readonly duracaoMs: number;
+  readonly categoria: string;
+  readonly status: number | null;
+}
+
+export interface DiagnosticoEtapa {
+  readonly duracaoMs: number;
+  readonly categoriaFinal: string;
+  readonly tentativas: readonly TentativaDiagnostico[];
+  /** Resumo textual sanitizado ("Gemini→TIMEOUT | Groq→SUCCESS"). */
+  readonly fila?: string;
+}
 
 export interface ResultadoPipeline {
   ok: boolean;
@@ -198,6 +230,8 @@ export async function executarPipeline(
       },
       dados,
     });
+
+    if (resposta.diagnostico) etapa.diagnostico = resposta.diagnostico; // P2 Fase 1
 
     if (resposta.texto === null || resposta.texto === "") {
       etapa.resultado = "";

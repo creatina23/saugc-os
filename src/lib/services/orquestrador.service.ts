@@ -1,6 +1,11 @@
 // orquestrador.service.ts — Sprint 020-C (Pipeline Dinâmica + Persistência Supabase)
 // P0.1: campo aditivo "erro?" — mensagem honesta quando a etapa falhou por
 // falta de resposta do motor de IA. Nenhum campo existente foi removido.
+// CP-01 FIX P2 Fase 1: campo aditivo "diagnostico?" — DTO sanitizado
+// (whitelist) da chamada do especialista; presente só quando o servidor o
+// envia. Type-only import (apagado em runtime; sem custo no bundle).
+
+import type { DiagnosticoEtapa } from "../orquestrador/pipeline";
 
 export interface EtapaOrquestracao {
   id: string;
@@ -11,6 +16,7 @@ export interface EtapaOrquestracao {
   nota?: number;
   iteracao?: number;
   erro?: string; // P0.1 — mensagem honesta de falha (sem conteúdo simulado)
+  diagnostico?: DiagnosticoEtapa; // P2-1 — camada 2 (detalhe técnico colapsável)
 }
 
 export interface PipelineResultado {
