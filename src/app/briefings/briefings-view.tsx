@@ -456,12 +456,22 @@ export function BriefingsView() {
       .filter(Boolean)
       .join("\n");
 
-    return `Você é um roteirista sênior de anúncios UGC — vídeos curtos que parecem orgânicos, gravados por pessoas reais com o celular — especialista em Meta Ads. Você escreve sempre em português do Brasil, natural, como gente de verdade fala. Nada de texto corporativo.
+    return `Você é um roteirista de anúncios UGC para Meta Ads — vídeos curtos que parecem orgânicos, gravados por pessoas reais com o celular. Escreva sempre em português do Brasil, natural, como gente de verdade fala. Nada de texto corporativo, biografia inventada ou promessa que o briefing não sustenta.
 
-Com base no briefing abaixo, escreva o roteiro completo do criativo, pronto para o creator gravar.
+Com base somente no briefing abaixo, escreva o roteiro completo do criativo, pronto para o creator gravar. Use o produto, público, oferta, requisitos, creator e detalhes que realmente aparecerem. Se uma informação essencial para uma decisão estiver ausente, use uma indicação curta [AJUSTAR: informação necessária] dentro do campo afetado; não invente cliente, benefício, preço, depoimento, número ou resultado. A ausência do cliente em modo demo é um contrato: não tente reconstruí-lo.
 
 BRIEFING:
 ${contexto}
+
+Antes de escrever, defina internamente: situação concreta, desejo/problema, crença atual, mecanismo da oferta, estágio de consciência, hook visual e ação final. Não mostre o raciocínio.
+
+Regras de roteiro:
+- O GANCHO precisa ser uma fala ou ação específica para os primeiros 3 segundos e deve funcionar visualmente mesmo sem áudio.
+- Faça 3 a 6 cenas numeradas, com ação simples, ambiente real e fala gravável.
+- Use demonstração, processo ou detalhe do produto quando não houver prova social fornecida.
+- Depoimento, antes/depois, número e resultado só entram se estiverem no briefing e forem responsabilidade da marca confirmar.
+- A legenda deve puxar conversa sem fabricar aprovação social.
+- O CTA deve pedir uma ação real disponível na oferta.
 
 Entregue o roteiro EXATAMENTE nesta estrutura, sem introdução nem conclusão:
 
@@ -469,7 +479,7 @@ Entregue o roteiro EXATAMENTE nesta estrutura, sem introdução nem conclusão:
 🎣 GANCHO (0–3s): a fala ou ação exata que para o scroll
 🎬 CENA A CENA: 3 a 6 cenas numeradas — cada uma com "O que aparece:" e "O que é dito:"
 💬 LEGENDA SUGERIDA: texto do post com 1 pergunta que puxe comentário
-📣 CTA: a chamada final para ação`;
+📣 CTA: a chamada final para ação`
   }
 
   async function handleGerarRoteiro() {
@@ -502,17 +512,20 @@ Entregue o roteiro EXATAMENTE nesta estrutura, sem introdução nem conclusão:
   // ---------- IA: roteiro vira comandos de vídeo (Ponte do Vídeo, 017) ----------
 
   function montarPromptComandosVideo(): string {
-    return `Você é um engenheiro de comandos sênior para geradores de vídeo com IA, especialista no Flow/Veo do Google. Você transforma roteiros de anúncios UGC em comandos de vídeo prontos pra colar, um por cena.
+    return `Você é um engenheiro de comandos sênior para geradores de vídeo com IA, especialista em transformar roteiros UGC em comandos prontos para colar no Flow/Veo. Você escreve o comando; não gera, testa ou confirma o vídeo.
 
 ROTEIRO DO ANÚNCIO:
 ${roteiro.trim()}
 
 Regras dos comandos:
-- 1 comando por cena do roteiro (na mesma ordem), cada um pensado pra um clipe de 8 segundos.
-- Escreva em português do Brasil, descrevendo: quem aparece e faz o quê, onde está (cenário simples e real), iluminação natural, câmera na mão estilo caseiro gravado com celular, clima/emoção da cena.
-- Estilo UGC de verdade: pessoa comum, ambiente real (quarto, cozinha, rua), nada de estúdio ou perfeito demais.
-- Se a cena tem fala, termine o comando com a fala exata entre aspas duplas e a indicação de idioma: falando em português brasileiro: "...".
-- Mantenha o MESMO personagem em todos os comandos (aparência e roupa descritas iguais em cada cena).
+- Gere 1 comando por cena identificável do roteiro, na mesma ordem, cada um pensado para um clipe de 8 segundos. Não crie cena extra e não apague cena existente.
+- Escreva em português do Brasil, descrevendo quem aparece e faz o quê, onde está em um cenário simples e real, iluminação natural, câmera na mão estilo caseiro gravado com celular e clima/emoção.
+- Estilo UGC de verdade: pessoa comum e ambiente real; nada de estúdio perfeito demais se o roteiro não pedir isso.
+- Se a cena tem fala, termine o comando com a fala exata entre aspas duplas e a indicação: falando em português brasileiro: "...". Não reescreva a fala para deixá-la mais bonita.
+- Mantenha o MESMO personagem em todos os comandos: repita a aparência, roupa, cabelo, acessórios e faixa etária aproximada de forma consistente. Não invente uma identidade biográfica.
+- Mantenha também continuidade de ambiente, objetos, hora do dia, direção da luz e estado do produto, salvo mudança explícita no roteiro.
+- Prefira uma ação principal contínua por clipe; evite exigir transições impossíveis ou texto legível dentro do vídeo sem pedido explícito.
+- Não invente prova social, número, resultado, preço ou benefício que não esteja no roteiro.
 
 Formato EXATO de saída, sem introdução nem conclusão:
 
@@ -520,7 +533,7 @@ CENA 1 (8s): <comando completo>
 CENA 2 (8s): <comando completo>
 (quantas cenas o roteiro tiver)
 
-💡 DICA FINAL: <1 orientação rápida pra manter o mesmo personagem em todos os clipes gerados no Flow>`;
+💡 DICA FINAL: <1 orientação rápida para manter o mesmo personagem, ambiente e estado do produto em todos os clipes gerados no Flow>`
   }
 
   async function handleGerarComandosVideo() {

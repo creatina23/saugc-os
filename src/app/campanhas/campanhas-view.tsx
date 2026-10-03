@@ -503,7 +503,7 @@ export function CampanhasView() {
 
   // ---------- IA: Diretor de Tráfego (Sprint 015c) ----------
 
-  function montarPromptAnalise(): string {
+  function montarContextoAnalise(): { sobreACampanha: string; numeros: string } {
     const orcamento = toNumero(orcamentoF);
     const investido = toNumero(investidoF);
     const impressoes = Math.round(toNumero(impressoesF));
@@ -538,9 +538,18 @@ export function CampanhasView() {
       }`,
     ].join("\n");
 
-    return `Você é o Diretor de Tráfego: gestor de tráfego pago sênior (Meta Ads, Google Ads, TikTok Ads), com anos de estrada em e-commerce e infoprodutos, viciado em retorno sobre investimento. Você fala português do Brasil claro e direto, como se estivesse ao lado do cliente olhando o painel. Nada de jargão técnico sem explicação.
+    return { sobreACampanha, numeros };
+  }
 
-Analise os números desta campanha e escreva o relatório do gestor sênior.
+  /** AGT-016 v2 — fonte autorizada: uploads/CP-01-B (ficha AGT-016,
+   *  verbatim). Placeholders ${sobreACampanha} e ${numeros} preservados
+   *  nos mesmos pontos funcionais. */
+  function montarPromptAnalise(): string {
+    const { sobreACampanha, numeros } = montarContextoAnalise();
+
+    return `Você é o Diretor de Tráfego do AnuncIA: analista de campanhas em Meta Ads, Google Ads e TikTok Ads. Fale em português do Brasil claro e direto, como alguém olhando o painel com o cliente. Explique jargões. Sua função é interpretar os números recebidos e recomendar decisões; não alegue acesso a painel, execução, alteração de campanha ou fonte externa.
+
+Analise os números desta campanha e escreva o relatório do gestor.
 
 CAMPANHA:
 ${sobreACampanha}
@@ -548,14 +557,22 @@ ${sobreACampanha}
 NÚMEROS ATÉ AGORA:
 ${numeros}
 
-Referências pra sua leitura: em Meta Ads, CTR acima de 1% costuma ser saudável; abaixo de 0,5% sugere criativo fraco ou público errado. ROAS é julgado contra a meta; sem meta, abaixo de 1× é prejuízo. No estágio de Teste, volume baixo é normal — não trate poucos dados como desastre.
+PROTOCOLO DE LEITURA:
+- Primeiro separe o que foi observado nos campos recebidos do que é hipótese.
+- Verifique período, estágio, volume, denominadores e possíveis lacunas. Poucas impressões, cliques ou conversões reduzem a confiança; não trate ausência de volume como desastre nem como sucesso.
+- Use CTR, CPA, ROAS e demais métricas somente com definição e base fornecidas. Se um campo estiver ausente, diga que não pode concluir.
+- As referências "CTR acima de 1% costuma ser saudável" e "abaixo de 0,5% pode indicar criativo/público" são heurísticas de triagem, não leis universais. Contextualize por objetivo, placement, público, etapa e janela.
+- ROAS deve ser comparado à meta e, quando possível, à margem/valor econômico informado. Sem meta ou margem, diga a limitação; não chame abaixo de 1× de prejuízo em todos os modelos sem saber custo e receita.
+- Olhe o funil: impressão → clique → visita/conversa → conversão → receita. Aponte o gargalo mais provável e a evidência.
+- Recomende 3 ações de hoje, priorizadas. Cada ação deve ter alvo, mudança, razão e sinal de decisão. Evite mudar várias variáveis ao mesmo tempo quando isso impedir aprendizado.
+- Não invente benchmark, causa, público, qualidade de lead, atribuição, venda, lucro ou previsão.
 
 Entregue EXATAMENTE nesta estrutura, sem introdução nem conclusão:
 
-🩺 DIAGNÓSTICO: o que esses números estão dizendo, em 3 a 5 frases claras
-🚦 SEMÁFORO: 🟢 saudável · 🟡 atenção · 🔴 crítico — e o porquê em 1 frase
-🎯 AS 3 AÇÕES DE HOJE: numeradas (1., 2., 3.), específicas e executáveis hoje — nada genérico
-⚠️ RISCO SE NADA MUDAR: 1 frase honesta`;
+🩺 DIAGNÓSTICO: o que esses números estão dizendo, em 3 a 5 frases claras; diferencie observado de hipótese quando necessário
+🚦 SEMÁFORO: 🟢 saudável · 🟡 atenção · 🔴 crítico — e o porquê em 1 frase, considerando estágio e volume
+🎯 AS 3 AÇÕES DE HOJE: numeradas (1., 2., 3.), específicas e executáveis hoje — cada uma com alvo, mudança e sinal a observar
+⚠️ RISCO SE NADA MUDAR: 1 frase honesta, sem afirmar uma perda que os dados não sustentam`;
   }
 
   async function handleAnalisar() {
@@ -574,9 +591,20 @@ Entregue EXATAMENTE nesta estrutura, sem introdução nem conclusão:
       return;
     }
     setAnalisando(true);
+    // ARQ-4 (CP-01B): além do texto legível no prompt, os mesmos números
+    // trafegam como EVIDÊNCIA estruturada na camada 7 do compositor
+    // (rótulo DADO NÃO-AUTORITATIVO). Compat aditiva: ${numeros} fica.
+    const contexto = montarContextoAnalise();
     const resposta = await iaService.gerarTexto(montarPromptAnalise(), {
       temperatura: 0.4,
       maxTokens: 1500,
+      dados: [
+        {
+          tipo: "externalData",
+          fonte: "campanhas-view · campos calculados do formulário da campanha",
+          conteudo: `${contexto.sobreACampanha}\n\n${contexto.numeros}`,
+        },
+      ],
     });
     setAnalisando(false);
     if (!resposta.ok || !resposta.texto.trim()) {
