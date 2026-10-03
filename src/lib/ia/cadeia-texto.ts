@@ -69,6 +69,8 @@ export type TentativaCascata = {
   categoria: CategoriaFalhaCascata | "SUCCESS";
   status: number | null; // status HTTP quando existiu (null = sem resposta)
   modelo?: string | null; // P3.1: slug do modelo (seguro: não é segredo — é dado técnico público)
+  terminoStatus?: string | null; // P3.2: status canônico de término (label nosso)
+  saidaTokens?: number | null;   // P3.2: tokens de saída quando o provider informa (número puro)
 };
 
 export type ResultadoCascata =
@@ -78,6 +80,7 @@ export type ResultadoCascata =
       motor: string;
       provider: string;
       modelo: string;
+      termino: MetadadosTermino;
       tentativas: TentativaCascata[];
       duracaoMs: number;
     }
@@ -217,7 +220,11 @@ function valeEsperarRetryAfter(raMs: number | null, orc: Orcamento): raMs is num
 
 type ParteGemini = { text?: string };
 type RespostaGemini = {
-  candidates?: { content?: { parts?: ParteGemini[] } }[];
+  candidates?: {
+    content?: { parts?: ParteGemini[] };
+    finishReason?: string;
+  }[];
+  usageMetadata?: { candidatesTokenCount?: number; totalTokenCount?: number };
 };
 
 type ModeloGemini = {
@@ -225,7 +232,77 @@ type ModeloGemini = {
   supportedGenerationMethods?: string[];
 };
 
-type RespostaOpenAI = { choices?: { message?: { content?: string } }[] };
+type RespostaOpenAI = {
+  choices?: { message?: { content?: string }; finish_reason?: string }[];
+  usage?: { completion_tokens?: number; total_tokens?: number };
+};
+
+// ---------- Completion canônica (P3.2) ----------
+// SUCCESS ≠ "recebi texto". SUCCESS = texto válido + término aceitável.
+// finish_reason/stop_reason era DESCARTADO pelos parsers dos 5 providers
+// (causa raiz da truncação silenciosa). Estados canônicos:
+export type StatusTermino =
+  | "COMPLETE"               // stop/end_turn natural do provider
+  | "TRUNCATED_TOKEN_LIMIT"  // provider DISSE: encerrado no teto de geração
+  | "TRUNCATED_TIMEOUT"      // resposta parcial por tempo (reservado; hoje timeout aborta sem texto)
+  | "UNKNOWN_COMPLETION";    // provider não informou (nunca inventar COMPLETE)
+
+export type MetadadosTermino = {
+  readonly status: StatusTermino;
+  /** forma canônica sanitizada do finish_reason original (enum conhecido
+   *  APENAS — texto arbitrário do provider jamais atravessa). */
+  readonly finishReason: string | null;
+  /** tokens de saída quando o provider informa (número puro, seguro). */
+  readonly outputTokens: number | null;
+};
+
+/** Conjunto FECHADO de finish_reasons reconhecidos — whitelist de transporte. */
+const FINISH_CONHECIDOS: ReadonlySet<string> = new Set([
+  "stop", "length", "end_turn", "tool_calls", "content_filter",
+  "STOP", "MAX_TOKENS", "SAFETY", "RECITATION", "OTHER", "BLOCKLIST",
+  "PROHIBITED_CONTENT", "SPII", "LANGUAGE", "MALFORMED_FUNCTION_CALL",
+]);
+
+function finishSanitizado(bruto: unknown): string | null {
+  const texto = typeof bruto === "string" ? bruto : null;
+  return texto && FINISH_CONHECIDOS.has(texto) ? texto : null;
+}
+
+/** Gemini: STOP→COMPLETE; MAX_TOKENS→TRUNCATED; SAFETY/…→TRUNCATED (provider
+ *  alega encerramento não-natural); ausente→UNKNOWN. */
+function terminoDeRespostaGemini(dados: unknown): MetadadosTermino {
+  const g = dados as RespostaGemini | null;
+  const bruto = g?.candidates?.[0]?.finishReason;
+  const finishReason = finishSanitizado(bruto);
+  const outputTokens =
+    typeof g?.usageMetadata?.candidatesTokenCount === "number"
+      ? g.usageMetadata.candidatesTokenCount
+      : null;
+  let status: StatusTermino = "UNKNOWN_COMPLETION";
+  if (finishReason === "STOP") status = "COMPLETE";
+  else if (finishReason === "MAX_TOKENS") status = "TRUNCATED_TOKEN_LIMIT";
+  else if (finishReason === null) status = "UNKNOWN_COMPLETION";
+  else status = typeof bruto === "string" ? "TRUNCATED_TOKEN_LIMIT" : "UNKNOWN_COMPLETION";
+  return { status, finishReason, outputTokens };
+}
+
+/** Formato OpenAI (Groq · Cerebras · OpenRouter · Cloudflare REST):
+ *  stop/end_turn→COMPLETE; length→TRUNCATED_TOKEN_LIMIT; ausente→UNKNOWN. */
+function terminoDeRespostaOpenAI(dados: unknown): MetadadosTermino {
+  const r = dados as RespostaOpenAI | null;
+  const bruto = r?.choices?.[0]?.finish_reason;
+  const finishReason = finishSanitizado(bruto);
+  const outputTokens =
+    typeof r?.usage?.completion_tokens === "number"
+      ? r.usage.completion_tokens
+      : null;
+  let status: StatusTermino = "UNKNOWN_COMPLETION";
+  if (finishReason === "stop" || finishReason === "end_turn") status = "COMPLETE";
+  else if (finishReason === "length") status = "TRUNCATED_TOKEN_LIMIT";
+  else if (finishReason === null) status = "UNKNOWN_COMPLETION";
+  else status = typeof bruto === "string" ? "TRUNCATED_TOKEN_LIMIT" : "UNKNOWN_COMPLETION";
+  return { status, finishReason, outputTokens };
+}
 
 // Extrai a versão numérica do nome ("gemini-2.5-flash" → 250)
 function versaoDoModelo(nome: string): number {
@@ -281,8 +358,100 @@ function categorizarExcecao(excecao: unknown): CategoriaFalhaCascata {
 }
 
 type TentativaInterna =
-  | { ok: true; texto: string; motor: string; provider: string; modelo: string }
+  | { ok: true; texto: string; motor: string; provider: string; modelo: string; termino: MetadadosTermino }
   | { ok: false; status: number | null; categoria: CategoriaFalhaCascata; modelo?: string };
+
+// ---------- Continuação canônica após TRUNCATED_TOKEN_LIMIT (P3.2) ----------
+// Regras duras: MÁXIM0 1 continuação automática por geração; no MESMO
+// provider/modelo; só se restarem ≥ ORCAMENTO_MINIMO_MS; a segunda
+// resposta IMPOE o status final (truncate de novo → permanece marcado,
+// sem loop). Se a continuação falha em transporte → mantemos o parcial
+// com status TRUNCADO honesto.
+const PROMPT_CONTINUACAO =
+  "Continue exatamente de onde parou. Não reinicie a resposta. " +
+  "Não repita conteúdo já produzido. Conclua apenas as partes restantes do contrato.";
+const ORCAMENTO_MINIMO_CONTINUACAO_MS = 8000;
+
+type RespostaComposta =
+  | { texto: string; termino: MetadadosTermino }
+  | null;
+
+async function continuarGemini(
+  chave: string,
+  modelo: string,
+  prompt: string,
+  parcial: string,
+  temperatura: number,
+  maxTokens: number,
+  orc: Orcamento
+): Promise<RespostaComposta> {
+  try {
+    const resposta = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": chave },
+        body: JSON.stringify({
+          contents: [
+            { role: "user", parts: [{ text: prompt }] },
+            { role: "model", parts: [{ text: parcial }] },
+            { role: "user", parts: [{ text: PROMPT_CONTINUACAO }] },
+          ],
+          generationConfig: { temperature: temperatura, maxOutputTokens: maxTokens },
+        }),
+        signal: orc.sinalRestante(45000),
+      }
+    );
+    if (!resposta.ok) return null;
+    const dados: unknown = await resposta.json().catch(() => null);
+    const texto = textoDaRespostaGemini(dados);
+    if (!texto) return null;
+    return { texto, termino: terminoDeRespostaGemini(dados) };
+  } catch {
+    return null;
+  }
+}
+
+async function continuarOpenAICompativel(
+  urlChat: string,
+  chave: string,
+  modelo: string,
+  prompt: string,
+  parcial: string,
+  temperatura: number,
+  maxTokens: number,
+  orc: Orcamento,
+  headersExtras?: Record<string, string>
+): Promise<RespostaComposta> {
+  try {
+    const resposta = await fetch(urlChat, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${chave}`,
+        ...(headersExtras ?? {}),
+      },
+      body: JSON.stringify({
+        model: modelo,
+        messages: [
+          { role: "user", content: prompt },
+          { role: "assistant", content: parcial },
+          { role: "user", content: PROMPT_CONTINUACAO },
+        ],
+        temperature: temperatura,
+        max_tokens: maxTokens,
+      }),
+      signal: orc.sinalRestante(45000),
+    });
+    if (!resposta.ok) return null;
+    const dados: unknown = await resposta.json().catch(() => null);
+    const texto = textoDeRespostaOpenAI(dados);
+    if (!texto) return null;
+    return { texto, termino: terminoDeRespostaOpenAI(dados) };
+  } catch {
+    return null;
+  }
+}
 
 // ---------- Camada 1: Gemini (titular, autodescoberta) ----------
 
@@ -405,12 +574,32 @@ async function gerarViaGemini(
         }
         modeloAprovado = modelo;
         console.log(`[motor-ia] Gemini aprovado e fixado: ${modelo}`);
+        // P3.2: SUCCESS = texto + TÉRMINO aceitável. TRUNCATED_TOKEN_LIMIT
+        // gera no máximo 1 continuação no MESMO modelo; sem orçamento →
+        // mantém o parcial MARCADO (nunca silencioso).
+        let termino = terminoDeRespostaGemini(dados);
+        let textoFinal = gerado;
+        if (termino.status === "TRUNCATED_TOKEN_LIMIT") {
+          if (orc.restanteMs() >= ORCAMENTO_MINIMO_CONTINUACAO_MS) {
+            console.log(`[motor-ia] Gemini ${modelo}: MAX_TOKENS — 1 continuação automática`);
+            const cont = await continuarGemini(chave, modelo, prompt, gerado, temperatura, maxTokens, orc);
+            if (cont) {
+              textoFinal = gerado + cont.texto;
+              termino = cont.termino;
+            } else {
+              console.log("[motor-ia] Gemini: continuação falhou — parcial mantido marcado");
+            }
+          } else {
+            console.log("[motor-ia] Gemini: MAX_TOKENS sem orçamento p/ continuação — parcial marcado");
+          }
+        }
         return {
           ok: true,
-          texto: gerado,
+          texto: textoFinal,
           motor: `Gemini · ${modelo}`,
           provider: "Gemini",
           modelo,
+          termino,
         };
       }
 
@@ -553,12 +742,32 @@ async function gerarViaCompativel(
         const texto = textoDeRespostaOpenAI(dados);
         if (texto) {
           console.log(`[motor-ia] ${rotulo} respondeu (${modelo})`);
+          // P3.2: término canônico + no máximo 1 continuação automática
+          let termino = terminoDeRespostaOpenAI(dados);
+          let textoFinal = texto;
+          if (termino.status === "TRUNCATED_TOKEN_LIMIT") {
+            if (orc.restanteMs() >= ORCAMENTO_MINIMO_CONTINUACAO_MS) {
+              console.log(`[motor-ia] ${rotulo} (${modelo}): length — 1 continuação automática`);
+              const cont = await continuarOpenAICompativel(
+                urlChat, chave, modelo, prompt, texto, temperatura, maxTokens, orc
+              );
+              if (cont) {
+                textoFinal = texto + cont.texto;
+                termino = cont.termino;
+              } else {
+                console.log(`[motor-ia] ${rotulo}: continuação falhou — parcial mantido marcado`);
+              }
+            } else {
+              console.log(`[motor-ia] ${rotulo}: length sem orçamento p/ continuação — parcial marcado`);
+            }
+          }
           return {
             ok: true,
-            texto,
+            texto: textoFinal,
             motor: `${rotulo} · ${modelo}`,
             provider: rotulo,
             modelo,
+            termino,
           };
         }
         anotarDetalheIA(dados);
@@ -673,7 +882,7 @@ async function chamarOpenRouter(
   maxTokens: number,
   orc: Orcamento
 ): Promise<
-  | { ok: true; texto: string }
+  | { ok: true; texto: string; termino: MetadadosTermino }
   | { ok: false; status: number; categoria: CategoriaFalhaCascata; retryAfterMs: number | null }
 > {
   try {
@@ -709,7 +918,7 @@ async function chamarOpenRouter(
       anotarDetalheIA(dados);
       return { ok: false, status: 502, categoria: "INVALID_RESPONSE", retryAfterMs: null };
     }
-    return { ok: true, texto };
+    return { ok: true, texto, termino: terminoDeRespostaOpenAI(dados) };
   } catch (excecao) {
     console.error(`[motor-ia] Exceção no OpenRouter ${modelo}`);
     return { ok: false, status: 0, categoria: categorizarExcecao(excecao), retryAfterMs: null };
@@ -737,12 +946,34 @@ async function gerarViaOpenRouterFree(
     const resultado = await chamarOpenRouter(chave, modelo, prompt, temperatura, maxTokens, orc);
     if (resultado.ok) {
       console.log(`[motor-ia] OpenRouter free respondeu: ${modelo}`);
+      // P3.2: término canônico + no máximo 1 continuação no MESMO modelo
+      let termino = resultado.termino;
+      let textoFinal = resultado.texto;
+      if (termino.status === "TRUNCATED_TOKEN_LIMIT") {
+        if (orc.restanteMs() >= ORCAMENTO_MINIMO_CONTINUACAO_MS) {
+          console.log(`[motor-ia] OpenRouter (${modelo}): length — 1 continuação automática`);
+          const cont = await continuarOpenAICompativel(
+            "https://openrouter.ai/api/v1/chat/completions",
+            chave, modelo, prompt, resultado.texto, temperatura, maxTokens, orc,
+            { "HTTP-Referer": "https://anuncia-three.vercel.app", "X-Title": "AnuncIA" }
+          );
+          if (cont) {
+            textoFinal = resultado.texto + cont.texto;
+            termino = cont.termino;
+          } else {
+            console.log("[motor-ia] OpenRouter: continuação falhou — parcial mantido marcado");
+          }
+        } else {
+          console.log("[motor-ia] OpenRouter: length sem orçamento p/ continuação — parcial marcado");
+        }
+      }
       return {
         ok: true,
-        texto: resultado.texto,
+        texto: textoFinal,
         motor: `OpenRouter · ${modelo}`,
         provider: "OpenRouter",
         modelo,
+        termino,
       };
     }
     if (resultado.ok === false && (resultado.status === 404 || resultado.status === 400)) {
@@ -850,12 +1081,18 @@ async function gerarViaCloudflare(
           return { ok: false, status: 502, categoria: "INVALID_RESPONSE", modelo };
         }
         console.log(`[motor-ia] Cloudflare respondeu (${modelo})`);
+        // P3.2: a REST nativa do Workers AI não publica finish_reason/usage
+        // no result — honestamente UNKNOWN_COMPLETION (nunca inventar
+        // COMPLETE). Texto continua truncável ATÉ a soma de max_tokens do
+        // lado de lá; como não há sinal, segue o fluxo como sucesso.
+        const termino = terminoDeRespostaOpenAI(dados);
         return {
           ok: true,
           texto,
           motor: `Cloudflare · ${modelo}`,
           provider: "Cloudflare",
           modelo,
+          termino,
         };
       }
       anotarDetalheIA(dados);
@@ -1006,6 +1243,8 @@ export async function gerarTextoCascata(
         categoria: "SUCCESS",
         status: 200,
         modelo: resultado.modelo ?? null,
+        terminoStatus: resultado.termino.status,
+        saidaTokens: resultado.termino.outputTokens,
       });
       return;
     }
@@ -1034,6 +1273,7 @@ export async function gerarTextoCascata(
         motor: r.motor,
         provider: r.provider,
         modelo: r.modelo,
+        termino: r.termino,
         tentativas,
         duracaoMs: Date.now() - inicio,
       };
@@ -1070,6 +1310,7 @@ export async function gerarTextoCascata(
         motor: r.motor,
         provider: r.provider,
         modelo: r.modelo,
+        termino: r.termino,
         tentativas,
         duracaoMs: Date.now() - inicio,
       };
@@ -1095,6 +1336,7 @@ export async function gerarTextoCascata(
         motor: r.motor,
         provider: r.provider,
         modelo: r.modelo,
+        termino: r.termino,
         tentativas,
         duracaoMs: Date.now() - inicio,
       };
@@ -1132,6 +1374,7 @@ export async function gerarTextoCascata(
         motor: r.motor,
         provider: r.provider,
         modelo: r.modelo,
+        termino: r.termino,
         tentativas,
         duracaoMs: Date.now() - inicio,
       };
@@ -1167,6 +1410,7 @@ export async function gerarTextoCascata(
         motor: r.motor,
         provider: r.provider,
         modelo: r.modelo,
+        termino: r.termino,
         tentativas,
         duracaoMs: Date.now() - inicio,
       };

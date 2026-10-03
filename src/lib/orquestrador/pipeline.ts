@@ -99,6 +99,11 @@ export interface TentativaDiagnostico {
   readonly categoria: string;
   readonly status: number | null;
   readonly modelo?: string | null;
+  /** P3.2: status canônico de término (NOSSO label: COMPLETE /
+   *  TRUNCATED_TOKEN_LIMIT / UNKNOWN_COMPLETION… nunca texto do provider). */
+  readonly terminoStatus?: string | null;
+  /** P3.2: tokens de saída quando informados (número puro). */
+  readonly saidaTokens?: number | null;
 }
 
 export interface DiagnosticoEtapa {
@@ -107,6 +112,8 @@ export interface DiagnosticoEtapa {
   readonly tentativas: readonly TentativaDiagnostico[];
   /** Resumo textual sanitizado ("Gemini→TIMEOUT | Groq→SUCCESS"). */
   readonly fila?: string;
+  /** P3.2: término canônico da TENTATIVA VENCEDORA da etapa (label nosso). */
+  readonly termino?: string;
 }
 
 export interface ResultadoPipeline {

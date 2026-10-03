@@ -52,12 +52,14 @@ function resumoTentativas(
     categoria: string;
     duracaoMs: number;
     modelo?: string | null;
+    terminoStatus?: string | null;
   }[]
 ): string {
   return tentativas
     .map((t) => {
       const modelo = t.modelo ? `[${t.modelo.split("/").pop()}]` : "";
-      return `${t.provider}${modelo}→${t.categoria}`;
+      const termino = t.terminoStatus ? `=${t.terminoStatus}` : "";
+      return `${t.provider}${modelo}→${t.categoria}${termino}`;
     })
     .join(" | ");
 }
@@ -76,6 +78,9 @@ function dtoTentativa(t: TentativaCascata) {
     // P3.1: slug de modelo (fonte: NOSSA allowlist/transporte) — seguro
     // para atravessar ao frontend: não é segredo e não vem do provider.
     ...(t.modelo ? { modelo: t.modelo } : {}),
+    // P3.2: término canônico (label NOSSO) + tokens (número puro) — seguros.
+    ...(t.terminoStatus ? { terminoStatus: t.terminoStatus } : {}),
+    ...(typeof t.saidaTokens === "number" ? { saidaTokens: t.saidaTokens } : {}),
   } as const;
 }
 
@@ -175,6 +180,7 @@ export function criarGeradorReal(deps: {
             categoriaFinal: "SUCCESS",
             tentativas: resultado.tentativas.map(dtoTentativa),
             fila: resumoTentativas(resultado.tentativas),
+            termino: resultado.termino.status,
           }
         : {
             duracaoMs: resultado.duracaoMs,

@@ -237,6 +237,14 @@ export function OrquestradorView() {
                               {tentativa.status !== null && (
                                 <span className="font-mono text-muted-foreground">HTTP {tentativa.status}</span>
                               )}
+                              {tentativa.terminoStatus && (
+                                <span className="font-mono text-muted-foreground">{tentativa.terminoStatus}</span>
+                              )}
+                              {typeof tentativa.saidaTokens === "number" && (
+                                <span className="font-mono text-muted-foreground">
+                                  {tentativa.saidaTokens.toLocaleString("pt-BR")} tokens
+                                </span>
+                              )}
                               <span className="font-mono text-muted-foreground">{tentativa.duracaoMs.toLocaleString("pt-BR")} ms</span>
                             </div>
                           ))}
@@ -245,6 +253,12 @@ export function OrquestradorView() {
                             <span className="font-mono text-warning">{etapa.diagnostico.categoriaFinal}</span>
                             <span className="text-muted-foreground"> — {rotuloCategoria(etapa.diagnostico.categoriaFinal)}</span>
                           </div>
+                          {etapa.diagnostico.termino === "TRUNCATED_TOKEN_LIMIT" && (
+                            <div className="font-mono text-warning">
+                              ⓘ Resposta gerada parcialmente: o provedor encerrou no limite de geração
+                              antes da conclusão (visualizado de forma honesta, sem retoque).
+                            </div>
+                          )}
                           {etapa.diagnostico.fila && (
                             <div className="font-mono text-muted-foreground break-all">Fila: {etapa.diagnostico.fila}</div>
                           )}
