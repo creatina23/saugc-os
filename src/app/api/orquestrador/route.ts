@@ -30,6 +30,13 @@ import {
 } from "@/lib/orquestrador/pipeline";
 import { criarGeradorReal } from "@/lib/orquestrador/motor";
 
+/** CP-01 FIX P1 §9 — teto serverless desta rota: 300s.
+ *  Orçamento real: deadline global do gerador = 240s compartilhado por
+ *  todas as etapas + PRAZO_POR_ETAPA = 40s por especialista; a cascata
+ *  herda min(45s, restante) por fetch. 300 dá folga ao pior caso sem
+ *  permitir cascata teoricamente ilimitada. */
+export const maxDuration = 300;
+
 /** Adaptador mínimo: compositor (objeto) → string (o que o motor precisa).
  *  BlocoDado do pipeline → BlocoDados do compositor (formato contraditório
  *  mínimo; pipeline.dados são sempre tipo toolOutput nesta unidade). */

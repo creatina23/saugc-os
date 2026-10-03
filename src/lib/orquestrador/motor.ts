@@ -1,105 +1,66 @@
-// src/lib/orquestrador/motor.ts — CP-01 · ARQ-3 + Observabilidade mínima
+// src/lib/orquestrador/motor.ts — CP-01 FIX P1 · CONSUMIDOR DA CASCATA CANÔNICA
 // ======================================================================
 // Callback REAL de geração do Orquestrador: compõe com FND-03 (Constituição
 // + CONTRATO_AGENTE persona + repertório opcional + dados da cadeia) e
-// desfila os provedores. Não inventa autodescoberta (fora do escopo da
-// unidade; modelos homologados em runtime do provider, não aqui).
+// delega o TRANSPORTE à cascata canônica (src/lib/ia/cadeia-texto.ts) —
+// A MESMA de /api/ia: Gemini (autodescoberta) → Groq (auto) → OpenRouter
+// (:free auto) → Cerebras (auto), com hall dos reprovados e skip gracioso.
 //
-// ARQ-3 — DECISÃO DE EVIDÊNCIA SOBRE O REPERTÓRIO:
-//   O comentário histórico em base-excelencia.ts dizia "injetada em TODAS
-//   as gerações na rota /api/ia e /api/orquestrador", mas a V0 do
-//   orquestrador NUNCA injetava. Decisão arquitetural desta unidade:
-//   injetar como SELEÇÃO EXPLÍCITA de cada chamada real (camada 6 do
-//   compositor, id rastreável), porque as personas legadas são uma linha
-//   cada e as LEIS DA CASA/métodos vivem no repertório. Se a devolução do
-//   Agente 2 trouxer personas já saturadas, o ponto de corte é ESTA
-//   constante — declaração de intenção no código, não efeito surpresa.
+// ELIMINADO neste FIX (causa do incidente P1 2026-10-02): a cascata
+// duplicada e degradada que existia aqui — 3 slugs cravados
+// (gemini-2.0-flash · llama-3.3-70b-versatile · gemini-2.0-flash-exp:free),
+// sem auto-descoberta, sem Cerebras, sem hall, com catch{} mudo que
+// engolia status HTTP por provider. UMA capacidade, UMA implementação.
 //
-// Logs estruturados (ARQ-7/Observabilidade): sem segredos, sem conteúdo
-// de prompt, somente metadados: etapa, agentId, agentVersion, motor,
-// sucesso, duração em ms, quantidade de blocos de dados.
+// ARQ-3 — DECISÃO DE EVIDÊNCIA SOBRE O REPERTÓRIO (mantida):
+//   injetar BASE_EXCELENCIA como SELEÇÃO EXPLÍCITA de cada chamada real
+//   (camada 6 do compositor, id rastreável). Ponto de corte = constante
+//   abaixo — declaração de intenção no código, não efeito surpresa.
+//
+// ORÇAMENTO TEMPORAL (P1 §9 — decisão documentada):
+//   • PRAZO_POR_ETAPA = 40s: uma etapa (especialista) pode desfilar a
+//     cascata inteira, mas nunca mais que 40s no total.
+//   • PRAZO_GLOBAL = 240s: deadline compartilhado por execução do
+//     Orquestrador (criado em criarGeradorReal, que roda 1× por request).
+//     6 especialistas × sucesso típico (3–8s) ≪ 240s; cascata lenta em
+//     uma etapa não pode derrubar as seguintes. Rota exporta
+//     maxDuration = 300 (teto serverless; acima do pior caso com folga).
+//   • A cascata herda o teto restante por fetch (min(45s, restante)) —
+//     resiliência integral preservada, sem cascata teoricamente ilimitada.
+//
+// Logs estruturados (ARQ-7/Observabilidade P1): sem segredos, sem prompt,
+// somente metadados: etapa, agentId, agentVersion, motor vencedor, ok,
+// duração, blocos de dados e a FILA de tentativas por provider
+// (provider→categoria) — o buraco de observabilidade do incidente está
+// fechado server-side.
 // ======================================================================
 
-// Alterar para false quando a devolução do Agente 2 declarar repertório
-// próprio por agente (cut point administrável, não comentário solto).
 import type { GeradorIA, BlocoDado } from "./pipeline";
+import { gerarTextoCascata } from "@/lib/ia/cadeia-texto";
 
 export const INJETAR_BASE_EXCELENCIA_NA_PIPELINE = true;
 
-const GEMINI_MODELO = "gemini-2.0-flash";
-const GROQ_MODELO = "llama-3.3-70b-versatile";
-const OPENROUTER_MODELO = "google/gemini-2.0-flash-exp:free";
-const TEMPERATURA = 0.8;
-const MAX_TOKENS = 3000;
+const PRAZO_POR_ETAPA_MS = 40_000;
+const PRAZO_GLOBAL_MS = 240_000;
 
-type TextoPlano = { texto: string; motor: string } | { texto: null; motor: null };
-
-async function tentarGemini(chave: string, prompt: string): Promise<TextoPlano> {
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODELO}:generateContent?key=${chave}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: TEMPERATURA, maxOutputTokens: MAX_TOKENS },
-        }),
-        signal: AbortSignal.timeout(45000),
-      }
-    );
-    if (res.ok) {
-      const data = (await res.json().catch(() => null)) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      } | null;
-      const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (texto) return { texto: texto.trim(), motor: `Gemini · ${GEMINI_MODELO}` };
-    }
-  } catch {
-    // silêncio honesto — tenta o próximo
-  }
-  return { texto: null, motor: null };
-}
-
-async function tentarCompativel(
-  chave: string,
-  url: string,
-  modelo: string,
-  prompt: string,
-  rotulo: string
-): Promise<TextoPlano> {
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${chave}`,
-      },
-      body: JSON.stringify({
-        model: modelo,
-        messages: [{ role: "user", content: prompt }],
-        temperature: TEMPERATURA,
-        max_tokens: MAX_TOKENS,
-      }),
-      signal: AbortSignal.timeout(45000),
-    });
-    if (res.ok) {
-      const data = (await res.json().catch(() => null)) as {
-        choices?: { message?: { content?: string } }[];
-      } | null;
-      const texto = data?.choices?.[0]?.message?.content;
-      if (texto) return { texto: texto.trim(), motor: `${rotulo} · ${modelo}` };
-    }
-  } catch {
-    // tenta o próximo
-  }
-  return { texto: null, motor: null };
+/** Resumo sanitizado da fila: "Gemini→HTTP_404_MODEL | Groq→SUCCESS" */
+function resumoTentativas(
+  tentativas: readonly {
+    provider: string;
+    categoria: string;
+    duracaoMs: number;
+  }[]
+): string {
+  return tentativas
+    .map((t) => `${t.provider}→${t.categoria}`)
+    .join(" | ");
 }
 
 /**
  * Cria o callback `gerar` injetado na pipeline. `montar` é o compositor
- * (passado por parâmetro para ficar mediamento lib⊥implementação); a
- * variedade só existe no servidor real.
+ * (passado por parâmetro para ficar mediamente lib⊥implementação); a
+ * variedade só existe no servidor real. O deadline global nasce aqui e
+ * é compartilhado por todas as etapas desta execução.
  */
 export function criarGeradorReal(deps: {
   montar: (input: {
@@ -111,6 +72,8 @@ export function criarGeradorReal(deps: {
   repertorio: { ids: readonly string[]; conteudo: string } | null;
 }): GeradorIA {
   const { montar, repertorio } = deps;
+  const alvoGlobal = Date.now() + PRAZO_GLOBAL_MS;
+
   return async (entrada) => {
     const inicio = Date.now();
     const promptCompleto = montar({
@@ -123,48 +86,51 @@ export function criarGeradorReal(deps: {
       dados: entrada.dados,
     });
 
-    const chaveGemini = process.env.GEMINI_API_KEY;
-    const chaveGroq = process.env.GROQ_API_KEY;
-    const chaveOpenRouter = process.env.OPENROUTER_API_KEY;
-
-    let resultado: TextoPlano = { texto: null, motor: null };
-    if (chaveGemini) {
-      resultado = await tentarGemini(chaveGemini, promptCompleto);
-    }
-    if (resultado.texto === null && chaveGroq) {
-      resultado = await tentarCompativel(
-        chaveGroq,
-        "https://api.groq.com/openai/v1/chat/completions",
-        GROQ_MODELO,
-        promptCompleto,
-        "Groq"
+    const restanteGlobal = Math.max(0, alvoGlobal - inicio);
+    if (restanteGlobal < 5000) {
+      // Deadline global estourado antes de arrancar: fail-closed honesto.
+      console.log(
+        "[orquestrador]",
+        JSON.stringify({
+          etapa: entrada.agentContract.id,
+          agentVersion: entrada.agentContract.versao,
+          motor: null,
+          ok: false,
+          fila: "GLOBAL_DEADLINE_EXCEEDED",
+          blocosDados: entrada.dados.length,
+          duracaoMs: Date.now() - inicio,
+        })
       );
-    }
-    if (resultado.texto === null && chaveOpenRouter) {
-      resultado = await tentarCompativel(
-        chaveOpenRouter,
-        "https://openrouter.ai/api/v1/chat/completions",
-        OPENROUTER_MODELO,
-        promptCompleto,
-        "OpenRouter"
-      );
+      return { texto: null, motor: null };
     }
 
-    // Log estrututal — SEM segredos, SEM prompt
+    const resultado = await gerarTextoCascata(promptCompleto, {
+      temperatura: 0.8,
+      maxTokens: 3000,
+      prazoMs: Math.min(PRAZO_POR_ETAPA_MS, restanteGlobal),
+    });
+
+    // Log estrutural — SEM segredos, SEM prompt, COM a fila por provider
     const duracaoMs = Date.now() - inicio;
-    const blocosDados = entrada.dados.length;
     console.log(
       "[orquestrador]",
       JSON.stringify({
         etapa: entrada.agentContract.id,
         agentVersion: entrada.agentContract.versao,
-        motor: resultado.motor,
-        ok: resultado.texto !== null,
-        blocosDados,
+        motor: resultado.ok ? resultado.motor : null,
+        ok: resultado.ok,
+        fila: resumoTentativas(resultado.tentativas),
+        categoriaFinal: resultado.ok ? "SUCCESS" : resultado.categoriaFinal,
+        blocosDados: entrada.dados.length,
         duracaoMs,
       })
     );
 
-    return { texto: resultado.texto, motor: resultado.motor };
+    if (resultado.ok) {
+      return { texto: resultado.texto, motor: resultado.motor };
+    }
+    // Fail-closed honesto: a pipeline transforma texto:null na mensagem
+    // C-17 ("Sem resposta do motor") — nada de conteúdo simulado.
+    return { texto: null, motor: null };
   };
 }
