@@ -88,14 +88,17 @@ export type GeradorIA = (entrada: {
 
 /** DTO sanitizado mínimo (whitelist) — os ÚNICOS campos de tentativa
  *  autorizados a atravessar para o frontend. provider/categoria/status/
- *  ms são labels e números gerados pelo NOSSO código (nunca texto do
- *  provider, nunca payload, nunca credencial). */
+ *  ms/modelo são labels e números gerados pelo NOSSO código (nunca texto
+ *  do provider, nunca payload, nunca credencial) — o campo `modelo`
+ *  (P3.1) é um slug de modelo gerado pelo NOSSO allowlist/transporte,
+ *  dado técnico público e pequeno, NUNCA segredo. */
 export interface TentativaDiagnostico {
   readonly provider: string;
   readonly redeHouve: boolean;
   readonly duracaoMs: number;
   readonly categoria: string;
   readonly status: number | null;
+  readonly modelo?: string | null;
 }
 
 export interface DiagnosticoEtapa {

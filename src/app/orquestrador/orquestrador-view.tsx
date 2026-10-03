@@ -229,6 +229,9 @@ export function OrquestradorView() {
                           {etapa.diagnostico.tentativas.map((tentativa, idx) => (
                             <div key={idx} className="flex flex-wrap items-baseline gap-x-2">
                               <span className="font-semibold text-foreground">{tentativa.provider}</span>
+                              {tentativa.modelo && (
+                                <span className="font-mono text-muted-foreground">{tentativa.modelo}</span>
+                              )}
                               <span className="font-mono text-warning">{tentativa.categoria}</span>
                               <span className="text-muted-foreground">— {rotuloCategoria(tentativa.categoria)}</span>
                               {tentativa.status !== null && (

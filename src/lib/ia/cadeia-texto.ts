@@ -63,11 +63,12 @@ export type SaudeProvider =
 export type SaudeExecucao = Map<string, SaudeProvider>;
 
 export type TentativaCascata = {
-  provider: string; // "Gemini" | "Groq" | "OpenRouter" | "Cerebras"
+  provider: string; // "Gemini" | "Groq" | "OpenRouter" | "Cerebras" | "Cloudflare"
   redeHouve: boolean; // true = a requsição saiu (útil p/ distinguir skip de falha)
   duracaoMs: number;
   categoria: CategoriaFalhaCascata | "SUCCESS";
   status: number | null; // status HTTP quando existiu (null = sem resposta)
+  modelo?: string | null; // P3.1: slug do modelo (seguro: não é segredo — é dado técnico público)
 };
 
 export type ResultadoCascata =
@@ -148,8 +149,21 @@ function criarOrcamento(prazoMs: number) {
     );
     return AbortSignal.timeout(orcado);
   };
+  // P3.1: para a ÚLTIMA camada da cascata o "fallback protegido pela
+  // metade" não existe — dividir o restante por 2 capava o Cloudflare em
+  // ~20s exatos (causa do TIMEOUT no smoke). Regra da última camada:
+  // teto = min(timeoutDaEtapa, restante - MARGEM), piso 5s — respeita o
+  // orçamento restante da etapa, nunca ultrapassa o deadline.
+  const sinalRestante = (timeoutMs: number): AbortSignal => {
+    const restante = restanteMs();
+    const orcado = Math.max(
+      5000,
+      Math.min(timeoutMs, Math.max(5000, restante - 1500))
+    );
+    return AbortSignal.timeout(orcado);
+  };
   const esgotado = () => restanteMs() <= 0;
-  return { restanteMs, sinal, esgotado };
+  return { restanteMs, sinal, sinalRestante, esgotado };
 }
 
 type Orcamento = ReturnType<typeof criarOrcamento>;
@@ -268,7 +282,7 @@ function categorizarExcecao(excecao: unknown): CategoriaFalhaCascata {
 
 type TentativaInterna =
   | { ok: true; texto: string; motor: string; provider: string; modelo: string }
-  | { ok: false; status: number | null; categoria: CategoriaFalhaCascata };
+  | { ok: false; status: number | null; categoria: CategoriaFalhaCascata; modelo?: string };
 
 // ---------- Camada 1: Gemini (titular, autodescoberta) ----------
 
@@ -770,10 +784,16 @@ async function gerarViaOpenRouterFree(
 // modelo que exija Workers Paid silenciosamente. Modelos pagos conhecidos
 // (Kimi K2.x, GLM 5.x, DeepSeek V4) NÃO constam nesta lista.
 export const CLOUDFLARE_MODELOS_FREE_PERMITIDOS: readonly string[] = [
-  // principal: estável, instruction-tuned, PT-BR sólido, contexto 128k,
-  // free confirmado nos docs oficiais (10k neurons/dia)
-  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-  // reserva: "flash" (rápido), raciocínio+coding, contexto 131k, free idem
+  // principal P3.1 (estratégia B): FAILOVER precisa de latência baixa —
+  // 8B instrutivo, ativo, GA, PT aceitável, contexto documentado ≥ ~16k
+  // (cabe a etapa inteira: prompt real ~1-2k tokens + max_tokens 3000).
+  // Free confirmado (Workers Free 10k neurons/dia, sem cartão).
+  "@cf/meta/llama-3.1-8b-instruct",
+  // reserva: família DIFERENTE (proteção contra outage específico de
+  // Llama). "flash" = otimizado p/ latência. Free idem. NB: o 70B
+  // (llama-3.3-70b-instruct-fp8-fast) foi REMOVIDO da allowlist — com
+  // apenas 24k de contexto documentado e latência muito alta, não
+  // justificava o espaço para um provider cuja função é resgatar rápido.
   "@cf/zai-org/glm-4.7-flash",
 ];
 
@@ -816,7 +836,9 @@ async function gerarViaCloudflare(
             temperature: temperatura,
             max_tokens: maxTokens,
           }),
-          signal: orc.sinal(45000),
+          // P3.1: última camada → respeita o ORÇAMENTO REMANESCENTE da
+          // etapa (com margem de 1,5s), nunca o teto artificial dos 20s.
+          signal: orc.sinalRestante(45000),
         }
       );
       const dados: unknown = await resposta.json().catch(() => null);
@@ -825,7 +847,7 @@ async function gerarViaCloudflare(
         if (!texto) {
           anotarDetalheIA(dados);
           console.error(`[motor-ia] Cloudflare ${modelo} respondeu sem texto utilizável`);
-          return { ok: false, status: 502, categoria: "INVALID_RESPONSE" };
+          return { ok: false, status: 502, categoria: "INVALID_RESPONSE", modelo };
         }
         console.log(`[motor-ia] Cloudflare respondeu (${modelo})`);
         return {
@@ -841,7 +863,7 @@ async function gerarViaCloudflare(
       // FREE GUARD: 402/403 (plan/billing/paid-required) — fail-closed, NUNCA
       // re-tentar, NUNCA buscar modelo pago alternativo.
       if (resposta.status === 402 || resposta.status === 403) {
-        return { ok: false, status: resposta.status, categoria: categorizarStatus(resposta.status) };
+        return { ok: false, status: resposta.status, categoria: categorizarStatus(resposta.status), modelo };
       }
       // 400/404: slug saiu do ar ou input recusado → próximo da allowlist
       if (resposta.status === 404 || resposta.status === 400) continue;
@@ -869,10 +891,20 @@ async function gerarViaCloudflare(
         ok: false,
         status: resposta.status,
         categoria: categorizarStatus(resposta.status),
+        modelo,
       };
     } catch (excecao) {
-      console.error(`[motor-ia] Exceção no Cloudflare ${modelo}`);
-      return { ok: false, status: null, categoria: categorizarExcecao(excecao) };
+      const categoria = categorizarExcecao(excecao);
+      console.error(`[motor-ia] Exceção no Cloudflare ${modelo} (${categoria})`);
+      // P3.1: TIMEOUT do modelo é "falha elegível" — se houver RESERVA
+      // FREE na allowlist e orçamento suficiente (≥7s), tenta o próximo.
+      // Nunca rotaciona para modelo pago (allowlist 100% free, hard-coded).
+      const haReservaFree = tentativa + 1 < CLOUDFLARE_MODELOS_FREE_PERMITIDOS.length;
+      if (categoria === "TIMEOUT" && haReservaFree && orc.restanteMs() >= 7000) {
+        console.log("[motor-ia] Cloudflare: timeout do principal — tentando a RESERVA FREE");
+        continue;
+      }
+      return { ok: false, status: null, categoria, modelo };
     }
   }
   return { ok: false, status: 404, categoria: "HTTP_404_MODEL" };
@@ -926,6 +958,12 @@ export async function gerarTextoCascata(
     // da FREE GUARD do Cloudflare) — não se recupera dentro do mesmo request.
     if (categoria === "HTTP_401" || categoria === "HTTP_403") return "unavailable_for_run";
     if (categoria === "HTTP_5XX") return "temporary_failure"; // transitório: próxima etapa pode tentar de novo
+    // P3.1: TIMEOUT isolado NÃO é indisponibilidade permanente (pode ser
+    // prompt grande/modelo/latência transitória) — marca transitório e deixa
+    // a etapa seguinte tentar com orçamento novo. NÃO criamos cooldown em
+    // timeout: a última camada já é a última chance, e derrubá-la para toda
+    // a execução só custaria resgates que poderiam ter sucesso em poucos s.
+    if (categoria === "TIMEOUT") return "temporary_failure";
     return null;
   };
   const providerEmCooldown = (provider: string): boolean => {
@@ -967,6 +1005,7 @@ export async function gerarTextoCascata(
         duracaoMs: Date.now() - inicioEtapa,
         categoria: "SUCCESS",
         status: 200,
+        modelo: resultado.modelo ?? null,
       });
       return;
     }
@@ -978,6 +1017,7 @@ export async function gerarTextoCascata(
       duracaoMs: Date.now() - inicioEtapa,
       categoria: resultado.categoria,
       status: resultado.status,
+      modelo: resultado.modelo ?? null,
     });
   };
 

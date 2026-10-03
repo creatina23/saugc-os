@@ -44,16 +44,21 @@ export const INJETAR_BASE_EXCELENCIA_NA_PIPELINE = true;
 const PRAZO_POR_ETAPA_MS = 40_000;
 const PRAZO_GLOBAL_MS = 240_000;
 
-/** Resumo sanitizado da fila: "Gemini→HTTP_404_MODEL | Groq→SUCCESS" */
+/** Resumo sanitizado da fila: "Gemini→HTTP_404_MODEL | Groq→SUCCESS"
+ *  P3.1: inclui o MODELO quando presente (slug público — não é segredo). */
 function resumoTentativas(
   tentativas: readonly {
     provider: string;
     categoria: string;
     duracaoMs: number;
+    modelo?: string | null;
   }[]
 ): string {
   return tentativas
-    .map((t) => `${t.provider}→${t.categoria}`)
+    .map((t) => {
+      const modelo = t.modelo ? `[${t.modelo.split("/").pop()}]` : "";
+      return `${t.provider}${modelo}→${t.categoria}`;
+    })
     .join(" | ");
 }
 
@@ -68,6 +73,9 @@ function dtoTentativa(t: TentativaCascata) {
     duracaoMs: t.duracaoMs,
     categoria: t.categoria,
     status: t.status,
+    // P3.1: slug de modelo (fonte: NOSSA allowlist/transporte) — seguro
+    // para atravessar ao frontend: não é segredo e não vem do provider.
+    ...(t.modelo ? { modelo: t.modelo } : {}),
   } as const;
 }
 
