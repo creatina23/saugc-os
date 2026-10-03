@@ -762,6 +762,122 @@ async function gerarViaOpenRouterFree(
   return { ok: false, status: 404, categoria: "HTTP_404_MODEL" };
 }
 
+// ---------- Camada 5: Cloudflare Workers AI (P3 — expansão free-first) ----------
+// REST oficial: POST /client/v4/accounts/{ACCOUNT_ID}/ai/run/{model}
+// Auth: Bearer {CLOUDFLARE_API_TOKEN} (token com permissão Workers AI).
+// Free: 10.000 Neurons/dia (hard quota, sem cartão). NÃO usamos discovery:
+// allowance explícita abaixo — mudança de catálogo NUNCA pode escolher um
+// modelo que exija Workers Paid silenciosamente. Modelos pagos conhecidos
+// (Kimi K2.x, GLM 5.x, DeepSeek V4) NÃO constam nesta lista.
+export const CLOUDFLARE_MODELOS_FREE_PERMITIDOS: readonly string[] = [
+  // principal: estável, instruction-tuned, PT-BR sólido, contexto 128k,
+  // free confirmado nos docs oficiais (10k neurons/dia)
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  // reserva: "flash" (rápido), raciocínio+coding, contexto 131k, free idem
+  "@cf/zai-org/glm-4.7-flash",
+];
+
+function textoDaRespostaCloudflare(dados: unknown): string | null {
+  // formato REST: { success: true, result: { response: "..." } }
+  const raiz = dados as { result?: { response?: unknown } } | null;
+  const texto = raiz?.result?.response;
+  return typeof texto === "string" && texto.trim() ? texto.trim() : null;
+}
+
+async function gerarViaCloudflare(
+  accountId: string,
+  token: string,
+  prompt: string,
+  temperatura: number,
+  maxTokens: number,
+  orc: Orcamento
+): Promise<TentativaInterna> {
+  let retentou5xx = false; // P2-2
+  let retentou429 = false; // P2-2
+  for (let tentativa = 0; tentativa < CLOUDFLARE_MODELOS_FREE_PERMITIDOS.length; tentativa += 1) {
+    if (orc.esgotado()) {
+      return { ok: false, status: null, categoria: "TIMEOUT" };
+    }
+    const modelo = CLOUDFLARE_MODELOS_FREE_PERMITIDOS[tentativa];
+    // FREE GUARD: somente IDs que constam na allowlist explícita (fail-closed)
+    if (!CLOUDFLARE_MODELOS_FREE_PERMITIDOS.includes(modelo)) break; // defensivo; hoje identidade
+    if (!modelo.startsWith("@cf/")) break; // malformado não vaza de casa
+    try {
+      const resposta = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${modelo}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: prompt }],
+            temperature: temperatura,
+            max_tokens: maxTokens,
+          }),
+          signal: orc.sinal(45000),
+        }
+      );
+      const dados: unknown = await resposta.json().catch(() => null);
+      if (resposta.ok) {
+        const texto = textoDaRespostaCloudflare(dados);
+        if (!texto) {
+          anotarDetalheIA(dados);
+          console.error(`[motor-ia] Cloudflare ${modelo} respondeu sem texto utilizável`);
+          return { ok: false, status: 502, categoria: "INVALID_RESPONSE" };
+        }
+        console.log(`[motor-ia] Cloudflare respondeu (${modelo})`);
+        return {
+          ok: true,
+          texto,
+          motor: `Cloudflare · ${modelo}`,
+          provider: "Cloudflare",
+          modelo,
+        };
+      }
+      anotarDetalheIA(dados);
+      console.error(`[motor-ia] Cloudflare ${modelo} recusou. status:`, resposta.status);
+      // FREE GUARD: 402/403 (plan/billing/paid-required) — fail-closed, NUNCA
+      // re-tentar, NUNCA buscar modelo pago alternativo.
+      if (resposta.status === 402 || resposta.status === 403) {
+        return { ok: false, status: resposta.status, categoria: categorizarStatus(resposta.status) };
+      }
+      // 400/404: slug saiu do ar ou input recusado → próximo da allowlist
+      if (resposta.status === 404 || resposta.status === 400) continue;
+      // P2 Fase 2: 5xx transitório → 1 retentativa com espera curta
+      if (resposta.status >= 500 && !retentou5xx && orc.restanteMs() > ESPERA_5XX_MS + 5000) {
+        retentou5xx = true;
+        console.log(`[motor-ia] Cloudflare 5xx transitório — 1 retentativa em ${ESPERA_5XX_MS}ms`);
+        await esperarRespeitando(ESPERA_5XX_MS, orc);
+        tentativa -= 1;
+        continue;
+      }
+      // P2 Fase 2: 429 → Retry-After pequeno ou nada (quota de Neurons)
+      if (resposta.status === 429 && !retentou429) {
+        const raMs = lerRetryAfterMs(resposta);
+        if (valeEsperarRetryAfter(raMs, orc)) {
+          retentou429 = true;
+          console.log(`[motor-ia] Cloudflare 429 — Retry-After ${raMs}ms respeitado (1 retentativa)`);
+          await esperarRespeitando(raMs, orc);
+          tentativa -= 1;
+          continue;
+        }
+        console.log(`[motor-ia] Cloudflare 429 — quota de Neurons incompatível nesta execução: NÃO esperar`);
+      }
+      return {
+        ok: false,
+        status: resposta.status,
+        categoria: categorizarStatus(resposta.status),
+      };
+    } catch (excecao) {
+      console.error(`[motor-ia] Exceção no Cloudflare ${modelo}`);
+      return { ok: false, status: null, categoria: categorizarExcecao(excecao) };
+    }
+  }
+  return { ok: false, status: 404, categoria: "HTTP_404_MODEL" };
+}
+
 // ---------- API canônica ----------
 
 /** Espelho da mesa (booleanos — NUNCA as chaves). */
@@ -771,6 +887,11 @@ export function motoresArmados(): { id: string; armado: boolean }[] {
     { id: "groq", armado: Boolean(process.env.GROQ_API_KEY) },
     { id: "openrouter", armado: Boolean(process.env.OPENROUTER_API_KEY) },
     { id: "cerebras", armado: Boolean(process.env.CEREBRAS_API_KEY) },
+    // P3: "armado" = account id + token presentes (NUNCA testar/expor valores)
+    {
+      id: "cloudflare",
+      armado: Boolean(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN),
+    },
   ];
 }
 
@@ -801,6 +922,9 @@ export async function gerarTextoCascata(
   const categoriaParaSaude = (categoria: CategoriaFalhaCascata): SaudeProvider | null => {
     if (categoria === "HTTP_429_QUOTA") return "quota_limited"; // quota esgotada: re-martelar é inútil
     if (categoria === "HTTP_402_PAYMENT_REQUIRED") return "unavailable_for_run"; // "Payment Required" (não reutilizável nesta execução)
+    // 401/403: credencial sem autorização/permissão (inclui "paid plan required"
+    // da FREE GUARD do Cloudflare) — não se recupera dentro do mesmo request.
+    if (categoria === "HTTP_401" || categoria === "HTTP_403") return "unavailable_for_run";
     if (categoria === "HTTP_5XX") return "temporary_failure"; // transitório: próxima etapa pode tentar de novo
     return null;
   };
@@ -979,6 +1103,41 @@ export async function gerarTextoCascata(
     if (!chaveCerebras)
       console.log("[motor-ia] Cerebras: sem CEREBRAS_API_KEY — fora da fila (opcional)");
     registrarTentativa("Cerebras", 0, { skip: true });
+  }
+
+  // 5) Cloudflare Workers AI (P3 — expansão free-first; ADICIONAL, não substitui)
+  const cfAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const cfApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const cfArmado = Boolean(cfAccountId && cfApiToken);
+  if (cfArmado && !orc.esgotado() && !providerEmCooldown("Cloudflare")) {
+    const t0 = Date.now();
+    const r = await gerarViaCloudflare(
+      cfAccountId as string,
+      cfApiToken as string,
+      prompt,
+      temperatura,
+      maxTokens,
+      orc
+    );
+    registrarTentativa("Cloudflare", t0, r);
+    if (r.ok) {
+      return {
+        ok: true,
+        texto: r.texto,
+        motor: r.motor,
+        provider: r.provider,
+        modelo: r.modelo,
+        tentativas,
+        duracaoMs: Date.now() - inicio,
+      };
+    }
+  } else if (cfArmado && providerEmCooldown("Cloudflare")) {
+    console.log("[motor-ia] Cloudflare: em cooldown nesta execução — skipando");
+    registrarTentativa("Cloudflare", 0, { cooldown: true });
+  } else {
+    if (!cfArmado)
+      console.log("[motor-ia] Cloudflare: sem CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN — fora da fila (opcional)");
+    registrarTentativa("Cloudflare", 0, { skip: true });
   }
 
   // Fail-closed:
