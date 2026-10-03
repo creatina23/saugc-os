@@ -693,7 +693,7 @@ export function ConfiguracoesView() {
                     "Simulador de Projeção de Escala (CFO Mestre)",
                     "WhatsApp Growth Engine (Agente Multi-Nicho)",
                     "YouTube Growth Engine (Roteirista de Alta Retenção)",
-                    "Orquestrador de Agentes (Conselho Supremo)",
+                    "Orquestrador de Agentes",
                     "Engenheiro Visual de Criativos",
                   ].map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
