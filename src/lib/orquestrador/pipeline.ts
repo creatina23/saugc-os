@@ -67,6 +67,10 @@ export interface SaidaAnterior {
   readonly etapaId: string;
   readonly agente: string;
   readonly texto: string;
+  /** P4.1: aviso não-autoritativo carimbado quando o output contém claim
+   *  material sem autorização no Nível A. Viaja no repasse N→N+1 DENTRO do
+   *  bloco; NÃO entra no material varrido pelo Auditor (texto puro lá). */
+  readonly avisoEpistemico?: string;
 }
 
 export interface BlocoDado {
@@ -143,6 +147,7 @@ import { META_AGENTES_PIPELINE } from "../agentes/pipeline";
 import {
   montarBlocoEnvelopeEpistemico,
   montarBlocoAuditoriaAdversarial,
+  montarAvisoInteragente,
   varrerClaimsMateriais,
   calcularVereditoEpistemico,
   type AchadoEpistemico,
@@ -246,7 +251,11 @@ export async function executarPipeline(
       ...anteriores.map((anterior) => ({
         tipo: "toolOutput" as const,
         fonteOuFerramenta: `etapa-${anterior.etapaId} (${anterior.agente}) — CONTEXTO NÃO AUTORITATIVO`,
-        conteudo: capTexto(anterior.texto),
+        // P4.1: o aviso (quando há) viaja DENTRO do bloco, antes do texto —
+        // a autoridade não desaparece por cap/proximidade lexical.
+        conteudo:
+          (anterior.avisoEpistemico ? `${anterior.avisoEpistemico}\n---\n` : "") +
+          capTexto(anterior.texto),
       })),
     ];
 
@@ -290,10 +299,15 @@ export async function executarPipeline(
       etapa.veredito = calcularVereditoEpistemico(achadosAuditor ?? []);
     }
 
+    // P4.1: varredura interagentes — o aviso prescinde do Auditor; o claim
+    // material sem autorização é carimbado JÁ no repasse N→N+1 (I1/I4).
+    const achadosEtapa =
+      persona.id === "analista" ? [] : varrerClaimsMateriais(texto, inputGeral);
     anteriores.push({
       etapaId: persona.id,
       agente: persona.agente,
       texto,
+      avisoEpistemico: montarAvisoInteragente(achadosEtapa) ?? undefined,
     });
   }
 

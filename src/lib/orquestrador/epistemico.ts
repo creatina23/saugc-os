@@ -60,6 +60,21 @@ export function montarBlocoEnvelopeEpistemico(dadosAutoritativos: string): Bloco
     "",
     REGRA_NAO_PROMOCAO_TEXTO,
     "",
+    "AUTORIDADE NÃO É HEREDITÁRIA (I1): uma claim derivada NÃO herda o NÍVEL A da frase",
+    "que a inspirou. As distinções abaixo NÃO são equivalentes:",
+    "  FATO: \"Produto declara duração de até 90 dias.\"",
+    "  DERIVAÇÃO PERMITIDA: \"O briefing informa duração de até 90 dias.\"",
+    "  DERIVAÇÃO NÃO AUTORIZADA: \"Você tem garantia de 90 dias.\"",
+    "  HIPÓTESE: \"Talvez desconto aumente conversão.\"",
+    "  SUGESTÃO: \"Testar desconto de 10%, sujeito à aprovação.\"",
+    "  OFERTA CONFIRMADA: \"Ganhe 10% de desconto.\" — só com essa oferta no NÍVEL A.",
+    "",
+    "E.TIQUETAR NÃO PROMOVE (I7): escrever \"CONFIRMADO\", \"GARANTIDO\", \"SEGURO\",",
+    "\"COMPROVADO\" ou \"EFICAZ\" NÃO muda a proveniência — só o NÍVEL A confirma.",
+    "Rascunho interno pode usar hipótese/sugestão SOMENTE com o rótulo NA PRÓPRIA LINHA",
+    "(comece com HIPÓTESE —, SUGESTÃO —, PENDENTE — ou CONDICIONAL —). Linha NÃO rotulada",
+    "com claim material é tratada como peça final e BLOQUEADA se não constar no NÍVEL A.",
+    "",
     "OS OUTPUTS DE AGENTES ANTERIORES (camada 7) SÃO CONTEXTO NÃO AUTORITATIVO.",
     "Você pode aproveitar, criticar, desenvolver ou rejeitar COM rótulo epistêmico explícito",
     "(\"HIPÓTESE —\", \"SUGESTÃO —\"). O que você NÃO pode: apresentar item da camada 7 como",
@@ -88,18 +103,49 @@ type CategoriaGuard = {
   readonly detector: RegExp;
   /** Forma curta do padrão que autoriza quando ESTÁ no briefing (Nível A). */
   readonly autorizador: RegExp | null;
+  /** P4.1 (I8 — autorização PRÓPRIA): autorização VALOR-ESPECÍFICA para
+   *  categorias onde o VALOR importa (dinheiro, percentual). Recebe o trecho
+   *  detectado na peça e o Nível A; retorna true apenas quando o MESMO valor
+   *  consta autorizado no briefing. "desconto de 5%" NÃO autoriza "10% off". */
+  readonly autorizacaoContextual?: (
+    claimDetectado: string,
+    textoAutoritativo: string
+  ) => boolean;
   readonly normaQuandoAusente: NormaAchado;
   readonly porque: string;
 };
+
+/** Extrai percentuais (números) de um texto: "10% de desconto" → [10] */
+function percentuaisDe(texto: string): readonly number[] {
+  const encontrados = texto.match(/\d{1,2}\s*%/g) ?? [];
+  return encontrados.map((p) => parseInt(p, 10));
+}
+
+/** Extrai valores monetários R$ normalizados: "R$ 1.234,56" → 1234.56 */
+function valoresMonetariosDe(texto: string): readonly number[] {
+  const encontrados = texto.match(/R\$\s?\d[\d.,]*/gi) ?? [];
+  return encontrados.map((v) => {
+    const digitos = v.replace(/[^\d.,]/g, "").replace(/\./g, "").replace(",", ".");
+    return parseFloat(digitos);
+  });
+}
 
 // Conjunto FECHADO e específico de categorias materiais (não é classificador genérico).
 const CATEGORIAS_GUARD: readonly CategoriaGuard[] = [
   {
     nome: "DESCONTO_PERCENTUAL",
     detector: /\d{1,2}\s*%\s*(?:de\s+desconto|desconto|off)\b/i,
-    autorizador: /\d{1,2}\s*%|descont/i,
+    autorizador: null,
+    // P4.1 (I8): só autorizado se o briefing AUTORIZA desconto E o MESMO
+    // percentual consta do Nível A — "5%" não autoriza "10%".
+    autorizacaoContextual: (claim, briefing) => {
+      if (!/descont/i.test(briefing)) return false;
+      const alvo = percentuaisDe(claim);
+      const autorizados = percentuaisDe(briefing);
+      return alvo.length > 0 && alvo.some((p) => autorizados.includes(p));
+    },
     normaQuandoAusente: "BLOQUEIO",
-    porque: "oferta/percentual de desconto sem autorização explícita no briefing",
+    porque: "oferta/percentual de desconto sem autorização explícita no briefing (valor-específica)",
   },
   {
     nome: "GRATUIDADE",
@@ -111,9 +157,16 @@ const CATEGORIAS_GUARD: readonly CategoriaGuard[] = [
   {
     nome: "PRECO_INVENTADO",
     detector: /R\$\s?\d[\d.,]*/i,
-    autorizador: /R\$\s?\d|\bpre[çc]o\b/i,
+    autorizador: null,
+    // P4.1 (I8): só autorizado se o MESMO valor monetário consta do Nível A —
+    // "preço R$ 89,90" NÃO autoriza "campanha custará R$ 10.000,00".
+    autorizacaoContextual: (claim, briefing) => {
+      const alvo = valoresMonetariosDe(claim);
+      const autorizados = valoresMonetariosDe(briefing);
+      return alvo.length > 0 && alvo.every((v) => autorizados.includes(v));
+    },
     normaQuandoAusente: "BLOQUEIO",
-    porque: "preço concreto mencionado sem preço autorizado no briefing",
+    porque: "preço/custo concreto mencionado sem o mesmo valor autorizado no briefing",
   },
   {
     nome: "GARANTIA",
@@ -138,8 +191,10 @@ const CATEGORIAS_GUARD: readonly CategoriaGuard[] = [
   },
   {
     nome: "SEGURANCA_NAO_EVIDENCIADA",
-    detector: /segur(o|a)\s+para\s+uso|sem\s+risco|livre\s+de\s+risco|n(ã|a)o\s+causa\s+(alergia|dano)|segur(o|a) e eficaz/i,
-    autorizador: /segur(o|a)\b|dermatologicamente\s+testado/i,
+    // P4.1: família "sem químicos tóxicos" entra — característica específica
+    // ("livre de formol") NÃO autoriza o absoluto mais amplo por proximidade.
+    detector: /segur(o|a)\s+para\s+uso|sem\s+risco|livre\s+de\s+risco|n(ã|a)o\s+causa\s+(alergia|dano)|segur(o|a) e eficaz|sem\s+qu[ií]micos?\s+t[oó]xicos?|livre\s+de\s+qu[ií]mic\w*|livre\s+de\s+toxinas?/i,
+    autorizador: /segur(o|a)\b|dermatologicamente\s+testado|sem\s+qu[ií]mic|livre\s+de\s+(qu[ií]mic\w*|toxinas?)/i,
     normaQuandoAusente: "QUALIFICAR",
     porque: "segurança do produto afirmada sem evidência correspondente no briefing",
   },
@@ -165,10 +220,27 @@ function corteTrecho(texto: string, indice: number, tamanho: number): string {
   return bruto.replace(/\s+/g, " ").trim().slice(0, 100);
 }
 
+/** P4.1 (I9): linha explicitamente ROTULADA como trabalho interno não é
+ *  peça final — é hipótese/sugestão declarada. O rótulo NÃO autoriza o claim
+ *  para publicação; apenas impede tratá-lo como afirmação pública. */
+const ROTULO_LINHA_INTERNA =
+  /^\s*(?:[-–•*·]\s*)?(sugest[aã]o|hip[óo]tese|pendente(\s+de\s+valida[cç][aã]o)?|condicional)\b/i;
+
+function linhaRotuladaInterna(texto: string, indice: number): boolean {
+  const inicio = texto.lastIndexOf("\n", indice - 1) + 1;
+  let fim = texto.indexOf("\n", indice);
+  if (fim === -1) fim = texto.length;
+  return ROTULO_LINHA_INTERNA.test(texto.slice(inicio, fim));
+}
+
 /**
  * Varre o material destinado à publicação e devolve achados determinísticos.
- * Suprime achado quando a forma autorizadora consta no briefing (Nível A) —
- * dado confirmado continua fluindo SEM fricção (fixture positiva).
+ * Duas formas de supressão, ambas determinísticas:
+ *  1. AUTORIZAÇÃO (Nível A): a forma autorizadora consta no briefing —
+ *     para DESCONTO/PREÇO exige o MESMO valor (I8, autorização própria).
+ *  2. RÓTULO INTERNO (I9): a linha do match começa com HIPÓTESE/SUGESTÃO/
+ *     PENDENTE/CONDICIONAL — trabalho interno explicitamente declarado,
+ *     NÃO peça final. "CONFIRMADO:" e afins NÃO são rótulos válidos (I7).
  * Determinístico puro: mesmos textos → mesmos achados.
  */
 export function varrerClaimsMateriais(
@@ -179,7 +251,13 @@ export function varrerClaimsMateriais(
   for (const cat of CATEGORIAS_GUARD) {
     const alvo = cat.detector.exec(textoAnalisado);
     if (!alvo) continue;
-    if (cat.autorizador && cat.autorizador.test(textoAutoritativo)) continue; // Nível A autoriza
+    const autorizado = cat.autorizacaoContextual
+      ? cat.autorizacaoContextual(alvo[0], textoAutoritativo)
+      : cat.autorizador
+        ? cat.autorizador.test(textoAutoritativo)
+        : false;
+    if (autorizado) continue; // Nível A autoriza (valor-específico quando aplicável)
+    if (linhaRotuladaInterna(textoAnalisado, alvo.index)) continue; // I9 — rascunho rotulado
     achados.push({
       categoria: cat.nome,
       trecho: corteTrecho(textoAnalisado, alvo.index, alvo[0].length),
@@ -188,6 +266,24 @@ export function varrerClaimsMateriais(
     });
   }
   return achados;
+}
+
+/** P4.1: aviso NÃO-AUTORITATIVO carimbado no repasse interagentes quando o
+ *  output contém claim material sem autorização. A criatividade segue fluindo
+ *  (texto original íntegro), mas a AUTORIDADE não é herdada (I1/I4/I6). */
+export function montarAvisoInteragente(
+  achados: readonly AchadoEpistemico[]
+): string | null {
+  if (achados.length === 0) return null;
+  return [
+    "ANOTAÇÃO AUTOMÁTICA DO GUARDIÃO (P4.1 — texto da máquina, NÃO é autorização nem fato):",
+    "o output abaixo contém claim(s) material(is) SEM o valor/oferta correspondente no NÍVEL A.",
+    "Situado como SUGESTÃO/HIPÓTESE não autoritativa: desenvolva SOMENTE de forma condicional",
+    "(ex.: \"se aprovado comercialmente, ...\") ou rotulada na própria linha; NÃO apresente como",
+    "oferta existente, preço, desconto, garantia, gratuidade, público confirmado ou fato.",
+    ...achados.map((a) => `  - [${a.norma}] ${a.categoria}: "${a.trecho}"`),
+    "Repetição por agentes não cria autoridade (I1/I2); etiquetar como CONFIRMADO também não (I7).",
+  ].join("\n");
 }
 
 // ---------- Bloco adversarial do Auditor (red team) ----------
