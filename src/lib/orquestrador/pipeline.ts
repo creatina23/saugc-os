@@ -24,6 +24,19 @@
 //   VERBATIM (a devolução cognitiva do Agente 2, com prompt novo,
 //   substituirá estes textos na etapa autorizada — NÃO turbinação aqui).
 //
+// P4.1.2 — MODELO DE QUATRO SAÍDAS (Context Integrity):
+//   rawOutput        = texto integral do LLM. Base do Claim Guard e do
+//                      Auditor (auditableText ≡ concatenação dos raws).
+//                      NUNCA perde claim por higiene/render.
+//   propagationOutput = raw higienizado (repasse.ts: SÓ delimitadores
+//                      estruturais exatos; ambíguo NUNCA é apagado) e
+//                      capado — viaja à etapa seguinte.
+//   publicOutput     = mesmo texto higienizado exibido ao usuário
+//                      (resultado da etapa; a apresentação vive na UI).
+//   auditableText    = trilha rastreável (proveniência + raw de cada
+//                      etapa na ordem) — claim detectável em UI/tela
+//                      continua presente aqui.
+//
 // Invariantes preservadas da V0:
 // - ordem das etapas; - regex NOTA: X/10 do auditor (contrato duro);
 // - erro global ok:false só quando TODAS falham;
@@ -57,6 +70,10 @@ export interface EtapaOrquestracao {
   /** P4: veredito publicável DETERMINÍSTICO do Claim Guard (calculado pela
    *  máquina a partir dos achados — o texto do Auditor não o decide). */
   veredito?: import("./epistemico").VereditoEpistemico;
+  /** P4.1.2: veredito TEXTUAL do Auditor LLM (contrato AGT-012),
+   *  TRANSCRITO honestamente (normalizado em maiúsculas) — informação de
+   *  apresentação com ZERO autoridade sobre o gate determinístico. */
+  vereditoAuditorLlm?: string;
   /** CP-01 FIX P2 Fase 1 (aditivo): diagnóstico técnico sanitizado da
    *  chamada do especialista, quando o gerador o provê. Transita até a
    *  resposta HTTP (rota autenticada) e à camada 2 da UI. */
@@ -121,12 +138,21 @@ export interface DiagnosticoEtapa {
   readonly fila?: string;
   /** P3.2: término canônico da TENTATIVA VENCEDORA da etapa (label nosso). */
   readonly termino?: string;
+  /** P4.1.2 — camada de diagnóstico eco (camada técnica colapsável;
+   *  contagens geradas pelo NOSSO código, nunca conteúdo do provider). */
+  readonly ecoBlocosRemovidos?: number;
+  readonly ecoBlocosAmbiguosPreservados?: number;
+  readonly repasseCharsAntes?: number;
+  readonly repasseCharsDepois?: number;
 }
 
 export interface ResultadoPipeline {
   ok: boolean;
   etapas: EtapaOrquestracao[];
   erro?: string;
+  /** P4.1.2: PRONTO | REVISAO_NECESSARIA | BLOQUEADO — composição
+   *  QUALIDADE (Auditor) × INTEGRIDADE (gate). Ver status.ts. */
+  statusGeral?: import("./status").StatusGeral;
 }
 
 // ---------- Constantes (versão cognitiva — ARQ-5) ----------
@@ -144,6 +170,12 @@ export const LIMITE_CARACTERES_SAIDA = 2000;
 // para preservar import sites existentes (harness, view).
 
 import { META_AGENTES_PIPELINE } from "../agentes/pipeline";
+import { higienizarRepasse, diagnosticoEco } from "./repasse";
+import {
+  calcularStatusGeral,
+  parseVereditoAuditor,
+  type StatusGeral,
+} from "./status";
 import {
   montarBlocoEnvelopeEpistemico,
   montarBlocoAuditoriaAdversarial,
@@ -224,6 +256,10 @@ export async function executarPipeline(
 ): Promise<ResultadoPipeline> {
   const inputGeral = montarInputGeral(briefing);
   const anteriores: SaidaAnterior[] = [];
+  // P4.1.2: trilha AUDITÁVEL (rawOutput integral por etapa) — separada do
+  // repasse. O Claim Guard e o Auditor operam AQUI; nenhum claim some do
+  // caminho auditável por higiene de UI/repasse.
+  const auditaveis: SaidaAnterior[] = [];
   // P4: envelope epistêmico ÚNICO da execução (request-memory, custo R$0)
   const envelopeEpistemico = montarBlocoEnvelopeEpistemico(inputGeral);
   // P4: achados do Claim Guard calculados 1× antes do Auditor (determinístico)
@@ -263,7 +299,8 @@ export async function executarPipeline(
     // checklist adversarial antes de julgar. Os achados alimentam o GATE
     // determinístico ao final (o texto dele não decide sozinho).
     if (persona.id === "analista") {
-      const materialPublicavel = anteriores.map((a) => a.texto).join("\n\n");
+      // P4.1.2: auditableText = concatenação dos RAW outputs (integral).
+      const materialPublicavel = auditaveis.map((a) => a.texto).join("\n\n");
       achadosAuditor = varrerClaimsMateriais(materialPublicavel, inputGeral);
       dados.push(montarBlocoAuditoriaAdversarial(achadosAuditor));
     }
@@ -287,27 +324,59 @@ export async function executarPipeline(
       continue; // cadeia CONTINUA com o que há de válido
     }
 
-    const texto = resposta.texto;
+    const raw = resposta.texto; // rawOutput — integral imutável
+    // P4.1.2: propagationOutput/publicOutput = raw higienizado. SÓ
+    // delimitadores estruturais exatos; bloco ambíguo é PRESERVADO (e
+    // contado no diagnóstico) — nunca apagamos conteúdo incerto.
+    const limpeza = higienizarRepasse(raw);
+    const texto = limpeza.texto;
     etapa.resultado = texto;
     etapa.status = "concluido";
 
+    // Diagnóstico de eco: métricas técnicas na camada colapsável (🔧),
+    // jamais na cara do usuário comum. Fusão não-destrutiva do DTO.
+    const eco = diagnosticoEco(limpeza);
+    if (eco) {
+      etapa.diagnostico = {
+        ...(resposta.diagnostico ?? {
+          duracaoMs: 0,
+          categoriaFinal: "SUCCESS",
+          tentativas: [],
+        }),
+        ecoBlocosRemovidos: eco.ecoBlocosRemovidos,
+        ecoBlocosAmbiguosPreservados: eco.ecoBlocosAmbiguosPreservados,
+        repasseCharsAntes: eco.repasseCharsAntes,
+        repasseCharsDepois: eco.repasseCharsDepois,
+      };
+    }
+
     if (persona.id === "analista") {
-      const nota = parseNotaAuditor(texto);
+      const nota = parseNotaAuditor(raw);
       if (nota !== null) etapa.nota = nota; // sem nota default artificial (C-16)
       // P4 GATE determinístico: o veredito publicável é mecânico —
       // o LLM não pode escrever aprovação que a máquina bloqueou.
       etapa.veredito = calcularVereditoEpistemico(achadosAuditor ?? []);
+      // P4.1.2: transcrição HONESTA do veredito textual do Auditor LLM —
+      // exibição rotulada, SEM influência sobre o gate (status.ts decide
+      // a composição com regra própria, transparente).
+      const vereditoLlm = parseVereditoAuditor(raw);
+      if (vereditoLlm !== null) etapa.vereditoAuditorLlm = vereditoLlm;
     }
 
     // P4.1: varredura interagentes — o aviso prescinde do Auditor; o claim
     // material sem autorização é carimbado JÁ no repasse N→N+1 (I1/I4).
     const achadosEtapa =
-      persona.id === "analista" ? [] : varrerClaimsMateriais(texto, inputGeral);
+      persona.id === "analista" ? [] : varrerClaimsMateriais(raw, inputGeral);
     anteriores.push({
       etapaId: persona.id,
       agente: persona.agente,
-      texto,
+      texto, // propagationOutput (higienizado; cap ocorre no bloco N+1)
       avisoEpistemico: montarAvisoInteragente(achadosEtapa) ?? undefined,
+    });
+    auditaveis.push({
+      etapaId: persona.id,
+      agente: persona.agente,
+      texto: raw, // auditableText por etapa — integral, nunca higienizado
     });
   }
 
@@ -321,5 +390,15 @@ export async function executarPipeline(
     };
   }
 
-  return { ok: true, etapas };
+  // P4.1.2: STATUS GERAL — QUALIDADE (veredito textual do Auditor) ×
+  // INTEGRIDADE (gate determinístico). Sem limiar silencioso de nota;
+  // gate BLOQUEADO manda; auditor reprovante impede PRONTO.
+  const etapaAuditor = etapas.find((e) => e.id === "analista");
+  const statusGeral: StatusGeral = calcularStatusGeral({
+    vereditoGate: etapaAuditor?.veredito ?? null,
+    vereditoAuditorLlm: etapaAuditor?.vereditoAuditorLlm ?? null,
+    auditorConcluido: etapaAuditor?.status === "concluido",
+  });
+
+  return { ok: true, etapas, statusGeral };
 }

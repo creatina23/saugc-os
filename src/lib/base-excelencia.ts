@@ -100,3 +100,187 @@ AUTO-REVISÃO: problema real? público específico? hipótese melhor? contradiç
 FILTRO PREMIUM — LENTE DE QUALIDADE, NÃO FATO
 Pergunte: é valioso para o público? é claro? é diferente de forma relevante? é atraente sem exagero? é inteligente na medida certa? alguém pagaria, considerando oferta e prova reais? "Disruptivo" não é requisito; se a resposta for não, melhore ou declare a lacuna, sem fabricar.
 `.trim();
+
+// ======================================================================
+// CP-01 P4.1.2 — REPERTÓRIO SELETIVO POR FUNÇÃO
+// ----------------------------------------------------------------------
+// Antes: os 6.612 chars INTEIROS eram injetados em TODAS as 6 chamadas da
+// pipeline (auditoria F-03). Agora: cada persona recebe SÓ as seções que
+// existem de verdade na base acima — nenhuma seção inventada/sintética.
+// "Zero repertório" é resultado legítimo (persona sem seção útil → null),
+// NÃO falha a ser compensada com texto novo.
+// Segmentação determinística: a base é dividida por linha em branco; cada
+// fatia É endereçada pelo cabeçalho exato da primeira linha. Se a base for
+// editada e um cabeçalho sumir, os testes T19–T22 apontam na hora
+// (fail-closed — nunca injetamos repertório "meio certo" em silêncio).
+// ======================================================================
+
+interface FatiaRepertorio {
+  readonly id: string;
+  readonly cabecalho: (typeof REPERTORIO_CABECALHOS)[number];
+  readonly conteudo: string;
+}
+
+const REPERTORIO_CABECALHOS = [
+  "FUNÇÃO DO REPERTÓRIO",
+  "ARQUÉTIPOS E NARRATIVA",
+  "ATENÇÃO, MEMÓRIA E DECISÃO",
+  "CIALDINI / INFLUÊNCIA ÉTICA",
+  "KAHNEMAN E PROCESSAMENTO",
+  "LINGUAGEM E PNL",
+  "COMPORTAMENTO DO CONSUMIDOR",
+  "ANTROPOLOGIA E CULTURA",
+  "PSICANÁLISE E PERSONALIDADE",
+  "NEUROCIÊNCIA E BIOLOGIA",
+  "ECONOMIA COMPORTAMENTAL",
+  "COMPORTAMENTO APLICADO AO FUNIL",
+  "PODER, POSICIONAMENTO E NEGOCIAÇÃO",
+  "MATEMÁTICA, ESTATÍSTICA E EVIDÊNCIA",
+  "CIÊNCIA, QUÍMICA, FÍSICA E QUÂNTICA",
+  "LEIS DA CASA",
+  "MÉTODO DE TRABALHO",
+  "FILTRO PREMIUM — LENTE DE QUALIDADE, NÃO FATO",
+] as const;
+
+const SLUGS: Record<string, string> = {
+  "FUNÇÃO DO REPERTÓRIO": "funcao",
+  "ARQUÉTIPOS E NARRATIVA": "arquetipos",
+  "ATENÇÃO, MEMÓRIA E DECISÃO": "atencao",
+  "CIALDINI / INFLUÊNCIA ÉTICA": "cialdini",
+  "KAHNEMAN E PROCESSAMENTO": "kahneman",
+  "LINGUAGEM E PNL": "linguagem",
+  "COMPORTAMENTO DO CONSUMIDOR": "consumidor",
+  "ANTROPOLOGIA E CULTURA": "antropologia",
+  "PSICANÁLISE E PERSONALIDADE": "psicanalise",
+  "NEUROCIÊNCIA E BIOLOGIA": "neurociencia",
+  "ECONOMIA COMPORTAMENTAL": "economia",
+  "COMPORTAMENTO APLICADO AO FUNIL": "funil",
+  "PODER, POSICIONAMENTO E NEGOCIAÇÃO": "poder",
+  "MATEMÁTICA, ESTATÍSTICA E EVIDÊNCIA": "evidencia",
+  "CIÊNCIA, QUÍMICA, FÍSICA E QUÂNTICA": "ciencia",
+  "LEIS DA CASA": "leis-da-casa",
+  "MÉTODO DE TRABALHO": "metodo",
+  "FILTRO PREMIUM — LENTE DE QUALIDADE, NÃO FATO": "filtro-premium",
+};
+
+let cacheFatias: Map<string, FatiaRepertorio> | null = null;
+
+/** Fatia a base em seções endereçáveis. Retorna null se ALGUM cabeçalho
+ *  declarado estiver ausente (fail-closed, nunca repertório degradado). */
+function fatiasBase(): Map<string, FatiaRepertorio> | null {
+  if (cacheFatias) return cacheFatias;
+  const chunks = BASE_EXCELENCIA.split(/\n\s*\n/)
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
+  const mapa = new Map<string, FatiaRepertorio>();
+  for (const chunk of chunks) {
+    const primeiraLinha = chunk.split("\n")[0]?.trim() ?? "";
+    for (const cabecalho of REPERTORIO_CABECALHOS) {
+      if (primeiraLinha === cabecalho) {
+        mapa.set(cabecalho, {
+          id: `legacy-base-excelencia/${SLUGS[cabecalho] ?? "secao"}`,
+          cabecalho,
+          conteudo: chunk,
+        });
+        break;
+      }
+    }
+  }
+  for (const cabecalho of REPERTORIO_CABECALHOS) {
+    if (!mapa.has(cabecalho)) return null;
+  }
+  cacheFatias = mapa;
+  return mapa;
+}
+
+/** Seções por função da pipeline — curadoria explícita e testável.
+ *  "FUNÇÃO DO REPERTÓRIO" (guardrail anti-abuso), "LEIS DA CASA" e
+ *  "MÉTODO DE TRABALHO" são transversais; o resto é por função. */
+export const REPERTORIO_POR_PERSONA: Readonly<
+  Record<string, readonly string[]>
+> = {
+  comportamento: [
+    "FUNÇÃO DO REPERTÓRIO",
+    "COMPORTAMENTO DO CONSUMIDOR",
+    "ANTROPOLOGIA E CULTURA",
+    "PSICANÁLISE E PERSONALIDADE",
+    "NEUROCIÊNCIA E BIOLOGIA",
+    "KAHNEMAN E PROCESSAMENTO",
+    "ATENÇÃO, MEMÓRIA E DECISÃO",
+    "LINGUAGEM E PNL",
+    "ECONOMIA COMPORTAMENTAL",
+    "LEIS DA CASA",
+    "MÉTODO DE TRABALHO",
+  ],
+  estrategista: [
+    "FUNÇÃO DO REPERTÓRIO",
+    "COMPORTAMENTO APLICADO AO FUNIL",
+    "COMPORTAMENTO DO CONSUMIDOR",
+    "ANTROPOLOGIA E CULTURA",
+    "ECONOMIA COMPORTAMENTAL",
+    "MATEMÁTICA, ESTATÍSTICA E EVIDÊNCIA",
+    "PODER, POSICIONAMENTO E NEGOCIAÇÃO",
+    "LEIS DA CASA",
+    "MÉTODO DE TRABALHO",
+  ],
+  copywriter: [
+    "FUNÇÃO DO REPERTÓRIO",
+    "LINGUAGEM E PNL",
+    "ARQUÉTIPOS E NARRATIVA",
+    "CIALDINI / INFLUÊNCIA ÉTICA",
+    "ATENÇÃO, MEMÓRIA E DECISÃO",
+    "KAHNEMAN E PROCESSAMENTO",
+    "ANTROPOLOGIA E CULTURA",
+    "LEIS DA CASA",
+    "MÉTODO DE TRABALHO",
+    "FILTRO PREMIUM — LENTE DE QUALIDADE, NÃO FATO",
+  ],
+  diretor: [
+    "FUNÇÃO DO REPERTÓRIO",
+    "ARQUÉTIPOS E NARRATIVA",
+    "ATENÇÃO, MEMÓRIA E DECISÃO",
+    "ANTROPOLOGIA E CULTURA",
+    "COMPORTAMENTO DO CONSUMIDOR",
+    "LEIS DA CASA",
+    "MÉTODO DE TRABALHO",
+    "FILTRO PREMIUM — LENTE DE QUALIDADE, NÃO FATO",
+  ],
+  engenheiro: [
+    "FUNÇÃO DO REPERTÓRIO",
+    "ATENÇÃO, MEMÓRIA E DECISÃO",
+    "NEUROCIÊNCIA E BIOLOGIA",
+    "MATEMÁTICA, ESTATÍSTICA E EVIDÊNCIA",
+    "LEIS DA CASA",
+    "MÉTODO DE TRABALHO",
+  ],
+  analista: [
+    "FUNÇÃO DO REPERTÓRIO",
+    "MATEMÁTICA, ESTATÍSTICA E EVIDÊNCIA",
+    "ECONOMIA COMPORTAMENTAL",
+    "FILTRO PREMIUM — LENTE DE QUALIDADE, NÃO FATO",
+    "LEIS DA CASA",
+    "MÉTODO DE TRABALHO",
+  ],
+} as const;
+
+/** Seleção por função: retorna { ids, conteudo } pronto para o compositor,
+ *  ou null quando a persona não tem repertório útil declarado (legítimo —
+ *  não compensamos com texto inventado) ou quando a base está degradada. */
+export function selecionarRepertorioPersona(
+  personaId: string
+): { ids: readonly string[]; conteudo: string } | null {
+  const secoes = REPERTORIO_POR_PERSONA[personaId];
+  if (!secoes) return null;
+  const fatias = fatiasBase();
+  if (!fatias) return null;
+  const usados: FatiaRepertorio[] = [];
+  for (const cabecalho of secoes) {
+    const f = fatias.get(cabecalho);
+    if (!f) return null;
+    usados.push(f);
+  }
+  return {
+    ids: usados.map((f) => f.id),
+    conteudo: usados.map((f) => f.conteudo).join("\n\n"),
+  };
+}

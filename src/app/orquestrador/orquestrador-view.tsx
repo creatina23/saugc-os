@@ -38,6 +38,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { orquestradorService, type EtapaOrquestracao } from "@/lib/services/orquestrador.service";
+import { RenderSaida, BotaoCopiar } from "@/components/orquestrador/render-saida";
+import type { StatusGeral } from "@/lib/orquestrador/status";
 import { PERSONAS_ORQUESTRADOR } from "@/lib/orquestrador/pipeline";
 import { toast } from "@/lib/toast";
 
@@ -88,11 +90,31 @@ function rotuloCategoria(categoria: string): string {
   return ROTULO_CATEGORIA[categoria] ?? "Categoria técnica do provedor";
 }
 
+/** P4.1.2: STATUS GERAL composto (qualidade × integridade) — taxonomia
+ *  explícita, cores só de apresentação. */
+const ESTILO_STATUS_GERAL: Record<StatusGeral, { classe: string; texto: string }> = {
+  PRONTO: {
+    classe: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+    texto: "PRONTO — cadeia concluída; auditoria limpa e sem bloqueios de integridade.",
+  },
+  REVISAO_NECESSARIA: {
+    classe: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+    texto:
+      "REVISÃO NECESSÁRIA — a cadeia concluiu, mas há ajustes pendentes (qualidade e/ou integridade) antes de usar/publicar.",
+  },
+  BLOQUEADO: {
+    classe: "border-red-500/40 bg-red-500/10 text-red-300",
+    texto:
+      "BLOQUEADO — o gate de integridade detectou claims materiais sem sustentação no briefing. Não publicar sem evidência.",
+  },
+};
+
 export function OrquestradorView() {
   const [objetivoNegocio, setObjetivoNegocio] = useState("");
   const [executando, setExecutando] = useState(false);
   const [etapas, setEtapas] = useState<EtapaOrquestracao[] | null>(null);
   const [erroGlobal, setErroGlobal] = useState<string | null>(null);
+  const [statusGeral, setStatusGeral] = useState<StatusGeral | null>(null);
 
   async function handleExecutar(e: React.FormEvent) {
     e.preventDefault();
@@ -103,6 +125,7 @@ export function OrquestradorView() {
     setExecutando(true);
     setEtapas(null);
     setErroGlobal(null);
+    setStatusGeral(null);
 
     const resultado = await orquestradorService.orquestrarObjetivo(objetivoNegocio.trim());
     setExecutando(false);
@@ -110,6 +133,7 @@ export function OrquestradorView() {
     if (resultado.etapas.length > 0) {
       setEtapas(resultado.etapas);
     }
+    setStatusGeral(resultado.statusGeral ?? null);
     if (!resultado.ok) {
       setErroGlobal(resultado.erro ?? "Falha na cadeia de especialistas");
       toast("A cadeia não concluiu", { description: resultado.erro ?? "falha geral", type: "error" });
@@ -207,20 +231,37 @@ export function OrquestradorView() {
                   Escreva o objetivo ao lado e execute a cadeia…
                 </p>
               )}
+              {statusGeral && (
+                <div
+                  className={`rounded-lg border px-4 py-3 text-xs font-semibold ${ESTILO_STATUS_GERAL[statusGeral].classe}`}
+                  role="status"
+                >
+                  {ESTILO_STATUS_GERAL[statusGeral].texto}
+                </div>
+              )}
               {etapas?.map((etapa) => {
                 const Icone = ICONES[etapa.icone] ?? Brain;
                 return (
-                  <section key={etapa.id} className="rounded-xl border border-border/50 bg-background/60 p-4 space-y-2">
-                    <header className="flex items-center justify-between gap-2">
-                      <h3 className="text-xs font-semibold m-0 flex items-center gap-2">
-                        <Icone className="size-3.5 text-primary" /> {etapa.agente}
+                  <section
+                    key={etapa.id}
+                    className="rounded-xl border border-border/50 bg-background/60 p-4 space-y-2 min-w-0 overflow-hidden"
+                  >
+                    <header className="flex items-center justify-between gap-2 min-w-0">
+                      <h3 className="text-xs font-semibold m-0 flex items-center gap-2 min-w-0">
+                        <Icone className="size-3.5 shrink-0 text-primary" />
+                        <span className="truncate">{etapa.agente}</span>
                       </h3>
-                      <Badge variant={STATUS_BADGE[etapa.status]}>{STATUS_TEXTO[etapa.status]}</Badge>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {etapa.resultado && <BotaoCopiar texto={etapa.resultado} />}
+                        <Badge variant={STATUS_BADGE[etapa.status]}>{STATUS_TEXTO[etapa.status]}</Badge>
+                      </span>
                     </header>
                     {etapa.erro && (
                       <p className="text-[11px] text-warning">{etapa.erro}</p>
                     )}
-                    {etapa.status === "erro" && etapa.diagnostico && (
+                    {etapa.diagnostico &&
+                      (etapa.status === "erro" ||
+                        typeof etapa.diagnostico.ecoBlocosRemovidos === "number") && (
                       <details className="rounded-lg border border-border/40 bg-background/40 px-3 py-2 text-[11px]">
                         <summary className="cursor-pointer select-none font-semibold text-muted-foreground">
                           Diagnóstico técnico <span className="font-normal text-primary">▸ ver detalhes</span>
@@ -265,14 +306,40 @@ export function OrquestradorView() {
                           <div className="font-mono text-muted-foreground">
                             Duração total: {etapa.diagnostico.duracaoMs.toLocaleString("pt-BR")} ms
                           </div>
+                          {typeof etapa.diagnostico.ecoBlocosRemovidos === "number" && (
+                            <div className="pt-1 border-t border-border/30 space-y-0.5">
+                              <div className="font-mono text-muted-foreground">
+                                🔧 Eco interno detectado: {etapa.diagnostico.ecoBlocosRemovidos} bloco(s) interno(s)
+                                removido(s) do repasse
+                                {typeof etapa.diagnostico.ecoBlocosAmbiguosPreservados === "number" &&
+                                etapa.diagnostico.ecoBlocosAmbiguosPreservados > 0
+                                  ? ` · ${etapa.diagnostico.ecoBlocosAmbiguosPreservados} bloco(s) sem fechamento confiável PRESERVADO(S)`
+                                  : ""}
+                              </div>
+                              <div className="font-mono text-muted-foreground">
+                                Repasse:{" "}
+                                {etapa.diagnostico.repasseCharsAntes?.toLocaleString("pt-BR")} →{" "}
+                                {etapa.diagnostico.repasseCharsDepois?.toLocaleString("pt-BR")} caracteres
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </details>
                     )}
                     {etapa.resultado && (
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{etapa.resultado}</p>
+                      <div className="min-w-0 max-w-full">
+                        <RenderSaida texto={etapa.resultado} />
+                      </div>
                     )}
                     {typeof etapa.nota === "number" && (
-                      <p className="text-[11px] font-semibold text-primary">Nota do auditor: {etapa.nota}/10</p>
+                      <p className="text-[11px] font-semibold text-primary">
+                        Nota do auditor (LLM — qualidade): {etapa.nota}/10
+                      </p>
+                    )}
+                    {etapa.vereditoAuditorLlm && (
+                      <p className="text-[11px] font-semibold text-primary">
+                        Veredito do auditor (LLM — qualidade): {etapa.vereditoAuditorLlm}
+                      </p>
                     )}
                     {etapa.veredito && (
                       <p
@@ -284,7 +351,7 @@ export function OrquestradorView() {
                               : "text-[11px] font-semibold text-emerald-600"
                         }
                       >
-                        Veredito de publicação (gate epistêmico):{" "}
+                        Integridade epistêmica (gate determinístico):{" "}
                         {etapa.veredito === "BLOQUEADO_POR_EVIDENCIA"
                           ? "BLOQUEADO — há claims materiais sem sustentação no briefing; não publicar sem evidência dos itens acima"
                           : etapa.veredito === "APROVADO_COM_AJUSTES"

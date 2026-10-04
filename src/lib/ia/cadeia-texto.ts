@@ -27,6 +27,9 @@
 //   SEGREDOS JAMAIS entram em log nem no retorno.
 // ======================================================================
 
+import type { PromptParticionado } from "../constituicao/composicao";
+export type { PromptParticionado };
+
 export type CategoriaFalhaCascata =
   | "SKIPPED_NO_KEY"
   /** P2 Fase 2: provider pulado POR SAÚDE efêmera desta execução
@@ -361,6 +364,45 @@ type TentativaInterna =
   | { ok: true; texto: string; motor: string; provider: string; modelo: string; termino: MetadadosTermino }
   | { ok: false; status: number | null; categoria: CategoriaFalhaCascata; modelo?: string };
 
+// ---------- P4.1.2: prompt particionado (system × user) ----------
+// Consumidor novo (motor/pipeline) passa { system, user }; consumidor
+// legado passa uma string — normalizada para { system:"", user:string }
+// e os providers SIMPLESMENTE omitem o canal system (comportamento
+// idêntico ao anterior). Continuation P3.2 PRESERVA o particionamento:
+// o system é reenviado na systemInstruction/mensagem system da chamada
+// de continuação, o user vai no primeiro turno, o parcial no do modelo.
+export type EntradaPrompt = string | PromptParticionado;
+
+function particionar(entrada: EntradaPrompt): PromptParticionado {
+  if (typeof entrada === "string") return { system: "", user: entrada };
+  return { system: entrada.system ?? "", user: entrada.user };
+}
+
+/** Junção determinística de parcial+continuação (P4.1.2 §14).
+ *  Caso A (junção normal, sem overlap) → concatenação direta: MAX_TOKENS
+ *  corta no meio de qualquer token/linha, então NUNCA inserir separador
+ *  artificial no meio. Casos B/C (a continuação repete a CAUDA do parcial:
+ *  linha da fronteira ou trecho maior exato) → o overlap é removido e a
+ *  junção fica com UMA ocorrência. Caso D (repetição legítima em outra
+ *  posição do texto) → intocado: só deduplicamos PREFIXO×SUFIXO exato.
+ *  Regra: maior k≥1 tal que cont.startsWith(parcial.slice(-k)); zero se
+ *  não houver. O maior k vence primeiro, então overlaps longos são
+ *  preferidos a micro-matches acidentais. Sondagem limitada a 2000 chars
+ *  de cauda (determinístico). */
+export function juntarContinuacao(parcial: string, continuacao: string): string {
+  if (!continuacao) return parcial;
+  if (!parcial) return continuacao;
+  const LIMITE_SONDA = 2000;
+  const cauda = parcial.slice(-LIMITE_SONDA);
+  const alvo = Math.min(cauda.length, continuacao.length);
+  for (let k = alvo; k >= 1; k -= 1) {
+    if (continuacao.startsWith(cauda.slice(-k))) {
+      return parcial + continuacao.slice(k);
+    }
+  }
+  return parcial + continuacao;
+}
+
 // ---------- Continuação canônica após TRUNCATED_TOKEN_LIMIT (P3.2) ----------
 // Regras duras: MÁXIM0 1 continuação automática por geração; no MESMO
 // provider/modelo; só se restarem ≥ ORCAMENTO_MINIMO_MS; a segunda
@@ -379,21 +421,26 @@ type RespostaComposta =
 async function continuarGemini(
   chave: string,
   modelo: string,
-  prompt: string,
+  prompt: EntradaPrompt,
   parcial: string,
   temperatura: number,
   maxTokens: number,
   orc: Orcamento
 ): Promise<RespostaComposta> {
   try {
+    const partes = particionar(prompt);
     const resposta = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": chave },
         body: JSON.stringify({
+          // P4.1.2: continuation preserva o particionamento (system intacto)
+          ...(partes.system
+            ? { systemInstruction: { parts: [{ text: partes.system }] } }
+            : {}),
           contents: [
-            { role: "user", parts: [{ text: prompt }] },
+            { role: "user", parts: [{ text: partes.user }] },
             { role: "model", parts: [{ text: parcial }] },
             { role: "user", parts: [{ text: PROMPT_CONTINUACAO }] },
           ],
@@ -416,7 +463,7 @@ async function continuarOpenAICompativel(
   urlChat: string,
   chave: string,
   modelo: string,
-  prompt: string,
+  prompt: EntradaPrompt,
   parcial: string,
   temperatura: number,
   maxTokens: number,
@@ -424,6 +471,7 @@ async function continuarOpenAICompativel(
   headersExtras?: Record<string, string>
 ): Promise<RespostaComposta> {
   try {
+    const partes = particionar(prompt);
     const resposta = await fetch(urlChat, {
       method: "POST",
       headers: {
@@ -434,7 +482,9 @@ async function continuarOpenAICompativel(
       body: JSON.stringify({
         model: modelo,
         messages: [
-          { role: "user", content: prompt },
+          // P4.1.2: continuation preserva o particionamento (system intacto)
+          ...(partes.system ? [{ role: "system", content: partes.system }] : []),
+          { role: "user", content: partes.user },
           { role: "assistant", content: parcial },
           { role: "user", content: PROMPT_CONTINUACAO },
         ],
@@ -516,11 +566,12 @@ async function descobrirModelo(chave: string, orc: Orcamento): Promise<string | 
 
 async function gerarViaGemini(
   chave: string,
-  prompt: string,
+  prompt: EntradaPrompt,
   temperatura: number,
   maxTokens: number,
   orc: Orcamento
 ): Promise<TentativaInterna> {
+  const particoes = particionar(prompt); // P4.1.2
   let ultimoStatus: number | null = null;
   let ultimaCategoria: CategoriaFalhaCascata = "HTTP_4XX";
   let retentou5xx = false; // P2-2: no máximo 1 retry p/ erro transitório 5xx
@@ -548,7 +599,11 @@ async function gerarViaGemini(
             "x-goog-api-key": chave,
           },
           body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            // P4.1.2: systemInstruction nativo (Constituição/contrato/cadeia)
+            ...(particoes.system
+              ? { systemInstruction: { parts: [{ text: particoes.system }] } }
+              : {}),
+            contents: [{ role: "user", parts: [{ text: particoes.user }] }],
             generationConfig: {
               temperature: temperatura,
               maxOutputTokens: maxTokens,
@@ -584,7 +639,7 @@ async function gerarViaGemini(
             console.log(`[motor-ia] Gemini ${modelo}: MAX_TOKENS — 1 continuação automática`);
             const cont = await continuarGemini(chave, modelo, prompt, gerado, temperatura, maxTokens, orc);
             if (cont) {
-              textoFinal = gerado + cont.texto;
+              textoFinal = juntarContinuacao(gerado, cont.texto);
               termino = cont.termino;
             } else {
               console.log("[motor-ia] Gemini: continuação falhou — parcial mantido marcado");
@@ -706,13 +761,14 @@ async function gerarViaCompativel(
   urlChat: string,
   urlLista: string,
   chave: string,
-  prompt: string,
+  prompt: EntradaPrompt,
   temperatura: number,
   maxTokens: number,
   preferencias: string[],
   rotulo: string,
   orc: Orcamento
 ): Promise<TentativaInterna> {
+  const particoes = particionar(prompt); // P4.1.2
   let retentou5xx = false; // P2-2
   let retentou429 = false; // P2-2
   for (let tentativa = 0; tentativa < 2; tentativa += 1) {
@@ -731,7 +787,11 @@ async function gerarViaCompativel(
         },
         body: JSON.stringify({
           model: modelo,
-          messages: [{ role: "user", content: prompt }],
+          messages: [
+            // P4.1.2: canal system nativo quando houver particionamento
+            ...(particoes.system ? [{ role: "system", content: particoes.system }] : []),
+            { role: "user", content: particoes.user },
+          ],
           temperature: temperatura,
           max_tokens: maxTokens,
         }),
@@ -752,7 +812,7 @@ async function gerarViaCompativel(
                 urlChat, chave, modelo, prompt, texto, temperatura, maxTokens, orc
               );
               if (cont) {
-                textoFinal = texto + cont.texto;
+                textoFinal = juntarContinuacao(texto, cont.texto);
                 termino = cont.termino;
               } else {
                 console.log(`[motor-ia] ${rotulo}: continuação falhou — parcial mantido marcado`);
@@ -877,7 +937,7 @@ async function descobrirFreeOpenRouter(
 async function chamarOpenRouter(
   chave: string,
   modelo: string,
-  prompt: string,
+  prompt: EntradaPrompt,
   temperatura: number,
   maxTokens: number,
   orc: Orcamento
@@ -886,6 +946,7 @@ async function chamarOpenRouter(
   | { ok: false; status: number; categoria: CategoriaFalhaCascata; retryAfterMs: number | null }
 > {
   try {
+    const partes = particionar(prompt); // P4.1.2
     const resposta = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -896,7 +957,10 @@ async function chamarOpenRouter(
       },
       body: JSON.stringify({
         model: modelo,
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          ...(partes.system ? [{ role: "system", content: partes.system }] : []),
+          { role: "user", content: partes.user },
+        ],
         temperature: temperatura,
         max_tokens: maxTokens,
       }),
@@ -928,7 +992,7 @@ async function chamarOpenRouter(
 // A camada OpenRouter em ação: descobre os free vivos e desfila até 3
 async function gerarViaOpenRouterFree(
   chave: string,
-  prompt: string,
+  prompt: EntradaPrompt,
   temperatura: number,
   maxTokens: number,
   orc: Orcamento
@@ -958,7 +1022,7 @@ async function gerarViaOpenRouterFree(
             { "HTTP-Referer": "https://anuncia-three.vercel.app", "X-Title": "AnuncIA" }
           );
           if (cont) {
-            textoFinal = resultado.texto + cont.texto;
+            textoFinal = juntarContinuacao(resultado.texto, cont.texto);
             termino = cont.termino;
           } else {
             console.log("[motor-ia] OpenRouter: continuação falhou — parcial mantido marcado");
@@ -1038,11 +1102,12 @@ function textoDaRespostaCloudflare(dados: unknown): string | null {
 async function gerarViaCloudflare(
   accountId: string,
   token: string,
-  prompt: string,
+  prompt: EntradaPrompt,
   temperatura: number,
   maxTokens: number,
   orc: Orcamento
 ): Promise<TentativaInterna> {
+  const particoes = particionar(prompt); // P4.1.2
   let retentou5xx = false; // P2-2
   let retentou429 = false; // P2-2
   for (let tentativa = 0; tentativa < CLOUDFLARE_MODELOS_FREE_PERMITIDOS.length; tentativa += 1) {
@@ -1063,7 +1128,11 @@ async function gerarViaCloudflare(
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            messages: [{ role: "user", content: prompt }],
+            messages: [
+              // P4.1.2: canal system nativo quando houver particionamento
+              ...(particoes.system ? [{ role: "system", content: particoes.system }] : []),
+              { role: "user", content: particoes.user },
+            ],
             temperature: temperatura,
             max_tokens: maxTokens,
           }),
@@ -1174,7 +1243,7 @@ export function detalheSanitizadoUltimoErro(): string | null {
  * ÚNICA implementação de transporte provider do produto a partir daqui.
  */
 export async function gerarTextoCascata(
-  prompt: string,
+  prompt: EntradaPrompt, // P4.1.2: aceita string (legado) ou { system, user }
   opcoes: OpcoesCascata = {}
 ): Promise<ResultadoCascata> {
   const inicio = Date.now();

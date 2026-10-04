@@ -6,6 +6,7 @@
 // envia. Type-only import (apagado em runtime; sem custo no bundle).
 
 import type { DiagnosticoEtapa } from "../orquestrador/pipeline";
+import type { StatusGeral } from "../orquestrador/status";
 
 export type VereditoAuditoriaEpistemica =
   | "APROVADO"
@@ -24,12 +25,17 @@ export interface EtapaOrquestracao {
   diagnostico?: DiagnosticoEtapa; // P2-1 — camada 2 (detalhe técnico colapsável)
   /** P4: veredito publicável DETERMINÍSTICO (Claim Guard, não o LLM) */
   veredito?: VereditoAuditoriaEpistemica;
+  /** P4.1.2: veredito TEXTUAL do Auditor LLM transcrito (apresentação;
+   *  NUNCA autoridade sobre o gate). */
+  vereditoAuditorLlm?: string;
 }
 
 export interface PipelineResultado {
   ok: boolean;
   etapas: EtapaOrquestracao[];
   erro?: string;
+  /** P4.1.2: estado composto QUALIDADE × INTEGRIDADE. */
+  statusGeral?: StatusGeral;
 }
 
 export interface BriefingOrquestrador {
@@ -65,6 +71,8 @@ export const orquestradorService = {
         ok: data.ok === true && Array.isArray(data.etapas) ? true : false,
         etapas: Array.isArray(data.etapas) ? data.etapas : [],
         erro: data.erro,
+        // P4.1.2: estado composto (QUALIDADE × INTEGRIDADE) vem do servidor
+        statusGeral: typeof data.statusGeral === "string" ? data.statusGeral : undefined,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";
@@ -97,6 +105,8 @@ export const orquestradorService = {
         ok: data.ok === true && Array.isArray(data.etapas) ? true : false,
         etapas: Array.isArray(data.etapas) ? data.etapas : [],
         erro: data.erro,
+        // P4.1.2: estado composto (QUALIDADE × INTEGRIDADE) vem do servidor
+        statusGeral: typeof data.statusGeral === "string" ? data.statusGeral : undefined,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";

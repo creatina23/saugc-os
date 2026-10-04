@@ -208,3 +208,127 @@ export function montarPromptCognitivo(
 
   return { prompt: blocos.join("\n\n"), metadata };
 }
+
+// ======================================================================
+// CP-01 P4.1.2 — COMPOSIÇÃO PARTICIONADA (aditiva)
+// ----------------------------------------------------------------------
+// A função abaixo NÃO substitui `montarPromptCognitivo`: esta permanece
+// intocada para consumidores que ainda falam "uma string". A versão
+// particionada devolve { system, user, metadata } para providers que
+// aceitam canais separados (Gemini `systemInstruction`; OpenAI-compat
+// `role:"system"`), corrigindo o role collapse por empacotamento (F-02).
+//
+// PARTICIONAMENTO (semântico, hierarquia P0.2B §4 preservada):
+//   SYSTEM = camada 2 (Constituição) + camada 3 (Autorização, só quando
+//            fornecida) + instrução de cadeia (opcional, declarada pelo
+//            chamador — nunca duplicada aqui) + camada 5 (CONTRATO).
+//   USER   = camada 4 (USER_COMMAND = briefing/intenção legítima) +
+//            camada 6 (REPERTORIO) + camada 7 (DADOS em qualquer ordem
+//            fornecida, sempre rotulados não-autoritativos).
+// Cada parte é determinística e retorna exatamente os mesmos blocos que
+// a versão linear montaria — só mudou o CANAL. O envelope epistêmico
+// (toolOutput da pipeline) segue singleton por construção do chamador
+// (pipeline gera 1 bloco/envelope; o compositor apenas o transporta).
+// ======================================================================
+
+export interface ParametrosComposicaoParticionada extends ParametrosComposicao {
+  /** Instrução de transporte de cadeia (ex.: PREAMBULO_CADEIA) — vai ao
+   *  system ANTES do contrato. Opcional; NUNCA é gerada nem duplicada
+   *  aqui: quem a possui declara, quem não possui não finge. */
+  instrucaoCadeia?: string;
+}
+
+export interface PromptParticionado {
+  system: string;
+  user: string;
+}
+
+export interface ResultadoComposicaoParticionada {
+  prompt: PromptParticionado;
+  metadata: MetadataComposicao;
+}
+
+export function montarPromptParticionado(
+  parametros: ParametrosComposicaoParticionada
+): ResultadoComposicaoParticionada {
+  const {
+    userCommand,
+    agentContract,
+    selectedRepertoire,
+    authorizationContext,
+    dados,
+    instrucaoCadeia,
+  } = parametros;
+
+  // Validações idênticas à composição linear (C-17: falha explícita).
+  if (!temConteudo(userCommand)) {
+    throw new Error(
+      "montarPromptParticionado: userCommand vazio/ausente — intenção legítima é obrigatória."
+    );
+  }
+  if (agentContract !== undefined) {
+    if (
+      !temConteudo(agentContract.id) ||
+      !temConteudo(agentContract.versao) ||
+      !temConteudo(agentContract.conteudo)
+    ) {
+      throw new Error(
+        "montarPromptParticionado: agentContract presente exige id, versao e conteudo não vazios."
+      );
+    }
+  }
+  if (selectedRepertoire !== undefined && !temConteudo(selectedRepertoire.conteudo)) {
+    throw new Error(
+      "montarPromptParticionado: selectedRepertoire presente exige conteudo não vazio."
+    );
+  }
+
+  // ---- SYSTEM: instrução/autoridade/como executar ----
+  const systemBlocos: string[] = [];
+  systemBlocos.push(bloco("CONSTITUICAO", textoConstituicao()));
+  if (temConteudo(authorizationContext)) {
+    systemBlocos.push(bloco("AUTORIZACAO", authorizationContext));
+  }
+  if (temConteudo(instrucaoCadeia)) {
+    systemBlocos.push(bloco("INSTRUCAO_CADEIA", instrucaoCadeia));
+  }
+  if (agentContract !== undefined) {
+    systemBlocos.push(
+      bloco(
+        `CONTRATO_AGENTE id=${rotuloDe(agentContract.id)} versao=${rotuloDe(agentContract.versao)}`,
+        agentContract.conteudo
+      )
+    );
+  }
+
+  // ---- USER: objetivo legítimo + repertório + material/dados ----
+  const userBlocos: string[] = [];
+  userBlocos.push(bloco("USER_COMMAND", userCommand));
+  if (selectedRepertoire !== undefined) {
+    const ids =
+      selectedRepertoire.ids.length > 0
+        ? selectedRepertoire.ids.map(rotuloDe).join(",")
+        : "nenhum";
+    userBlocos.push(bloco(`REPERTORIO ids=${ids}`, selectedRepertoire.conteudo));
+  }
+  for (const dado of dados ?? []) {
+    userBlocos.push(blocoDeDado(dado));
+  }
+
+  const metadata: MetadataComposicao = {
+    constitutionVersion: CONSTITUICAO_VERSAO,
+    compositionVersion: COMPOSITION_VERSAO,
+  };
+  if (agentContract !== undefined) metadata.agentVersion = agentContract.versao;
+  if (selectedRepertoire !== undefined) {
+    metadata.repertoireIds = [...selectedRepertoire.ids];
+  }
+
+  return {
+    prompt: {
+      system: systemBlocos.join("\n\n"),
+      user: userBlocos.join("\n\n"),
+    },
+    metadata,
+  };
+}

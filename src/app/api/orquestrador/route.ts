@@ -21,8 +21,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { verificarSessao } from "@/lib/actions/gate";
-import { montarPromptCognitivo } from "@/lib/constituicao/composicao";
-import { BASE_EXCELENCIA } from "@/lib/base-excelencia";
+import {
+  montarPromptParticionado,
+  type PromptParticionado,
+} from "@/lib/constituicao/composicao";
+import { selecionarRepertorioPersona } from "@/lib/base-excelencia";
+import { PREAMBULO_CADEIA } from "@/lib/agentes/pipeline";
 import {
   executarPipeline,
   type BriefingOrquestrador,
@@ -37,19 +41,24 @@ import { criarGeradorReal } from "@/lib/orquestrador/motor";
  *  permitir cascata teoricamente ilimitada. */
 export const maxDuration = 300;
 
-/** Adaptador mínimo: compositor (objeto) → string (o que o motor precisa).
- *  BlocoDado do pipeline → BlocoDados do compositor (formato contraditório
- *  mínimo; pipeline.dados são sempre tipo toolOutput nesta unidade). */
+/** P4.1.2: composição PARTICIONADA (system × user). SYSTEM = Constituição
+ *  + autorização + instrução de cadeia (PREAMBULO_CADEIA) + contrato do
+ *  agente; USER = briefing do usuário + repertório seletivo da função +
+ *  dados/envelope (camada 7). BlocoDado do pipeline → BlocoDados do
+ *  compositor (formato contraditório mínimo; pipeline.dados são sempre
+ *  tipo toolOutput nesta unidade). */
 function montarComposicao(entrada: {
   userCommand: string;
   agentContract: { id: string; versao: string; conteudo: string };
   selectedRepertoire?: { ids: readonly string[]; conteudo: string };
   dados?: readonly BlocoDado[];
-}): string {
-  const { prompt } = montarPromptCognitivo({
+  instrucaoCadeia?: string;
+}): PromptParticionado {
+  const { prompt } = montarPromptParticionado({
     userCommand: entrada.userCommand,
     agentContract: entrada.agentContract,
     selectedRepertoire: entrada.selectedRepertoire,
+    instrucaoCadeia: entrada.instrucaoCadeia,
     dados: (entrada.dados ?? []).map((dado) => {
       switch (dado.tipo) {
         case "userSuppliedData":
@@ -71,6 +80,12 @@ function montarComposicao(entrada: {
   });
   return prompt;
 }
+
+// P4.1.2: o Envelope Epistêmico (ENVELOPE EPISTÊMICO (P4)) é gerado UMA
+// vez por execução em executarPipeline (pipeline.ts) e transportado aqui
+// como camada 7 — nunca reconstruído/girado nesta rota (justificativa do
+// singleton: pipeline mantém 1 instância local; o compositor apenas o
+// encapsula em BLOCO no user).
 
 async function negarSeSemSessao() {
   const sessao = await verificarSessao();
@@ -136,7 +151,11 @@ export async function POST(req: Request) {
 
   const gerador = criarGeradorReal({
     montar: montarComposicao,
-    repertorio: { ids: ["legacy-base-excelencia"], conteudo: BASE_EXCELENCIA },
+    // P4.1.2: repertório SELETIVO por função (seções reais da base;
+    // persona sem utilidade declarada → zero repertório, nunca inventado)
+    selecionarRepertorio: selecionarRepertorioPersona,
+    // P4.1.2: o contexto de cadeia viaja no SYSTEM — fora dos contratos
+    instrucaoCadeia: PREAMBULO_CADEIA,
   });
 
   const resultado = await executarPipeline(briefingFinal, gerador);

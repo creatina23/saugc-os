@@ -39,6 +39,12 @@ import type { GeradorIA, BlocoDado, DiagnosticoEtapa } from "./pipeline";
 import { gerarTextoCascata } from "../ia/cadeia-texto";
 import type { TentativaCascata, SaudeExecucao } from "../ia/cadeia-texto";
 
+// P4.1.2: a flag continua ligando o repertório na pipeline, mas a
+// injeção agora é SELETIVA POR FUNÇÃO (selecionarRepertorio nas deps):
+// cada persona recebe só as seções existentes da base pertinentes à sua
+// função — nunca os 6.612 chars inteiros em todas as chamadas (F-03).
+// O modo global (dep `repertorio`) fica como fallback de compatibilidade
+// quando nenhum seletor é fornecido.
 export const INJETAR_BASE_EXCELENCIA_NA_PIPELINE = true;
 
 const PRAZO_POR_ETAPA_MS = 40_000;
@@ -96,10 +102,23 @@ export function criarGeradorReal(deps: {
     agentContract: { id: string; versao: string; conteudo: string };
     selectedRepertoire?: { ids: readonly string[]; conteudo: string };
     dados?: readonly BlocoDado[];
-  }) => string;
-  repertorio: { ids: readonly string[]; conteudo: string } | null;
+    /** P4.1.2: instrução de cadeia (→ canal SYSTEM no compositor
+     *  particionado). Opcional: compositores legados a ignoram. */
+    instrucaoCadeia?: string;
+  }) => string | { system: string; user: string };
+  repertorio?: { ids: readonly string[]; conteudo: string } | null;
+  /** P4.1.2: seletor de repertório POR FUNÇÃO. Presente ⇒ substitui a
+   *  injeção global. Retornar null para uma persona é legítimo (zero
+   *  repertório) — nunca compensar com texto inventado. */
+  selecionarRepertorio?: (
+    personaId: string
+  ) => { ids: readonly string[]; conteudo: string } | null;
+  /** P4.1.2: instrução de transporte de cadeia (ex.: PREAMBULO_CADEIA),
+   *  declarada pelo chamador e transportada ao SYSTEM — NUNCA duplicada
+   *  aqui nem embutida no contrato. */
+  instrucaoCadeia?: string | null;
 }): GeradorIA {
-  const { montar, repertorio } = deps;
+  const { montar, repertorio = null, selecionarRepertorio, instrucaoCadeia } = deps;
   const alvoGlobal = Date.now() + PRAZO_GLOBAL_MS;
   // P2 Fase 2: saúde efêmera dos providers — memória DESTA execução apenas
   // (1 Map por request; nasce e morre com criarGeradorReal; ZERO persistência,
@@ -111,14 +130,20 @@ export function criarGeradorReal(deps: {
 
   return async (entrada) => {
     const inicio = Date.now();
+    // P4.1.2: repertório seletivo por função (quando houver seletor);
+    // fallback = injeção global legada. Sem repertório útil ⇒ ausente
+    // (o compositor nunca gera bloco vazio artificial).
+    const repertorioSelecionado = INJETAR_BASE_EXCELENCIA_NA_PIPELINE
+      ? selecionarRepertorio
+        ? selecionarRepertorio(entrada.agentContract.id) ?? undefined
+        : repertorio ?? undefined
+      : undefined;
     const promptCompleto = montar({
       userCommand: entrada.userCommand,
       agentContract: entrada.agentContract,
-      selectedRepertoire:
-        INJETAR_BASE_EXCELENCIA_NA_PIPELINE && repertorio
-          ? repertorio
-          : undefined,
+      selectedRepertoire: repertorioSelecionado,
       dados: entrada.dados,
+      instrucaoCadeia: instrucaoCadeia ?? undefined,
     });
 
     const restanteGlobal = Math.max(0, alvoGlobal - inicio);

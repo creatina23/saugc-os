@@ -20,7 +20,7 @@
 // FONTE AUTORIZADA: uploads/CP-01-A-STUDIO-ORQUESTRADOR.md (Agente 2),
 // fichas AGT-007..012 — texto INTEGRAL VERBATIM abaixo (PROMPT/SYSTEM
 // INSTRUCTION FINAL INTEGRAL). Adaptação única autorizada pela missão
-// (integração com CP-01A): PREAMBULO_CADEIA — fio aditivo de contexto
+// (integração com CP-01A): PREAMBULO_CADEIA — fio aditivo de contexto transportado ao CANAL SYSTEM (P4.1.2)
 // de cadeia, porque os agentes agora recebem entregas de etapas
 // anteriores DESTA execução (pipeline real), e o texto-fonte foi escrito
 // presumindo etapa isolada. Não é memória (C-12): a própria frase diz isso.
@@ -233,7 +233,7 @@ export const META_AGENTES_PIPELINE: readonly MetaAgentePipeline[] = [
     icone: "Brain",
     versao: AGENTES_PIPELINE_VERSAO,
     funcao: "Analisar contexto humano e gerar hipóteses comportamentais testáveis",
-    prompt: `${PREAMBULO_CADEIA}\n\n${AGT_007_NUCLEO}`,
+    prompt: AGT_007_NUCLEO,
   },
   {
     id: "estrategista",
@@ -241,7 +241,7 @@ export const META_AGENTES_PIPELINE: readonly MetaAgentePipeline[] = [
     icone: "Target",
     versao: AGENTES_PIPELINE_VERSAO,
     funcao: "Transformar briefing em sequência priorizada de decisões e testes",
-    prompt: `${PREAMBULO_CADEIA}\n\n${AGT_008_NUCLEO}`,
+    prompt: AGT_008_NUCLEO,
   },
   {
     id: "copywriter",
@@ -249,7 +249,7 @@ export const META_AGENTES_PIPELINE: readonly MetaAgentePipeline[] = [
     icone: "FileText",
     versao: AGENTES_PIPELINE_VERSAO,
     funcao: "Produzir mensagens, hooks e roteiro UGC gravável sem fabricar prova",
-    prompt: `${PREAMBULO_CADEIA}\n\n${AGT_009_NUCLEO}`,
+    prompt: AGT_009_NUCLEO,
   },
   {
     id: "diretor",
@@ -257,7 +257,7 @@ export const META_AGENTES_PIPELINE: readonly MetaAgentePipeline[] = [
     icone: "Camera",
     versao: AGENTES_PIPELINE_VERSAO,
     funcao: "Decidir conceito audiovisual e especificar storyboard executável",
-    prompt: `${PREAMBULO_CADEIA}\n\n${AGT_010_NUCLEO}`,
+    prompt: AGT_010_NUCLEO,
   },
   {
     id: "engenheiro",
@@ -265,7 +265,7 @@ export const META_AGENTES_PIPELINE: readonly MetaAgentePipeline[] = [
     icone: "Sparkles",
     versao: AGENTES_PIPELINE_VERSAO,
     funcao: "Gerar prompts multimodais equivalentes PT-BR/EN prontos para colar",
-    prompt: `${PREAMBULO_CADEIA}\n\n${AGT_011_NUCLEO}`,
+    prompt: AGT_011_NUCLEO,
   },
   {
     id: "analista",
@@ -273,7 +273,7 @@ export const META_AGENTES_PIPELINE: readonly MetaAgentePipeline[] = [
     icone: "CheckCircle2",
     versao: AGENTES_PIPELINE_VERSAO,
     funcao: "Auditoria adversarial com nota parseável 0–10 e veredito acionável",
-    prompt: `${PREAMBULO_CADEIA}\n\n${AGT_012_NUCLEO}`,
+    prompt: AGT_012_NUCLEO,
   },
 ];
 
@@ -289,6 +289,6 @@ export const PERFIS_PIPELINE: readonly {
     consumidor: "ORQUESTRADOR",
     caminho: "src/app/api/orquestrador/route.ts → src/lib/orquestrador/pipeline.ts",
     adaptacao:
-      "PREAMBULO_CADEIA declara o contexto encadeado da execução atual; contrato da nota vive em parseNotaAuditor (pipeline.ts).",
+      "PREAMBULO_CADEIA (contexto encadeado da execução atual) NÃO vive mais dentro dos contratos: é transportado ao canal SYSTEM pelo motor/rota (P4.1.2), sem duplicação; contrato da nota vive em parseNotaAuditor (pipeline.ts).",
   },
 ];
