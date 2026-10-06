@@ -19,19 +19,19 @@ const personasNicho = {
     nome: "Assistente Poup Marketing (Supermercado)",
     saudação: "Olá! Seja bem-vindo ao Poup Marketing em Mangaratiba! 🛒 Qual oferta do nosso encarte de fim de semana você veio garantir hoje?",
     contexto: "Supermercado varejista local. Foco em carne, hortifrúti, cerveja gelada e ofertas de gôndola.",
-    promptSupremo: "Você é o MAIOR ESPECIALISTA EM VENDAS NO VAREJO ALIMENTAR DO BRASIL. Seu foco é gerar urgência de compra, destacar ofertas fresquinhas, encantar o cliente com economia e trazê-lo para a loja física em Mangaratiba com uma pitada de simpatia e alta persuasão.",
+    promptPersona: "Persona da demonstração: atendente de supermercado focado em ofertas da semana, preço baixo e convite à loja física, com tom simpático e direto.",
   },
   ecommerce: {
     nome: "Assistente Vitória Moda (E-commerce)",
     saudação: "Olá! Bem-vinda à Vitória Moda ✨ Procurando o look perfeito para o fim de semana ou querendo ver nossa nova coleção?",
     contexto: "E-commerce de vestuário feminino DTC. Foco em tendências, frete grátis e provador.",
-    promptSupremo: "Você é o MASTER COPYWRITER E CLOSER DE E-COMMERCE DE MODA. Seu tom é magnético, elegante, acolhedor e altamente persuasivo. Você entende de caimento, tendências, urgência de estoque limitado e conversão imediata.",
+    promptPersona: "Persona da demonstração: atendente de e-commerce de moda com tom elegante e acolhedor; fala de caimento, tendências e estoque limitado.",
   },
   saas: {
     nome: "Assistente TechFlow (SaaS B2B)",
     saudação: "Olá! Aqui é o assistente virtual da TechFlow. Como nossa plataforma de automação pode acelerar as vendas da sua empresa?",
     contexto: "Software B2B de automação de vendas. Foco em agendamento de demo e planos enterprise.",
-    promptSupremo: "Você é o DIRETOR COMERCIAL DE SOFTWARE B2B DE ELITE. Seu foco é demonstrar autoridade técnica imediata, ROI acelerado, redução de custos operacionais e conversão de leads frios em reuniões de demonstração agendadas.",
+    promptPersona: "Persona da demonstração: consultor de software B2B objetivo; apresenta benefícios operacionais e convida para uma reunião de demonstração.",
   },
 };
 
@@ -80,7 +80,8 @@ export function WhatsappView() {
     }));
     setInputTesto("");
 
-    // Resposta simulada operando sob a diretriz do Prompt Supremo
+    // AUD-COM-01: resposta LOCAL do simulador (regra por palavra-chave).
+    // O setTimeout é apenas cadência visual — NÃO é chamada de IA.
     setTimeout(() => {
       let respostaIa = "Com certeza! Temos ótimas condições para isso. Posso te enviar o catálogo completo aqui no WhatsApp?";
       
@@ -94,7 +95,7 @@ export function WhatsappView() {
 
       if (textoUsuario.includes("quero") || textoUsuario.includes("sim") || textoUsuario.includes("manda") || textoUsuario.includes("preço") || textoUsuario.includes("tamanho") || textoUsuario.includes("quanto")) {
         setQualificado(true);
-        respostaIa = "Lead qualificado e direcionado com sucesso! 🎯 O fechamento foi engatilhado com alta prioridade pelo agente comercial.";
+        respostaIa = "🎯 Simulação: o lead foi marcado como qualificado dentro desta demonstração. Nenhum atendente real foi acionado.";
       }
 
       const respostaMsg: Mensagem = {
@@ -120,10 +121,10 @@ export function WhatsappView() {
             <span className="flex size-8 items-center justify-center rounded-xl bg-success/15 text-success">
               <MessageSquare className="size-5" />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight">Agente Comercial de WhatsApp (Multi-Nicho Supremacia)</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Simulador de Atendimento no WhatsApp</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Bot de vendas treinado com personas mestres de alta conversão para cada operação do seu CRM.
+            SIMULAÇÃO — as respostas desta tela são geradas localmente e ilustram cenários de atendimento; não representam uma conversa enviada pelo WhatsApp.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -155,13 +156,14 @@ export function WhatsappView() {
                     <span className="absolute bottom-0 right-0 size-3 rounded-full bg-success border-2 border-background" />
                   </div>
                   <div>
-                    <CardTitle className="text-sm font-semibold">{persona.nome}</CardTitle>
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">{persona.nome}
+                      <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400">Simulação</span></CardTitle>
                     <CardDescription className="text-[11px]">{persona.contexto}</CardDescription>
                   </div>
                 </div>
                 {qualificado && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-success/20 px-2.5 py-1 text-xs font-medium text-success">
-                    <CheckCircle2 className="size-3.5" /> Lead Qualificado (Hot)
+                    <CheckCircle2 className="size-3.5" /> Lead qualificado (resultado da simulação)
                   </span>
                 )}
               </div>
@@ -219,24 +221,24 @@ export function WhatsappView() {
         <div className="lg:col-span-4 space-y-6">
           <Card className="border-border bg-surface/60 backdrop-blur-xl">
             <CardHeader>
-              <CardTitle className="text-base">Prompt Mestre Ativo</CardTitle>
-              <CardDescription>Diretriz suprema injetada no agente</CardDescription>
+              <CardTitle className="text-base">Persona da Demonstração</CardTitle>
+              <CardDescription>Contexto usado por esta simulação</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-xl border border-border/50 bg-background/50 p-3 space-y-1">
-                <p className="text-xs font-semibold text-success">Persona em Execução</p>
+                <p className="text-xs font-semibold text-success">Persona em simulação</p>
                 <p className="text-xs text-foreground font-medium">{persona.nome}</p>
-                <p className="text-[11px] text-muted-foreground mt-1 italic">&quot;{persona.promptSupremo}&quot;</p>
+                <p className="text-[11px] text-muted-foreground mt-1 italic">&quot;{persona.promptPersona}&quot;</p>
               </div>
 
               <div className="space-y-2 pt-2 border-t border-border">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Padrão de Qualidade</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sobre esta demonstração</p>
                 <div className="space-y-2 text-xs text-muted-foreground">
                   <p className="flex items-center gap-2">
-                    <ShieldCheck className="size-4 text-success" /> Zero respostas genéricas — contexto 100% sob medida
+                    <ShieldCheck className="size-4 text-success" /> Respostas de regra fixa por nicho — servem apenas para pré-visualizar o fluxo
                   </p>
                   <p className="flex items-center gap-2">
-                    <Sparkles className="size-4 text-primary" /> Foco agressivo em conversão e fechamento
+                    <Sparkles className="size-4 text-primary" /> A integração com um atendente real no WhatsApp requer configuração e conexão verificadas
                   </p>
                 </div>
               </div>

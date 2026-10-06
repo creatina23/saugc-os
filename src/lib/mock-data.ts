@@ -1,3 +1,9 @@
+// mock-data.ts — DADOS CENOGRÁFICOS DE DEMONSTRAÇÃO E DESENVOLVIMENTO.
+// AUD-COM-01: nada aqui representa cliente, receita, campanha ou
+// integração real. A camada de apresentação NUNCA deve exibir estes
+// valores como "real/atual/ativo". Estados honestos exigidos: REAL ·
+// DEMONSTRAÇÃO · SIMULAÇÃO · INDISPONÍVEL · NÃO CONFIGURADO.
+
 import type {
   ActivityLog,
   AiHistoryItem,
@@ -142,9 +148,9 @@ export const navItems = [
   { href: "/ia-studio", label: "IA Studio", icon: "Bot" },
   { href: "/orquestrador", label: "Orquestrador", icon: "Workflow" },
   { href: "/simulador", label: "Simulador", icon: "TrendingUp" },
-  { href: "/whatsapp", label: "WhatsApp IA", icon: "MessageSquare" },
+  { href: "/whatsapp", label: "Simulador WhatsApp", icon: "MessageSquare" },
   { href: "/youtube", label: "YouTube Growth", icon: "Video" },
-  { href: "/criativos", label: "Criativos Vencedores", icon: "Award" },
+  { href: "/criativos", label: "Biblioteca de Criativos", icon: "Award" },
   { href: "/integracoes", label: "APIs de Anúncios", icon: "Cpu" },
   { href: "/configuracoes", label: "Configurações", icon: "Settings" },
 ] as const;

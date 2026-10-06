@@ -44,15 +44,15 @@ export function SimuladorView() {
             <span className="flex size-8 items-center justify-center rounded-xl bg-primary/15 text-primary">
               <Calculator className="size-5" />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight">Simulador de Projeção de Escala (CFO Mestre)</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Simulador de Cenários Financeiros</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Modelo financeiro preditivo para cálculo de unit economics, receita, lucro e ponto de saturação de mídia.
+            Simulação de cenários — os valores abaixo são projeções matemáticas dos parâmetros informados, não previsão nem garantia de resultado.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-medium text-success">
-            <Sparkles className="size-3.5" /> Algoritmo Financeiro Supremo Ativo
+            <Calculator className="size-3.5" /> Simulação de cenários
           </span>
         </div>
       </div>
@@ -65,7 +65,7 @@ export function SimuladorView() {
               <CardTitle className="text-base flex items-center gap-2">
                 <PieChart className="size-4 text-primary" /> Parâmetros da Operação
               </CardTitle>
-              <CardDescription>Ajuste as variáveis macro para simular cenários de faturamento.</CardDescription>
+              <CardDescription>Ajuste as variáveis para montar cenários hipotéticos de faturamento.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
@@ -127,8 +127,8 @@ export function SimuladorView() {
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-300 flex items-start gap-2">
                   <ShieldAlert className="size-4 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold">Alerta de Saturação de Audiência</p>
-                    <p className="text-[11px] text-amber-200/80 mt-0.5">Orçamentos acima de R$ 2.000/dia exigem rotação semanal de criativos UGC para evitar fadiga de anúncio.</p>
+                    <p className="font-semibold">Ponto de atenção (orçamento &gt; R$ 2.000/dia)</p>
+                    <p className="text-[11px] text-amber-200/80 mt-0.5">Referência orientativa: em orçamentos mais altos, alguns gestores rotacionam criativos com mais frequência para reduzir fadiga de audiência. Não é regra universal — valide no seu nicho.</p>
                   </div>
                 </div>
               )}
@@ -168,8 +168,9 @@ export function SimuladorView() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart3 className="size-4 text-ai" /> Indicadores de Conversão & Volume
+
               </CardTitle>
-              <CardDescription>Métricas de vendas estimadas com base nos parâmetros inseridos</CardDescription>
+              <CardDescription>Estimativas do cenário calculado — resultado hipotético, não medida</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 rounded-xl border border-border/50 bg-background/50">
@@ -192,7 +193,7 @@ export function SimuladorView() {
 
               {/* Cenários Comparativos */}
               <div className="space-y-2 pt-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cenários de Sensibilidade de Caixa</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cenários de sensibilidade (hipotéticos)</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-xl border border-border/40 p-3 bg-surface/30">
                     <p className="text-xs font-medium text-amber-400">Conservador (-20%)</p>
@@ -200,7 +201,7 @@ export function SimuladorView() {
                     <p className="text-[10px] text-muted-foreground mt-0.5">ROAS {(roas * 0.8).toFixed(1)}x</p>
                   </div>
                   <div className="rounded-xl border border-primary/40 p-3 bg-primary/5">
-                    <p className="text-xs font-medium text-primary">Realista (Atual)</p>
+                    <p className="text-xs font-medium text-primary">Cenário base</p>
                     <p className="text-sm font-bold mt-1">{formatBRL(receitaMensal)}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">ROAS {roas.toFixed(1)}x</p>
                   </div>

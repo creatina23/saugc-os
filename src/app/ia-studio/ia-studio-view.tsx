@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Bot,
   Brain,
@@ -29,37 +29,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { aiModels, aiHistory } from "@/lib/mock-data";
+import { aiHistory } from "@/lib/mock-data";
 import { iaService } from "@/lib/services/ia-service";
 import { toast } from "@/lib/toast";
 
 export function IaStudioView() {
-  const [modelos, setModelos] = useState<any[]>(aiModels);
-  const [modeloSelecionado, setModeloSelecionado] = useState("GPT-4o");
-  const [agenteSelecionado, setAgenteSelecionado] = useState("Copywriter Supremo");
+  // AUD-COM-01 · Release Gate: não há contrato real de seleção de modelo.
+  // O provider é definido automaticamente pelo motor da AnuncIA durante a
+  // execução — exibimos AQUI apenas o provedor efetivamente retornado.
+  const [provedorReal, setProvedorReal] = useState<string | null>(null);
+  const [agenteSelecionado, setAgenteSelecionado] = useState("Copywriter");
   const [promptUsuario, setPromptUsuario] = useState("");
   const [resultadoIa, setResultadoIa] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [historico, setHistorico] = useState(aiHistory);
 
-  // Aba ativa: "chat" (Mesa de Agentes) ou "imagem" (Engenheiro Visual Supremo)
+  // Aba ativa: "chat" (Mesa de Agentes) ou "imagem" (Engenheiro de Prompts Visuais)
   const [abaAtiva, setAbaAtiva] = useState<"chat" | "imagem">("chat");
   const [produtoImagem, setProdutoImagem] = useState("");
   const [nichoImagem, setNichoImagem] = useState("");
   const [promptGerado, setPromptGerado] = useState("");
   const [imagemUrl, setImagemUrl] = useState<string | null>(null);
   const [gerandoImagem, setGerandoImagem] = useState(false);
-
-  useEffect(() => {
-    let ativo = true;
-    iaService.statusMotores().then((lista) => {
-      if (!ativo || !lista.length) return;
-      setModelos(lista);
-    });
-    return () => {
-      ativo = false;
-    };
-  }, []);
 
   async function handleGerarTexto(e: React.FormEvent) {
     e.preventDefault();
@@ -68,12 +59,12 @@ export function IaStudioView() {
     setCarregando(true);
     setResultadoIa("");
 
-    const promptSupremoMestre = `Você é o ${agenteSelecionado} — uma inteligência artificial de elite, absoluta masterclass na sua função, com especialidade em conversão agressiva, copy magnética e estratégias validadas de 9 dígitos. Responda com profundidade cirúrgica, sem rodeios e entregue o resultado em nível 10/10.
+    const promptSistema = `Você é um assistente de IA especializado em ${agenteSelecionado}. Responda de forma direta, estruturada e útil, com foco na tarefa solicitada e sem exageros promocionais.
 
 Contexto da Tarefa:
 ${promptUsuario}`;
 
-    const resposta = await iaService.gerarTexto(promptSupremoMestre, {
+    const resposta = await iaService.gerarTexto(promptSistema, {
       temperatura: 0.7,
       maxTokens: 2000,
     });
@@ -87,12 +78,14 @@ ${promptUsuario}`;
 
     const textoFinal = resposta.texto.trim();
     setResultadoIa(textoFinal);
+    // Só DEPOIS da execução real exibimos o provedor que a resposta informou.
+    setProvedorReal(resposta.provedorUsado ?? null);
 
     // Salva no histórico local
     const novoItem = {
       id: "h_" + Date.now(),
       agent: agenteSelecionado,
-      model: modeloSelecionado,
+      model: resposta.provedorUsado ?? "Motor AnuncIA",
       prompt: promptUsuario,
       output: textoFinal,
       createdAt: new Date().toLocaleString("pt-BR"),
@@ -101,7 +94,7 @@ ${promptUsuario}`;
     toast("Execução concluída com sucesso!", { type: "success" });
   }
 
-  // ENGENHEIRO DE PROMPT VISUAL SUPREMO (Criação de Criativos de Alta Conversão)
+  // Engenheiro de prompts visuais (texto por IA real + prévia ilustrativa)
   async function handleEngenheiroVisual(e: React.FormEvent) {
     e.preventDefault();
     if (!produtoImagem.trim() || !nichoImagem.trim()) {
@@ -113,16 +106,16 @@ ${promptUsuario}`;
     setPromptGerado("");
     setImagemUrl(null);
 
-    // Prompt Supremo para o Engenheiro de Prompts Criar a Direção de Arte
-    const promptEngenheiro = `Você é o ENGENHEIRO DE PROMPTS VISUAIS MAIS AVANÇADO DO MUNDO. Sua especialidade é criar conceitos de anúncios de alta conversão (Meta Ads, TikTok e E-commerce) que param o scroll instantaneamente.
+    // Prompt de sistema para gerar a direção de arte (chamada real)
+    const promptEngenheiro = `Você é um especialista em direção de arte para anúncios digitais (Meta Ads, TikTok, e-commerce).
 
 Produto / Oferta: ${produtoImagem}
 Nicho / Mercado: ${nichoImagem}
 
 Sua missão é gerar um prompt hiper-detalhado em inglês para geradores de imagem de ponta (Midjourney v6 / DALL-E 3 / Flux) e a direção de arte completa em português.
 Estruture a resposta EXATamente assim:
-1. DIREÇÃO DE ARTE (pt-br): Explique o conceito visual, iluminação cinematográfica, paleta de cores e ângulo que farão o cliente clicar.
-2. PROMPT MESTRE (en): O comando perfeito e ultra-detalhado para gerar a imagem ideal (--ar 9:16 --v 6.0).`;
+1. DIREÇÃO DE ARTE (pt-br): conceito visual, iluminação, paleta de cores e ângulo sugeridos.
+2. PROMPT MESTRE (en): comando detalhado para geradores de imagem externos (--ar 9:16 --v 6.0).`;
 
     const resposta = await iaService.gerarTexto(promptEngenheiro, { temperatura: 0.8 });
     setGerandoImagem(false);
@@ -135,7 +128,8 @@ Estruture a resposta EXATamente assim:
     const textoGerado = resposta.texto.trim();
     setPromptGerado(textoGerado);
 
-    // Simulação de renderização de imagem de alta performance baseada no nicho
+    // AUD-COM-01: PRÉVIA ILUSTRATIVA — fotografia de referência (Unsplash)
+    // selecionada por nicho. NÃO é imagem gerada pelo sistema.
     if (nichoImagem.toLowerCase().includes("supermercado") || nichoImagem.toLowerCase().includes("poup")) {
       setImagemUrl("https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1000&q=80");
     } else if (nichoImagem.toLowerCase().includes("moda") || nichoImagem.toLowerCase().includes("ecommerce")) {
@@ -144,14 +138,14 @@ Estruture a resposta EXATamente assim:
       setImagemUrl("https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1000&q=80");
     }
 
-    toast("Engenheiro de Prompts gerou o criativo visual com sucesso!", { type: "success" });
+    toast("Prompt visual gerado por IA. A imagem abaixo é apenas uma prévia ilustrativa.", { type: "success" });
   }
 
   return (
     <div className="space-y-8 pb-16">
       <PageHeader
-        title="IA Studio (Bancada de Agentes Supremos)"
-        description="Central avançada de inteligência artificial com agentes especializados e Engenheiro Visual de Criativos."
+        title="IA Studio — Bancada de Agentes"
+        description="Geração de texto por IA real (via iaService) e construção de prompts visuais. A imagem exibida na aba visual é apenas uma prévia ilustrativa."
       >
         <div className="flex items-center gap-2">
           <Button
@@ -166,7 +160,7 @@ Estruture a resposta EXATamente assim:
             onClick={() => setAbaAtiva("imagem")}
             className="gap-2"
           >
-            <ImageIcon className="size-4" /> Engenheiro Visual & Criativos
+            <ImageIcon className="size-4" /> Engenheiro de Prompts Visuais
           </Button>
         </div>
       </PageHeader>
@@ -186,30 +180,21 @@ Estruture a resposta EXATamente assim:
                       <SelectValue placeholder="Escolha o especialista..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Copywriter Supremo">✨ Copywriter Supremo (Conversão & Vendas)</SelectItem>
+                      <SelectItem value="Copywriter">✨ Copywriter (Conversão & Vendas)</SelectItem>
                       <SelectItem value="Estrategista de Negócios">🧠 Estrategista de Negócios (Funil & Escala)</SelectItem>
                       <SelectItem value="Roteirista de Vídeo UGC">🎬 Roteirista de Vídeo UGC (Retenção & Hook)</SelectItem>
-                      <SelectItem value="Diretor de Tráfego de Elite">📈 Diretor de Tráfego de Elite (Mídia Paga)</SelectItem>
+                      <SelectItem value="Diretor de Tráfego">📈 Diretor de Tráfego (Mídia Paga)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <Cpu className="size-4 text-ai" /> Motor de IA Ativo
+                    <Cpu className="size-4 text-ai" /> Motor de IA
                   </label>
-                  <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha o modelo..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {modelos.map((m) => (
-                        <SelectItem key={m.id || m.name} value={m.name}>
-                          {m.name} ({m.provider})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2.5 text-xs text-muted-foreground leading-relaxed">
+                    Provedor definido automaticamente pelo motor da AnuncIA durante a execução. A seleção manual de modelos não está disponível nesta versão.
+                  </div>
                 </div>
 
                 <form onSubmit={handleGerarTexto} className="space-y-4 pt-2">
@@ -221,7 +206,7 @@ Estruture a resposta EXATamente assim:
                       rows={6}
                       value={promptUsuario}
                       onChange={(e) => setPromptUsuario(e.target.value)}
-                      placeholder="Ex: Crie uma sequência de copies agressivas para Black Friday de um supermercado..."
+                      placeholder="Ex: Crie uma sequência de copies de venda direta para a Black Friday de um supermercado..."
                       className="text-sm leading-relaxed"
                     />
                   </div>
@@ -230,7 +215,7 @@ Estruture a resposta EXATamente assim:
                     {carregando ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
-                        Processando com Mago Supremo...
+                        Processando com IA...
                       </>
                     ) : (
                       <>
@@ -274,15 +259,15 @@ Estruture a resposta EXATamente assim:
                   <div className="min-h-[350px] rounded-xl border border-border/50 bg-background/60 p-5 text-sm leading-relaxed text-gray-200 overflow-y-auto whitespace-pre-wrap font-sans">
                     {resultadoIa || (
                       <span className="text-muted-foreground italic">
-                        O resultado supremo do agente aparecerá aqui após a execução do comando...
+                        A resposta do agente aparecerá aqui após a execução do comando...
                       </span>
                     )}
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><ShieldCheck className="size-4 text-success" /> Cadeia de Pensamento 10/10</span>
-                  <span>Motor: {modeloSelecionado}</span>
+                  <span className="flex items-center gap-1"><ShieldCheck className="size-4 text-success" /> Texto gerado por IA (chamada real via iaService)</span>
+                  <span>{provedorReal ? `Provedor: ${provedorReal}` : "Provedor: definido automaticamente na execução"}</span>
                 </div>
               </CardContent>
             </Card>
@@ -299,7 +284,7 @@ Estruture a resposta EXATamente assim:
                     <Wand2 className="size-5 text-amber-400" /> Engenheiro de Prompts Visuais
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Crie conceitos de anúncios que param o scroll. O engenheiro entende o seu nicho e gera a direção de arte perfeita.
+                    A IA gera a direção de arte e o prompt de texto. A geração da imagem em si não acontece nesta tela.
                   </p>
                 </div>
 
@@ -356,20 +341,23 @@ Estruture a resposta EXATamente assim:
 
                       {imagemUrl && (
                         <div className="rounded-2xl overflow-hidden border border-border/60 shadow-2xl max-w-md mx-auto">
-                          <img src={imagemUrl} alt="Criativo Gerado" className="w-full h-auto object-cover" />
+                          <img src={imagemUrl} alt="Prévia ilustrativa — fotografia de referência" className="w-full h-auto object-cover" />
+                          <p className="mt-2 px-1 text-[11px] leading-snug text-muted-foreground">
+                            <span className="font-semibold text-amber-400">Prévia ilustrativa</span> — fotografia de referência (Unsplash) selecionada pelo nicho. Não foi gerada pelo sistema; a geração real de imagem ainda não está conectada nesta tela.
+                          </p>
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="min-h-[300px] flex items-center justify-center rounded-xl border border-border/50 bg-background/40 text-sm text-muted-foreground italic">
-                      Preencha o produto e o nicho ao lado para o Engenheiro criar o criativo visual...
+                      Preencha o produto e o nicho ao lado para gerar o prompt visual e a direção de arte...
                     </div>
                   )}
                 </div>
 
                 <div className="pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><CheckCircle2 className="size-4 text-success" /> Otimizado para Meta Ads & TikTok</span>
-                  <span>Midjourney / DALL-E 3 Ready</span>
+                  <span className="flex items-center gap-1"><CheckCircle2 className="size-4 text-success" /> Prompt de texto gerado por IA (chamada real)</span>
+                  <span>Compatível com geradores externos (uso manual)</span>
                 </div>
               </CardContent>
             </Card>

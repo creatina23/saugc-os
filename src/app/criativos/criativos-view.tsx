@@ -15,11 +15,13 @@ interface Criativo {
   formato: string;
   roas: string;
   score: number;
-  hookVencedor: string;
+  hookExemplo: string;
   status: string;
 }
 
 export function CriativosView() {
+  // AUD-COM-01: exemplos cenográficos — ROAS, scores e status abaixo são
+  // ILUSTRATIVOS (nenhuma medição real). Rotulados como demonstração na UI.
   const [criativos] = useState<Criativo[]>([
     {
       id: "1",
@@ -29,8 +31,8 @@ export function CriativosView() {
       formato: "Reels / TikTok (9:16)",
       roas: "4.8x",
       score: 9.8,
-      hookVencedor: "'Eu testei o produto que esgotou em 24h e o resultado na minha pele foi surreal...'",
-      status: "Escalando (R$ 2.500/dia)",
+      hookExemplo: "'Eu testei o produto que esgotou em 24h e o resultado na minha pele foi surreal...'",
+      status: "Exemplo — Escalando (R$ 2.500/dia)",
     },
     {
       id: "2",
@@ -40,8 +42,8 @@ export function CriativosView() {
       formato: "Carrossel / Stories",
       roas: "5.2x",
       score: 9.9,
-      hookVencedor: "'O coxão mole e a cerveja gelada mais baratos de Mangaratiba estão aqui...'",
-      status: "Campeão de Vendas na Loja Física",
+      hookExemplo: "'O coxão mole e a cerveja gelada mais baratos de Mangaratiba estão aqui...'",
+      status: "Exemplo — Campeão de Vendas na Loja Física",
     },
     {
       id: "3",
@@ -51,8 +53,8 @@ export function CriativosView() {
       formato: "Vídeo Depoimento UGC",
       roas: "3.9x",
       score: 9.4,
-      hookVencedor: "'De 82kg para 74kg sem deixar de comer o que eu gosto no fim de semana...'",
-      status: "Estável em Escala",
+      hookExemplo: "'De 82kg para 74kg sem deixar de comer o que eu gosto no fim de semana...'",
+      status: "Exemplo — Estável em Escala",
     },
   ]);
 
@@ -66,8 +68,8 @@ export function CriativosView() {
   );
 
   function handleAuditar(titulo: string) {
-    toast(`Auditoria IA iniciada para: ${titulo}`, {
-      description: "O Analista Criativo de Elite está varrendo os ângulos de retenção desta peça.",
+    toast(`Análise demonstrativa exibida para: ${titulo}`, {
+      description: "Esta tela é uma demonstração: nenhuma auditoria de IA foi executada sobre estes exemplos.",
       type: "success",
     });
   }
@@ -81,15 +83,15 @@ export function CriativosView() {
             <span className="flex size-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
               <Award className="size-5" />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight">Criativos Vencedores (Validação Suprema)</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Biblioteca de Criativos</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Repositório blindado de anúncios validados com alto ROAS, ganchos de retenção de elite e análise de IA.
+            Modo demonstração — os exemplos abaixo ilustram como criativos e resultados poderão ser organizados quando houver dados reais conectados.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400">
-            <Sparkles className="size-3.5" /> Analista Criativo IA Ativo
+            <ShieldCheck className="size-3.5" /> Modo demonstração
           </span>
         </div>
       </div>
@@ -127,13 +129,13 @@ export function CriativosView() {
             </CardHeader>
             <CardContent className="space-y-4 pt-0">
               <div className="p-3.5 rounded-xl border border-border/50 bg-background/50 space-y-1.5">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Hook Vencedor (Primeiros 3s)</p>
-                <p className="text-xs font-medium text-foreground italic">{item.hookVencedor}</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Hook de exemplo (primeiros 3s)</p>
+                <p className="text-xs font-medium text-foreground italic">{item.hookExemplo}</p>
               </div>
 
               <div className="flex items-center justify-between border-t border-border pt-3">
                 <div>
-                  <span className="text-[10px] text-muted-foreground uppercase">Performance Real</span>
+                  <span className="text-[10px] text-muted-foreground uppercase">Métrica ilustrativa (demonstração)</span>
                   <p className="text-sm font-bold text-emerald-400 flex items-center gap-1">
                     <TrendingUp className="size-3.5" /> ROAS {item.roas}
                   </p>
@@ -149,7 +151,7 @@ export function CriativosView() {
                 className="w-full gap-2 text-xs font-semibold hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/30"
                 onClick={() => handleAuditar(item.titulo)}
               >
-                <Play className="size-3.5 fill-current" /> Auditar Variações com IA
+                <Play className="size-3.5 fill-current" /> Ver análise demonstrativa
               </Button>
             </CardContent>
           </Card>
