@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import {
+  AlertTriangle,
   Bot,
   Brain,
   CheckCircle2,
   Copy,
   Cpu,
+  Download,
   Layers,
   Loader2,
   Sparkles,
@@ -31,6 +33,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { aiHistory } from "@/lib/mock-data";
 import { iaService } from "@/lib/services/ia-service";
+import { imagemService } from "@/lib/services/imagem-service";
 import { toast } from "@/lib/toast";
 
 export function IaStudioView() {
@@ -49,8 +52,15 @@ export function IaStudioView() {
   const [produtoImagem, setProdutoImagem] = useState("");
   const [nichoImagem, setNichoImagem] = useState("");
   const [promptGerado, setPromptGerado] = useState("");
-  const [imagemUrl, setImagemUrl] = useState<string | null>(null);
   const [gerandoImagem, setGerandoImagem] = useState(false);
+  // ARC-01 · CREATIVE ENGINE: geração REAL sob demanda (imagemService →
+  // /api/imagem). A "prévia ilustrativa" (Unsplash) foi APOSENTADA: só
+  // aparece imagem na tela quando o sistema realmente a gerou (§12).
+  const [gerandoImagemReal, setGerandoImagemReal] = useState(false);
+  const [imagemReal, setImagemReal] = useState<string | null>(null);
+  const [infoImagem, setInfoImagem] = useState<{ motor: string; formato: string; promptUsado: string | null; notas: string[] | null } | null>(null);
+  const [erroImagem, setErroImagem] = useState<string | null>(null);
+  const [formatoImagem, setFormatoImagem] = useState<"quadrado" | "retrato" | "vertical" | "paisagem">("retrato");
 
   async function handleGerarTexto(e: React.FormEvent) {
     e.preventDefault();
@@ -104,7 +114,9 @@ ${promptUsuario}`;
 
     setGerandoImagem(true);
     setPromptGerado("");
-    setImagemUrl(null);
+    setImagemReal(null);
+    setInfoImagem(null);
+    setErroImagem(null);
 
     // Prompt de sistema para gerar a direção de arte (chamada real)
     const promptEngenheiro = `Você é um especialista em direção de arte para anúncios digitais (Meta Ads, TikTok, e-commerce).
@@ -127,25 +139,54 @@ Estruture a resposta EXATamente assim:
 
     const textoGerado = resposta.texto.trim();
     setPromptGerado(textoGerado);
+    toast("Direção de arte gerada. Quando quiser, execute a geração real da imagem abaixo.", { type: "success" });
+  }
 
-    // AUD-COM-01: PRÉVIA ILUSTRATIVA — fotografia de referência (Unsplash)
-    // selecionada por nicho. NÃO é imagem gerada pelo sistema.
-    if (nichoImagem.toLowerCase().includes("supermercado") || nichoImagem.toLowerCase().includes("poup")) {
-      setImagemUrl("https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1000&q=80");
-    } else if (nichoImagem.toLowerCase().includes("moda") || nichoImagem.toLowerCase().includes("ecommerce")) {
-      setImagemUrl("https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=1000&q=80");
-    } else {
-      setImagemUrl("https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1000&q=80");
+  // ARC-01 §11–12: extrai a seção 2 (PROMPT MESTRE, inglês) da resposta
+  // do engenheiro de prompts — feita especificamente para geradores de
+  // imagem. Fallback honesto: produto+nicho como base (sem invenção).
+  function extrairPromptMestre(texto: string): string {
+    const match = texto.match(/PROMPT MESTRE[^\n]*[\n]([\s\S]+)$/i);
+    const extraido = match?.[1]?.trim() ?? "";
+    if (extraido.length >= 40) return extraido.slice(0, 1500);
+    return `${produtoImagem} — anúncio comercial fotográfico, nicho ${nichoImagem}, luz natural, fundo limpo`;
+  }
+
+  // Geração REAL sob demanda (§12): o usuário decide quando executar.
+  // Estados honestos: gerando / erro explícito / sucesso com motor e
+  // formato declarados só DEPOIS da execução real retornada.
+  async function handleGerarImagemReal() {
+    const base = promptGerado ? extrairPromptMestre(promptGerado) : extrairPromptMestre(" ");
+    setGerandoImagemReal(true);
+    setErroImagem(null);
+    setImagemReal(null);
+    setInfoImagem(null);
+
+    const resposta = await imagemService.gerarImagem(base, { formato: formatoImagem });
+    setGerandoImagemReal(false);
+
+    if (!resposta.ok || !resposta.imagem.startsWith("data:image/")) {
+      const detalheNotas = resposta.notas?.length ? ` (${resposta.notas[resposta.notas.length - 1]})` : "";
+      setErroImagem(`${resposta.erro ?? "A geração não retornou imagem válida."}${detalheNotas}`);
+      toast("A geração real não concluiu", { description: resposta.erro ?? "tente novamente", type: "error" });
+      return;
     }
 
-    toast("Prompt visual gerado por IA. A imagem abaixo é apenas uma prévia ilustrativa.", { type: "success" });
+    setImagemReal(resposta.imagem);
+    setInfoImagem({
+      motor: resposta.motor ?? "motor comprovado pela rota",
+      formato: resposta.formato ?? formatoImagem,
+      promptUsado: resposta.promptUsado,
+      notas: resposta.notas,
+    });
+    toast("Imagem gerada de verdade pelo sistema.", { type: "success" });
   }
 
   return (
     <div className="space-y-8 pb-16">
       <PageHeader
         title="IA Studio — Bancada de Agentes"
-        description="Geração de texto por IA real (via iaService) e construção de prompts visuais. A imagem exibida na aba visual é apenas uma prévia ilustrativa."
+        description="Geração de texto por IA real (via iaService), direção de arte + prompt visual e geração real de imagem sob demanda (via imagemService)."
       >
         <div className="flex items-center gap-2">
           <Button
@@ -339,14 +380,94 @@ Estruture a resposta EXATamente assim:
                         {promptGerado}
                       </div>
 
-                      {imagemUrl && (
-                        <div className="rounded-2xl overflow-hidden border border-border/60 shadow-2xl max-w-md mx-auto">
-                          <img src={imagemUrl} alt="Prévia ilustrativa — fotografia de referência" className="w-full h-auto object-cover" />
-                          <p className="mt-2 px-1 text-[11px] leading-snug text-muted-foreground">
-                            <span className="font-semibold text-amber-400">Prévia ilustrativa</span> — fotografia de referência (Unsplash) selecionada pelo nicho. Não foi gerada pelo sistema; a geração real de imagem ainda não está conectada nesta tela.
+                      {/* ARC-01 · GERAÇÃO REAL DA IMAGEM (sob demanda) */}
+                      <div className="space-y-3 rounded-xl border border-border/50 bg-background/40 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            <ImageIcon className="size-3.5 text-primary" /> Geração real da imagem
                           </p>
+                          <Select value={formatoImagem} onValueChange={(v) => setFormatoImagem(v as typeof formatoImagem)}>
+                            <SelectTrigger className="h-8 w-[170px] text-xs">
+                              <SelectValue placeholder="Formato" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="retrato">Retrato 4:5 (feed)</SelectItem>
+                              <SelectItem value="quadrado">Quadrado 1:1</SelectItem>
+                              <SelectItem value="vertical">Vertical 9:16 (stories)</SelectItem>
+                              <SelectItem value="paisagem">Paisagem 5:4</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
-                      )}
+
+                        <Button
+                          type="button"
+                          onClick={handleGerarImagemReal}
+                          className="w-full gap-2 font-semibold"
+                          disabled={gerandoImagemReal}
+                        >
+                          {gerandoImagemReal ? (
+                            <>
+                              <Loader2 className="size-4 animate-spin" />
+                              Gerando imagem de verdade…
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="size-4" />
+                              Gerar imagem (execução real)
+                            </>
+                          )}
+                        </Button>
+
+                        {erroImagem && (
+                          <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-300 flex items-start gap-2" role="alert">
+                            <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+                            <p><span className="font-semibold">Falha honesta:</span> {erroImagem}</p>
+                          </div>
+                        )}
+
+                        {imagemReal && infoImagem && (
+                          <div className="space-y-2">
+                            <div className="rounded-2xl overflow-hidden border border-border/60 shadow-2xl max-w-md mx-auto">
+                              <img src={imagemReal} alt="Imagem gerada pelo sistema agora" className="w-full h-auto object-cover" />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">
+                                <CheckCircle2 className="size-3" /> Imagem gerada agora — execução real
+                              </span>
+                              <span className="rounded-full border border-border/60 px-2 py-0.5">Motor: {infoImagem.motor}</span>
+                              <span className="rounded-full border border-border/60 px-2 py-0.5">Formato: {infoImagem.formato}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <a
+                                href={imagemReal}
+                                download="criativo-anuncia.png"
+                                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+                              >
+                                <Download className="size-3.5" /> Baixar imagem
+                              </a>
+                            </div>
+                            <details className="text-[11px] text-muted-foreground rounded-lg border border-border/40 px-3 py-2 bg-background/30">
+                              <summary className="cursor-pointer select-none font-semibold">Camada técnica — prompt final e jornada da geração ▸</summary>
+                              {infoImagem.promptUsado && (
+                                <p className="mt-2 font-mono break-words">{infoImagem.promptUsado}</p>
+                              )}
+                              {infoImagem.notas && infoImagem.notas.length > 0 && (
+                                <ul className="mt-1.5 space-y-0.5">
+                                  {infoImagem.notas.map((nota, idx) => (
+                                    <li key={idx} className="font-mono">• {nota}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </details>
+                          </div>
+                        )}
+
+                        {!imagemReal && !erroImagem && !gerandoImagemReal && (
+                          <p className="text-[11px] text-muted-foreground italic">
+                            Nenhuma imagem gerada ainda — ao executar, o resultado real aparece aqui com motor e formato declarados.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="min-h-[300px] flex items-center justify-center rounded-xl border border-border/50 bg-background/40 text-sm text-muted-foreground italic">

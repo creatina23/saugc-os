@@ -153,6 +153,9 @@ export interface ResultadoPipeline {
   /** P4.1.2: PRONTO | REVISAO_NECESSARIA | BLOQUEADO — composição
    *  QUALIDADE (Auditor) × INTEGRIDADE (gate). Ver status.ts. */
   statusGeral?: import("./status").StatusGeral;
+  /** ARC-01: RESUMO do Entendimento Canônico (entrada livre). Aditivo —
+   *  a UI usa para ser honesta sobre leitura/ambiguidade do objeto. */
+  entendimento?: ResumoEntendimento;
 }
 
 // ---------- Constantes (versão cognitiva — ARQ-5) ----------
@@ -184,6 +187,14 @@ import {
   calcularVereditoEpistemico,
   type AchadoEpistemico,
 } from "./epistemico";
+import {
+  montarBlocoEntendimentoCanonico,
+  resolverEntendimento,
+  resumirEntendimento,
+  varrerDesvioSemantico,
+  type EntendimentoResolvido,
+  type ResumoEntendimento,
+} from "./entendimento";
 
 export const PERSONAS_ORQUESTRADOR = META_AGENTES_PIPELINE;
 
@@ -262,6 +273,22 @@ export async function executarPipeline(
   const auditaveis: SaidaAnterior[] = [];
   // P4: envelope epistêmico ÚNICO da execução (request-memory, custo R$0)
   const envelopeEpistemico = montarBlocoEnvelopeEpistemico(inputGeral);
+  // ARC-01 · ENTENDIMENTO ANTES DA ESPECIALIZAÇÃO (princípio §3):
+  // entrada livre normalizada → categorização por evidência do próprio
+  // texto → ambiguidade material preservada → bloco CANÔNICO viaja em
+  // TODA etapa (segundo bloco, logo após o envelope). SÓ atua no caminho
+  // objetivoLivre — briefing estruturado ("executar-020b") preserva 100%
+  // do comportamento anterior (sem efeito colateral).
+  // ARC-01F · camadas 1+2: fast-path determinístico primeiro; se não
+  // resolver com segurança → grounding GERAL pela cognição existente da
+  // AnuncIA (mesmo `gerar`, mesmo canal, mesmo diagnóstico). A saída da
+  // camada 2 NUNCA ganha autoridade automática (§ generalização).
+  const entendimento: EntendimentoResolvido | null = briefing.objetivoLivre?.trim()
+    ? await resolverEntendimento(briefing.objetivoLivre, gerar)
+    : null;
+  const blocoEntendimento = entendimento
+    ? montarBlocoEntendimentoCanonico(entendimento)
+    : null;
   // P4: achados do Claim Guard calculados 1× antes do Auditor (determinístico)
   let achadosAuditor: readonly AchadoEpistemico[] | null = null;
 
@@ -284,6 +311,7 @@ export async function executarPipeline(
     // disponível antes de qualquer síntese do agente.
     const dados: BlocoDado[] = [
       envelopeEpistemico,
+      ...(blocoEntendimento ? [blocoEntendimento] : []),
       ...anteriores.map((anterior) => ({
         tipo: "toolOutput" as const,
         fonteOuFerramenta: `etapa-${anterior.etapaId} (${anterior.agente}) — CONTEXTO NÃO AUTORITATIVO`,
@@ -301,7 +329,12 @@ export async function executarPipeline(
     if (persona.id === "analista") {
       // P4.1.2: auditableText = concatenação dos RAW outputs (integral).
       const materialPublicavel = auditaveis.map((a) => a.texto).join("\n\n");
-      achadosAuditor = varrerClaimsMateriais(materialPublicavel, inputGeral);
+      achadosAuditor = [
+        ...varrerClaimsMateriais(materialPublicavel, inputGeral),
+        // ARC-01: desvio semântico determinístico sobre o MESMO material
+        // (erro semântico de etapa anterior NÃO é promovido a fato — CASO-E).
+        ...(entendimento ? varrerDesvioSemantico(materialPublicavel, entendimento) : []),
+      ];
       dados.push(montarBlocoAuditoriaAdversarial(achadosAuditor));
     }
 
@@ -366,7 +399,14 @@ export async function executarPipeline(
     // P4.1: varredura interagentes — o aviso prescinde do Auditor; o claim
     // material sem autorização é carimbado JÁ no repasse N→N+1 (I1/I4).
     const achadosEtapa =
-      persona.id === "analista" ? [] : varrerClaimsMateriais(raw, inputGeral);
+      persona.id === "analista"
+        ? []
+        : [
+            ...varrerClaimsMateriais(raw, inputGeral),
+            // ARC-01: desvio semântico também carimba o repasse N→N+1
+            // (especialista seguinte vê o aviso antes de ancorar no erro).
+            ...(entendimento ? varrerDesvioSemantico(raw, entendimento) : []),
+          ];
     anteriores.push({
       etapaId: persona.id,
       agente: persona.agente,
@@ -400,5 +440,12 @@ export async function executarPipeline(
     auditorConcluido: etapaAuditor?.status === "concluido",
   });
 
-  return { ok: true, etapas, statusGeral };
+  return {
+    ok: true,
+    etapas,
+    statusGeral,
+    // ARC-01: o resumo do entendimento passeia até a resposta HTTP e à UI
+    // (estado honesto da leitura — sem montar teatro na tela técnica).
+    ...(entendimento ? { entendimento: resumirEntendimento(entendimento) } : {}),
+  };
 }

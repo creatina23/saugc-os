@@ -3641,3 +3641,95 @@ export function calcularVereditoEpistemico(
   if (achados.some((a) => a.norma === "QUALIFICAR")) return "APROVADO_COM_AJUSTES";
   return "APROVADO";
 }
+
+// ---------- ARC-01F BLOCKER-FIX · suporte ≠ existência (escopo de negação v2) ----------
+
+/** O termo aparece AFIRMADO (fora do escopo da negação) no texto?
+ *
+ *  ESCOPO v2 (corrige CAUSA 2 do Release Gate final: "pontuação ≠ fim de
+ *  escopo"). Regras determinísticas, sem léxico de domínio:
+ *
+ *  1. FRASE delimita escopo total: escopo nunca atravessa [.!?;] nem
+ *     quebra de linha ("Não cobramos taxas. Oferecemos X." → X afirmado).
+ *  2. DENTRO da frase, separadores de aposto (vírgula, travessão,
+ *     parênteses, dois-pontos) NÃO encerram o escopo — o negador segue
+ *     ativo ("não oferecemos, em nenhuma hipótese, aulas ao vivo" ·
+ *     "nunca, jamais, aulas ao vivo" · aposto/ressalva inclusos).
+ *  3. RESET POR VERBO-PORTADOR: cláusula posterior contendo forma verbal
+ *     de afirmação encerra o escopo do negador (ex.: "Sem taxa mensal,
+ *     oferecemos aulas ao vivo" → "aulas ao vivo" AFIRMADO). É heurística
+ *     estrutural (sufixos verbais pt inequívocos + formas copulares),
+ *     NÃO léxico de domínio.
+ *  4. NEGACAO é o mesmo conjunto de gatilhos auditado no P4.1.1 (CP-01);
+ *     a negação herda para as cláusulas seguintes até reset ou fim da frase.
+ *  5. Sufixos ambíguos ("ia/ava/ou") REMOVIDOS da heurística: casavam com
+ *     substantivos ("mentoria") e desarmavam a negação — bug reproduzido.
+ *
+ *  Direção segura: em dúvida sobre afirmação, o consumidor (portão do
+ *  entendimento) cai fail-closed (precisa-confirmar), nunca AFIRMA o
+ *  negado com autoridade. */
+const CLAUSULA_SEP = /[,.!?;:—()\n]/u;
+const FRASE_SEP = /[.!?;\n]/u;
+const VERBOID = new RegExp(
+  // (a) formas verbais/copulares frequentes explícitas (estruturais);
+  // (b) sufixos verbais inequívocos com caule ≥3 letras.
+  "\\b(é|sao|são|era|eram|foi|foram|será|sera|seria|ser|ha|há|tem|têm|" +
+  "tinha|tinham|havia|fazia|dá|dava|deu|dei|faz|fazem|fará|fara|" +
+  "pode|podem|poderá|deve|devem|deverá|quer|querem)\\b" +
+  "|\\b[a-zà-ú]{3,}(amos|emos|imos|aram|eram|iram|avam|iamos|ão|êm)\\b",
+  "i"
+);
+
+/** Índices das faixas NEGADAS dentro de uma frase (escopo dirigido). */
+function clausulasNegadasDaFrase(frase: string): readonly { inicio: number; fim: number }[] {
+  const partes = frase.split(CLAUSULA_SEP);
+  const negadas: { inicio: number; fim: number }[] = [];
+  let cursor = 0;
+  let emEscopo = false;
+  for (const parte of partes) {
+    const ini = cursor;
+    cursor = ini + parte.length + 1; // +1 pelo separador consumido
+    const temNegacao = NEGACAO.test(parte);
+    const temVerboide = VERBOID.test(parte);
+    if (temNegacao) {
+      emEscopo = true; // escopo abre NA cláusula do gatilho
+    } else if (emEscopo && temVerboide) {
+      emEscopo = false; // verbo portador de afirmação fecha o escopo
+    }
+    if (emEscopo) negadas.push({ inicio: ini, fim: cursor - 1 });
+  }
+  return negadas;
+}
+
+/** AFIRMADO = existe ocorrência cuja cláusula (dentro da frase) NÃO está negada. */
+export function termoEmContextoAfirmativo(texto: string, termo: string): boolean {
+  const normTexto = texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const normTermo = termo
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normTermo.length < 2) return false;
+  let cursorFrase = 0;
+  for (const frase of normTexto.split(FRASE_SEP)) {
+    const baseFrase = cursorFrase;
+    cursorFrase = baseFrase + frase.length + 1;
+    if (!frase.includes(normTermo)) continue;
+    const faixasNegadas = clausulasNegadasDaFrase(frase);
+    let cursor = 0;
+    while (cursor < frase.length) {
+      const idx = frase.indexOf(normTermo, cursor);
+      if (idx < 0) break;
+      const emFaixaNegada = faixasNegadas.some(
+        (f) => idx >= f.inicio && idx + normTermo.length <= f.fim
+      );
+      if (!emFaixaNegada) return true;
+      cursor = idx + normTermo.length;
+    }
+  }
+  return false;
+}

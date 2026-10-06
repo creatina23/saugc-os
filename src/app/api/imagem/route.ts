@@ -383,6 +383,15 @@ async function gerarViaPollinations(prompt: string, formato: Formato, modelo: "f
       return { ok: false, status: resposta.status };
     }
 
+    // ARC-01 §15K: resposta INVÁLIDA nunca vira "imagem" — validar o tipo
+    // do payload como fazemos em HF/Cloudflare (fail-closed: tipo ausente
+    // ou não-imagem não gera falso positivo no serviço/tela).
+    const tipoResposta = resposta.headers.get("content-type") ?? "";
+    if (!tipoResposta.startsWith("image/")) {
+      anotarDetalhe(`pollinations conteúdo inválido (${tipoResposta || "sem content-type"})`);
+      return { ok: false, status: 502 };
+    }
+
     const bytes = await resposta.arrayBuffer().catch(() => null);
     if (!bytes || bytes.byteLength === 0) return { ok: false, status: 502 };
 

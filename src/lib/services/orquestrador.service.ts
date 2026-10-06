@@ -7,6 +7,7 @@
 
 import type { DiagnosticoEtapa } from "../orquestrador/pipeline";
 import type { StatusGeral } from "../orquestrador/status";
+import type { ResumoEntendimento } from "../orquestrador/entendimento";
 
 export type VereditoAuditoriaEpistemica =
   | "APROVADO"
@@ -36,6 +37,8 @@ export interface PipelineResultado {
   erro?: string;
   /** P4.1.2: estado composto QUALIDADE × INTEGRIDADE. */
   statusGeral?: StatusGeral;
+  /** ARC-01: resumo honesto do Entendimento Canônico da entrada livre. */
+  entendimento?: ResumoEntendimento;
 }
 
 export interface BriefingOrquestrador {
@@ -73,6 +76,8 @@ export const orquestradorService = {
         erro: data.erro,
         // P4.1.2: estado composto (QUALIDADE × INTEGRIDADE) vem do servidor
         statusGeral: typeof data.statusGeral === "string" ? data.statusGeral : undefined,
+        // ARC-01: entendimento canônico (só existe em orquestrar-objetivo)
+        entendimento: data.entendimento && typeof data.entendimento === "object" ? data.entendimento : undefined,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";
@@ -107,6 +112,8 @@ export const orquestradorService = {
         erro: data.erro,
         // P4.1.2: estado composto (QUALIDADE × INTEGRIDADE) vem do servidor
         statusGeral: typeof data.statusGeral === "string" ? data.statusGeral : undefined,
+        // ARC-01: resumo do entendimento canônico (leitura da entrada)
+        entendimento: data.entendimento && typeof data.entendimento === "object" ? data.entendimento : undefined,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";

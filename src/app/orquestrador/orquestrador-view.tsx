@@ -38,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { orquestradorService, type EtapaOrquestracao } from "@/lib/services/orquestrador.service";
+import type { ResumoEntendimento } from "@/lib/orquestrador/entendimento";
 import { RenderSaida, BotaoCopiar } from "@/components/orquestrador/render-saida";
 import type { StatusGeral } from "@/lib/orquestrador/status";
 import { PERSONAS_ORQUESTRADOR } from "@/lib/orquestrador/pipeline";
@@ -115,6 +116,7 @@ export function OrquestradorView() {
   const [etapas, setEtapas] = useState<EtapaOrquestracao[] | null>(null);
   const [erroGlobal, setErroGlobal] = useState<string | null>(null);
   const [statusGeral, setStatusGeral] = useState<StatusGeral | null>(null);
+  const [entendimento, setEntendimento] = useState<ResumoEntendimento | null>(null);
 
   async function handleExecutar(e: React.FormEvent) {
     e.preventDefault();
@@ -134,6 +136,7 @@ export function OrquestradorView() {
       setEtapas(resultado.etapas);
     }
     setStatusGeral(resultado.statusGeral ?? null);
+    setEntendimento(resultado.entendimento ?? null);
     if (!resultado.ok) {
       setErroGlobal(resultado.erro ?? "Falha na cadeia de especialistas");
       toast("A cadeia não concluiu", { description: resultado.erro ?? "falha geral", type: "error" });
@@ -239,6 +242,25 @@ export function OrquestradorView() {
                   {ESTILO_STATUS_GERAL[statusGeral].texto}
                 </div>
               )}
+              {entendimento?.ambiguidade && (
+                <div className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-xs text-warning flex items-start gap-2" role="status">
+                  <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+                  <p>
+                    <span className="font-semibold">Ambiguidade preservada com honestidade:</span>{" "}
+                    o termo “{entendimento.ambiguidade.objeto}” pode pertencer a categorias diferentes (
+                    {entendimento.ambiguidade.candidatasRotulos.join(" × ")}). A cadeia não escolheu uma
+                    delas como fato — desenvolveu de forma condicional. Esclarecer a categoria aumenta a precisão do resultado.
+                  </p>
+                </div>
+              )}
+              {entendimento && entendimento.status === "resolvida" && entendimento.categoriaRotulo && (
+                <p className="text-[11px] text-muted-foreground px-1">
+                  Leitura da cadeia: objeto “{entendimento.objeto}” interpretado como{" "}
+                  <span className="font-semibold text-foreground">{entendimento.categoriaRotulo}</span>{" "}
+                  por evidência do próprio texto ({(entendimento.evidencias ?? []).map((e) => `“${e}”`).join(", ")}).
+                </p>
+              )}
+
               {etapas?.map((etapa) => {
                 const Icone = ICONES[etapa.icone] ?? Brain;
                 return (
