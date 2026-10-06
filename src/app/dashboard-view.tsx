@@ -558,7 +558,7 @@ const quickActions = [
   { label: "Novo Cliente", description: "Cadastrar empresa na base", href: "/clientes", icon: Users, tone: "bg-success/15 text-success shadow-[0_0_15px_rgba(16,185,129,0.2)]" },
   { label: "Nova Campanha", description: "Criar campanha multicanal", href: "/campanhas", icon: Megaphone, tone: "bg-primary/15 text-primary shadow-[0_0_15px_rgba(59,130,246,0.2)]" },
   { label: "Novo Prompt", description: "Salvar prompt reutilizável", href: "/prompts", icon: Sparkles, tone: "bg-ai/15 text-ai shadow-[0_0_15px_rgba(139,92,246,0.2)]" },
-  { label: "IA Studio", description: "Gerar copy e roteiros", href: "/ia-studio", icon: Bot, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
+  { label: "Gerar copy e roteiros", description: "Criar conteúdo com IA (IA Studio)", href: "/ia-studio", icon: Bot, tone: "bg-warning/15 text-warning shadow-[0_0_15px_rgba(245,158,11,0.2)]" },
 ];
 
 
@@ -870,7 +870,7 @@ export function DashboardView() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-8">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Centro de Comando & Desempenho</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Central</h1>
             {modoDemo && (
               <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning text-xs">
                 Modo Demonstração (Conecte o Supabase)
@@ -890,7 +890,7 @@ export function DashboardView() {
           {/* TR-04.8D.2a: sem afirmar sincronização contínua — só a hora real
               em que este carregamento terminou. */}
           <p className="text-sm text-muted-foreground">
-            Visão unificada da operação comercial, conversões e eficiência de campanhas.
+            Veja o que está acontecendo no negócio e o que merece sua atenção agora.
             {atualizadoEm && <> Atualizado às {atualizadoEm}.</>}
           </p>
         </div>
@@ -907,7 +907,7 @@ export function DashboardView() {
           <Link href="/orquestrador">
             <Button className="gap-2 font-semibold shadow-[0_0_20px_rgba(59,130,246,0.3)]">
               <Sparkles className="size-4" />
-              Executar Nova Operação
+              Analisar novo objetivo
             </Button>
           </Link>
         </div>

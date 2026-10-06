@@ -678,7 +678,7 @@ Entregue EXATAMENTE nesta estrutura, sem introdução nem conclusão:
       <PageHeader
         title="Campanhas"
         badge={modoDemo ? "Modo demonstração" : undefined}
-        description="Central de performance de Campanhas. "
+        description="Acompanhe campanhas, investimento e resultados em um só lugar."
       >
         <Dialog
           open={dialogOpen}

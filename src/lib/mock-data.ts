@@ -135,25 +135,35 @@ export const workspaces = [
   { id: "agency", name: "Agência Modelo", plan: "Enterprise" },
 ] as const;
 
-export const navItems = [
-  { href: "/", label: "Dashboard", icon: "LayoutDashboard" },
-  { href: "/clientes", label: "Clientes", icon: "Users" },
-  { href: "/campanhas", label: "Campanhas", icon: "Megaphone" },
-  { href: "/briefings", label: "Briefings", icon: "FileText" },
-  { href: "/comerciais", label: "Comerciais", icon: "Kanban" },
-  { href: "/crm", label: "CRM", icon: "Handshake" },
-  { href: "/assets", label: "Mídias", icon: "Film" },
-  { href: "/biblioteca", label: "Biblioteca", icon: "Library" },
-  { href: "/prompts", label: "Prompts", icon: "Sparkles" },
-  { href: "/ia-studio", label: "IA Studio", icon: "Bot" },
-  { href: "/orquestrador", label: "Orquestrador", icon: "Workflow" },
-  { href: "/simulador", label: "Simulador", icon: "TrendingUp" },
-  { href: "/whatsapp", label: "Simulador WhatsApp", icon: "MessageSquare" },
-  { href: "/youtube", label: "YouTube Growth", icon: "Video" },
-  { href: "/criativos", label: "Biblioteca de Criativos", icon: "Award" },
-  { href: "/integracoes", label: "APIs de Anúncios", icon: "Cpu" },
-  { href: "/configuracoes", label: "Configurações", icon: "Settings" },
-] as const;
+export type NavItem = {
+  readonly href: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly grupo: string;
+  readonly apoio?: string;
+};
+export const navItems: readonly NavItem[] = [
+  // AUD-COM-01 Business-First UX: navegação agrupada por finalidade do
+  // negócio — a rota NUNCA muda (href preservado); `grupo` é apenas
+  // organização visual; `apoio` = contexto legível por iniciante (title).
+  { href: "/", label: "Central", icon: "LayoutDashboard", grupo: "Operação", apoio: "Situação, prioridades e próximos passos" },
+  { href: "/clientes", label: "Clientes", icon: "Users", grupo: "Operação", apoio: "Carteira cadastrada da operação" },
+  { href: "/crm", label: "CRM", icon: "Handshake", grupo: "Operação", apoio: "Oportunidades e negociações" },
+  { href: "/campanhas", label: "Campanhas", icon: "Megaphone", grupo: "Operação", apoio: "Investimento e resultados" },
+  { href: "/comerciais", label: "Produção", icon: "Kanban", grupo: "Operação", apoio: "Anúncios em produção, revisão e aprovação" },
+  { href: "/briefings", label: "Briefings", icon: "FileText", grupo: "Conhecimento", apoio: "Pedidos de conteúdo e direcionamento" },
+  { href: "/assets", label: "Mídias", icon: "Film", grupo: "Conhecimento", apoio: "Arquivos e materiais da operação" },
+  { href: "/biblioteca", label: "Biblioteca", icon: "Library", grupo: "Conhecimento", apoio: "Templates e guias reutilizáveis" },
+  { href: "/criativos", label: "Biblioteca de Criativos", icon: "Award", grupo: "Conhecimento", apoio: "Exemplos de criativos e resultados" },
+  { href: "/prompts", label: "Prompts", icon: "Sparkles", grupo: "Ferramentas especializadas", apoio: "Comandos de IA salvos e reutilizáveis" },
+  { href: "/ia-studio", label: "IA Studio", icon: "Bot", grupo: "Ferramentas especializadas", apoio: "Gerar copy, roteiros e prompts visuais com IA" },
+  { href: "/orquestrador", label: "Orquestrador", icon: "Workflow", grupo: "Ferramentas especializadas", apoio: "Transformar um objetivo em plano de ação" },
+  { href: "/simulador", label: "Simulador", icon: "TrendingUp", grupo: "Ferramentas especializadas", apoio: "Cenários financeiros hipotéticos" },
+  { href: "/whatsapp", label: "Simulador WhatsApp", icon: "MessageSquare", grupo: "Ferramentas especializadas", apoio: "Demonstração de um fluxo de atendimento" },
+  { href: "/youtube", label: "YouTube Growth", icon: "Video", grupo: "Ferramentas especializadas", apoio: "Planejamento de estruturas de vídeo" },
+  { href: "/integracoes", label: "Integrações", icon: "Cpu", grupo: "Ferramentas especializadas", apoio: "Credenciais de conexão com plataformas" },
+  { href: "/configuracoes", label: "Configurações", icon: "Settings", grupo: "Sistema", apoio: "Conta, equipe e preferências" },
+];
 
 export const settingsTabs = [
   "Geral",

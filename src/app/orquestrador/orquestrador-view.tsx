@@ -119,7 +119,7 @@ export function OrquestradorView() {
   async function handleExecutar(e: React.FormEvent) {
     e.preventDefault();
     if (!objetivoNegocio.trim()) {
-      toast("Escreva o objetivo estratégico que a cadeia deve resolver", { type: "error" });
+      toast("Escreva o que você precisa alcançar", { type: "error" });
       return;
     }
     setExecutando(true);
@@ -145,8 +145,8 @@ export function OrquestradorView() {
   return (
     <div className="space-y-8 pb-16">
       <PageHeader
-        title="Orquestrador de Agentes"
-        description="Cadeia de especialistas: o objetivo passa em sequência e cada um recebe a inteligência real produzida pelo anterior."
+        title="Transforme um objetivo em plano de ação"
+        description="Diga o que você precisa alcançar. A AnuncIA reúne os especialistas necessários e constrói a resposta passo a passo — com rastreabilidade real de cada etapa."
       >
         <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
           <Workflow className="size-3.5" /> Cadeia real em sequência
@@ -159,16 +159,16 @@ export function OrquestradorView() {
           <Card className="border-border bg-surface/65 backdrop-blur-xl">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Brain className="size-4 text-primary" /> Objetivo da Operação
+                <Brain className="size-4 text-primary" /> Seu objetivo
               </CardTitle>
               <CardDescription>
-                Descreva o objetivo estratégico. A cadeia inteira vai trabalhar exatamente sobre esta entrada.
+                Descreva em linguagem natural o que precisa acontecer. Toda a análise parte desta entrada.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleExecutar} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Objetivo</label>
+                  <label className="text-xs font-medium text-muted-foreground">O que você precisa alcançar?</label>
                   <Textarea
                     rows={6}
                     value={objetivoNegocio}
@@ -179,7 +179,7 @@ export function OrquestradorView() {
                 </div>
 
                 <div className="p-3.5 rounded-xl border border-border/50 bg-background/50 space-y-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase">Especialistas da cadeia (ordem real)</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase">Como a AnuncIA vai analisar</p>
                   <ol className="text-xs text-foreground space-y-1.5">
                     {PERSONAS_ORQUESTRADOR.map((persona, indice) => {
                       const Icone = ICONES[persona.icone] ?? Brain;
@@ -196,9 +196,9 @@ export function OrquestradorView() {
 
                 <Button type="submit" className="w-full gap-2 font-semibold" disabled={executando}>
                   {executando ? (
-                    <><Loader2 className="size-4 animate-spin" /> Executando a cadeia…</>
+                    <><Loader2 className="size-4 animate-spin" /> Analisando seu objetivo…</>
                   ) : (
-                    <><Play className="size-4 fill-current" /> Executar cadeia de especialistas</>
+                    <><Play className="size-4 fill-current" /> Construir plano</>
                   )}
                 </Button>
               </form>
@@ -215,7 +215,7 @@ export function OrquestradorView() {
               </CardTitle>
               <CardDescription>
                 {etapas === null
-                  ? "Os resultados reais de cada etapa aparecem aqui após a execução."
+                  ? "A análise de cada etapa aparece aqui depois da execução."
                   : "Cada cartão mostra exatamente o que aquele especialista produziu com o contexto recebido."}
               </CardDescription>
             </CardHeader>
@@ -228,7 +228,7 @@ export function OrquestradorView() {
               )}
               {etapas === null && !erroGlobal && (
                 <p className="text-sm italic text-muted-foreground">
-                  Escreva o objetivo ao lado e execute a cadeia…
+                  Escreva ao lado o que você precisa alcançar e peça a análise…
                 </p>
               )}
               {statusGeral && (
@@ -356,7 +356,7 @@ export function OrquestradorView() {
                           ? "BLOQUEADO — há claims materiais sem sustentação no briefing; não publicar sem evidência dos itens acima"
                           : etapa.veredito === "APROVADO_COM_AJUSTES"
                             ? "APROVADO COM AJUSTES — claims declarativos precisam ser qualificados antes de publicar"
-                            : "APROVADO — nenhum claim material detectado além do autorizado no briefing"}
+                            : "APROVADO — nenhum claim material detectado nas categorias verificadas pelo Guard determinístico (cobertura limitada às regras em vigor — não é certificado editorial)"}
                       </p>
                     )}
                   </section>

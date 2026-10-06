@@ -195,9 +195,9 @@ export function ClientesView() {
       {/* Cabeçalho */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Clientes (Operações)</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            Cada cliente é uma operação ativa com receita e acompanhamento em tempo real.
+            Clientes cadastrados na operação, com receita e acompanhamento.
           </p>
         </div>
         <Button onClick={() => setModalAberto(true)} className="gap-2 font-semibold">
@@ -241,7 +241,7 @@ export function ClientesView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-success">100% Sincronizado</div>
-            <p className="text-xs text-muted-foreground mt-1">Autonomia total de dados</p>
+            <p className="text-xs text-muted-foreground mt-1">Base cadastrada no sistema</p>
           </CardContent>
         </Card>
       </div>

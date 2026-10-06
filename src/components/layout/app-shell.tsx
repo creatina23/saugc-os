@@ -173,43 +173,56 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   function renderNav(isMobileDrawer: boolean) {
+    // AUD-COM-01 Business-First UX: os itens chegam agrupados por finalidade
+    // (navItems[].grupo). O cabeçalho do grupo só aparece quando muda —
+    // href/ícone/active/badge/drawer/collapse preservados 1:1.
+    let grupoAnterior: string | null = null;
+    let indiceItem = 0;
     return (
       <nav aria-label="Navegação principal" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        <p
-          className={cn(
-            "mb-2 px-3 text-[10px] font-semibold tracking-[0.18em] text-muted-foreground uppercase",
-            collapsed && !isMobileDrawer && "sr-only",
-          )}
-        >
-          Menu
-        </p>
         {navItems.map((item) => {
           const Icon = iconMap[item.icon] ?? LayoutDashboard;
           const active = isActive(item.href);
+          const mudouGrupo = item.grupo !== grupoAnterior;
+          const primeiroItem = indiceItem === 0;
+          indiceItem += 1;
+          grupoAnterior = item.grupo;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={item.label}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all",
-                active
-                  ? "bg-primary/12 font-medium text-primary shadow-[inset_0_0_0_1px_rgba(59,130,246,0.25)]"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                collapsed && !isMobileDrawer && "justify-center px-0",
+            <div key={item.href}>
+              {mudouGrupo && (
+                <p
+                  className={cn(
+                    "mb-1 px-3 text-[10px] font-semibold tracking-[0.18em] text-muted-foreground uppercase",
+                    primeiroItem ? "mt-0" : "mt-3",
+                    collapsed && !isMobileDrawer && "sr-only",
+                  )}
+                >
+                  {item.grupo}
+                </p>
               )}
-            >
-              <Icon className="size-[18px] shrink-0" />
-              {(!collapsed || isMobileDrawer) && (
-                <span className="flex-1 truncate">{item.label}</span>
-              )}
-              {(!collapsed || isMobileDrawer) && item.label === "IA Studio" && (
-                <Badge variant="violet" className="px-1.5">
-                  Beta
-                </Badge>
-              )}
-            </Link>
+              <Link
+                href={item.href}
+                title={item.apoio ? `${item.label} — ${item.apoio}` : item.label}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all",
+                  active
+                    ? "bg-primary/12 font-medium text-primary shadow-[inset_0_0_0_1px_rgba(59,130,246,0.25)]"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  collapsed && !isMobileDrawer && "justify-center px-0",
+                )}
+              >
+                <Icon className="size-[18px] shrink-0" />
+                {(!collapsed || isMobileDrawer) && (
+                  <span className="flex-1 truncate">{item.label}</span>
+                )}
+                {(!collapsed || isMobileDrawer) && item.label === "IA Studio" && (
+                  <Badge variant="violet" className="px-1.5">
+                    Beta
+                  </Badge>
+                )}
+              </Link>
+            </div>
           );
         })}
       </nav>

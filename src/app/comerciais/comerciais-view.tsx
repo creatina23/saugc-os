@@ -486,7 +486,7 @@ export function ComerciaisView() {
       <PageHeader
         title="Comerciais"
         badge={modoDemo ? "Modo demonstração" : undefined}
-        description="Anúncios  em produção pela equipe."
+        description="Acompanhe os anúncios em produção, revisão e aprovação."
       >
         <Dialog
           open={dialogOpen}
