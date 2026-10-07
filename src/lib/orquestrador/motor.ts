@@ -87,6 +87,8 @@ function dtoTentativa(t: TentativaCascata) {
     // P3.2: término canônico (label NOSSO) + tokens (número puro) — seguros.
     ...(t.terminoStatus ? { terminoStatus: t.terminoStatus } : {}),
     ...(typeof t.saidaTokens === "number" ? { saidaTokens: t.saidaTokens } : {}),
+    // ARC-02B.3 · FASE 4: origem do cooldown explica o skip (rótulo NOSSO).
+    ...(t.cooldownOrigem ? { cooldownOrigem: t.cooldownOrigem } : {}),
   } as const;
 }
 
@@ -146,6 +148,23 @@ export function criarGeradorReal(deps: {
       instrucaoCadeia: instrucaoCadeia ?? undefined,
     });
 
+    // ARC-02B.3 · FASE 2 — TELEMETRIA DE PAYLOAD SANITIZADA: mede
+    // COMPOSIÇÃO/TAMANHO do pacote enviado ao provider desta etapa (sem
+    // texto, sem prompt, sem secrets). Sempre presente no diagnóstico.
+    const tComposicao = typeof promptCompleto === "string"
+      ? { system: "", user: promptCompleto }
+      : promptCompleto;
+    const inputTelemetria = {
+      systemChars: tComposicao.system.length,
+      userChars: tComposicao.user.length,
+      totalChars: tComposicao.system.length + tComposicao.user.length,
+      blocosDados: entrada.dados.length,
+      charsPorBloco: entrada.dados.map((d) => (d.conteudo ?? "").length),
+      /** estimativa ~4 chars/token; NÃO vem do provider (rótulo explícito). */
+      EstimativaTokensCh4: Math.round((tComposicao.system.length + tComposicao.user.length) / 4),
+      maxTokensSolicitado: 3000,
+    } as const;
+
     const restanteGlobal = Math.max(0, alvoGlobal - inicio);
     if (restanteGlobal < 5000) {
       // Deadline global estourado antes de arrancar: fail-closed honesto.
@@ -179,6 +198,7 @@ export function criarGeradorReal(deps: {
       maxTokens: 3000,
       prazoMs: Math.min(PRAZO_POR_ETAPA_MS, restanteGlobal),
       saude: saudeExecucao, // P2-2: efêmero desta execução (prazo global delimita a vida útil)
+      etapaId: entrada.agentContract.id, // ARC-02B.3 · FASE 4: rastreia origem de cooldown
     });
 
     // Log estrutural — SEM segredos, SEM prompt, COM a fila por provider
@@ -206,12 +226,14 @@ export function criarGeradorReal(deps: {
             tentativas: resultado.tentativas.map(dtoTentativa),
             fila: resumoTentativas(resultado.tentativas),
             termino: resultado.termino.status,
+            payload: inputTelemetria, // ARC-02B.3 · FASE 2
           }
         : {
             duracaoMs: resultado.duracaoMs,
             categoriaFinal: resultado.categoriaFinal,
             tentativas: resultado.tentativas.map(dtoTentativa),
             fila: resumoTentativas(resultado.tentativas),
+            payload: inputTelemetria, // ARC-02B.3 · FASE 2
           };
 
     if (resultado.ok) {
