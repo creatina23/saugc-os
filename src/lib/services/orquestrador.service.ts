@@ -31,6 +31,13 @@ export interface EtapaOrquestracao {
     readonly status: "conforme" | "fora-do-contrato";
     readonly motivo?: string;
     readonly faltam?: readonly string[];
+    /** ARC-02B.3 · FASE 1 — prévia diagnóstica capada/sanitizada do output
+     *  rejeitado (só quando provider respondeu texto + contrato recusou);
+     *  exibida APENAS na camada técnica colapsável, nunca como resultado. */
+    readonly rejectedOutputPreview?: string;
+    /** ARC-02B.3 · FASE 5: TRANSPORT_SUCCESS_CONTRACT_FAILURE quando o
+     *  provider respondeu mas o contrato recusou (≠ TASK SUCCESS). */
+    readonly classificacao?: "TRANSPORT_SUCCESS_CONTRACT_FAILURE";
   };
   /** ARC-02B.1 · A-02: dependências obrigatórias indisponíveis (fail-closed). */
   dependenciasAusentes?: readonly string[];
