@@ -24,6 +24,16 @@ export interface EtapaOrquestracao {
   iteracao?: number;
   erro?: string; // P0.1 — mensagem honesta de falha (sem conteúdo simulado)
   diagnostico?: DiagnosticoEtapa; // P2-1 — camada 2 (detalhe técnico colapsável)
+  /** ARC-02B · aditivo/whitelist: veredito estrutural do contrato da etapa
+   *  (gerado pelo NOSSO código — distingue "motor sem resposta" de
+   *  "resposta recebida e rejeitada pelo contrato", ARC-02B.2/UI-B). */
+  conformidade?: {
+    readonly status: "conforme" | "fora-do-contrato";
+    readonly motivo?: string;
+    readonly faltam?: readonly string[];
+  };
+  /** ARC-02B.1 · A-02: dependências obrigatórias indisponíveis (fail-closed). */
+  dependenciasAusentes?: readonly string[];
   /** P4: veredito publicável DETERMINÍSTICO (Claim Guard, não o LLM) */
   veredito?: VereditoAuditoriaEpistemica;
   /** P4.1.2: veredito TEXTUAL do Auditor LLM transcrito (apresentação;
