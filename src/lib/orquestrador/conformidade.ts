@@ -154,10 +154,35 @@ const SECOES: Readonly<Record<string, readonly SecaoContrato[]>> = {
 /** Marcador sancionado pelo próprio AGT-012 para material não avaliável. */
 const RX_ANALISTA_NAO_AVALIADO = /STATUS\s*:\s*NAO AVALIADO/;
 
+// ---------- ARC-02B.1 · A-03 — SUBSTÂNCIA MÍNIMA PÓS-CABEÇALHO ----------
+const MIN_LETRAS_SECAO = 8;
+const RAZAO_VOGAL_MIN = 0.25;
+const JANELA_LETRAS = 24;
+const RX_LETRA = /[\p{L}]/gu;
+const RX_VOGAL = /[aeiouáéíóúâêîôûãõàèìòù]/giu;
+const SECOES_ISENTAS_SUBSTANCIA = new Set(["NOTA: X/10"]);
+interface LocalizacaoSecao { readonly nome: string; readonly inicio: number; readonly inicioConteudo: number; }
+function localizarSecoes(norm: string, secoes: readonly SecaoContrato[]): LocalizacaoSecao[] {
+  const achados: LocalizacaoSecao[] = [];
+  for (const s of secoes) { const m = s.rx.exec(norm); if (m) achados.push({ nome:s.nome, inicio:m.index, inicioConteudo:m.index+m[0].length }); }
+  achados.sort((a,b)=>a.inicio-b.inicio); return achados;
+}
+function secoesSemSubstancia(norm:string, localizadas:readonly LocalizacaoSecao[]):string[] {
+  const vazias:string[]=[];
+  for(let i=0;i<localizadas.length;i+=1){
+    const sec=localizadas[i]; if(SECOES_ISENTAS_SUBSTANCIA.has(sec.nome)) continue;
+    const fim=i+1<localizadas.length?localizadas[i+1].inicio:norm.length;
+    const trecho=norm.slice(sec.inicioConteudo,fim); const letrasArr=trecho.match(RX_LETRA)??[]; const letras=letrasArr.length;
+    const janela=letrasArr.slice(0,JANELA_LETRAS).join(" "); const vogais=(janela.match(RX_VOGAL)??[]).length;
+    const temSubstancia=letras>=MIN_LETRAS_SECAO && vogais>=Math.ceil(Math.min(letras,JANELA_LETRAS)*RAZAO_VOGAL_MIN);
+    if(!temSubstancia) vazias.push(sec.nome);
+  } return vazias;
+}
+
 export interface VeredictoConformidade {
   readonly conforme: boolean;
   /** "eco" | "secoes-faltantes" | null */
-  readonly motivo: "eco" | "secoes-faltantes" | null;
+  readonly motivo: "eco" | "secoes-faltantes" | "secoes-vazias" | null;
   /** Seções ausentes (rótulos canônicos do contrato) — mensagem honesta. */
   readonly faltam: readonly string[];
   /** true quando a resposta é eco da instrução (contrato repetido). */
@@ -211,10 +236,12 @@ export function verificarConformidadeContrato(
   }
   const norm = normalizarParaVerificacao(texto);
   const faltam = secoes.filter((s) => !s.rx.test(norm)).map((s) => s.nome);
-  return {
-    conforme: faltam.length === 0,
-    motivo: faltam.length === 0 ? null : "secoes-faltantes",
-    faltam,
-    ecoDetectado: false,
-  };
+  if (faltam.length > 0) {
+    return { conforme: false, motivo: "secoes-faltantes", faltam, ecoDetectado: false };
+  }
+  const vazias = secoesSemSubstancia(norm, localizarSecoes(norm, secoes));
+  if (vazias.length > 0) {
+    return { conforme: false, motivo: "secoes-vazias", faltam: vazias, ecoDetectado: false };
+  }
+  return { conforme: true, motivo: null, faltam: [], ecoDetectado: false };
 }
