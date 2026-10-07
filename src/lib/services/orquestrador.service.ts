@@ -24,6 +24,23 @@ export interface EtapaOrquestracao {
   iteracao?: number;
   erro?: string; // P0.1 — mensagem honesta de falha (sem conteúdo simulado)
   diagnostico?: DiagnosticoEtapa; // P2-1 — camada 2 (detalhe técnico colapsável)
+  /** ARC-02B · aditivo/whitelist: veredito estrutural do contrato da etapa
+   *  (gerado pelo NOSSO código — distingue "motor sem resposta" de
+   *  "resposta recebida e rejeitada pelo contrato", ARC-02B.2/UI-B). */
+  conformidade?: {
+    readonly status: "conforme" | "fora-do-contrato";
+    readonly motivo?: string;
+    readonly faltam?: readonly string[];
+    /** ARC-02B.3 · FASE 1 — prévia diagnóstica capada/sanitizada do output
+     *  rejeitado (só quando provider respondeu texto + contrato recusou);
+     *  exibida APENAS na camada técnica colapsável, nunca como resultado. */
+    readonly rejectedOutputPreview?: string;
+    /** ARC-02B.3 · FASE 5: TRANSPORT_SUCCESS_CONTRACT_FAILURE quando o
+     *  provider respondeu mas o contrato recusou (≠ TASK SUCCESS). */
+    readonly classificacao?: "TRANSPORT_SUCCESS_CONTRACT_FAILURE";
+  };
+  /** ARC-02B.1 · A-02: dependências obrigatórias indisponíveis (fail-closed). */
+  dependenciasAusentes?: readonly string[];
   /** P4: veredito publicável DETERMINÍSTICO (Claim Guard, não o LLM) */
   veredito?: VereditoAuditoriaEpistemica;
   /** P4.1.2: veredito TEXTUAL do Auditor LLM transcrito (apresentação;

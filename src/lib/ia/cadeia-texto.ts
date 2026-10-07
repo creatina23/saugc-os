@@ -63,7 +63,21 @@ export type SaudeProvider =
   | "quota_limited"
   | "unavailable_for_run";
 
-export type SaudeExecucao = Map<string, SaudeProvider>;
+/** ARC-02B.3 · FASE 4 — saúde com ORIGEM FORENSE: o cooldown não é um
+ *  booleano cego; cada provider sabe QUAL falha (categoria nossa) em QUAL
+ *  etapa o pôs em quarentena. `undefined` para healthy/prior limpo. */
+export interface SaudeRegistro {
+  estado: SaudeProvider;
+  /** categoria NOSSA da falha que pôs o provider nesse estado. */
+  categoriaOrigem?: CategoriaFalhaCascata;
+  /** persona/etapa da cadeia onde a falha ocorreu (rótulo nosso). */
+  etapaOrigem?: string;
+}
+
+/** Compat defensiva: consumidores legados usavam Map<string,string>; a
+ *  leitura tolera valor-string (trata como estado), mas o código só ESCREVE
+ *  o novo formato `SaudeRegistro`. */
+export type SaudeExecucao = Map<string, SaudeRegistro>;
 
 export type TentativaCascata = {
   provider: string; // "Gemini" | "Groq" | "OpenRouter" | "Cerebras" | "Cloudflare"
@@ -74,6 +88,11 @@ export type TentativaCascata = {
   modelo?: string | null; // P3.1: slug do modelo (seguro: não é segredo — é dado técnico público)
   terminoStatus?: string | null; // P3.2: status canônico de término (label nosso)
   saidaTokens?: number | null;   // P3.2: tokens de saída quando o provider informa (número puro)
+  /** ARC-02B.3 · FASE 4 — quando categoria === SKIPPED_PROVIDER_COOLDOWN,
+   *  explica o skip, ex.: "HTTP_429_QUOTA na etapa \"estrategista\"" (rótulos
+   *  NOSSOS: categoria + etapa, nunca texto do provider). Null = skip sem
+   *  origem registrada (compat com consumidores que não passam etapaId). */
+  cooldownOrigem?: string | null;
 };
 
 export type ResultadoCascata =
@@ -97,6 +116,10 @@ export type ResultadoCascata =
 export type OpcoesCascata = {
   temperatura?: number; // default 0.7 (clamp 0..1)
   maxTokens?: number; // default 1024 (clamp 256..4096)
+  /** ARC-02B.3 · FASE 4 — id da etapa (persona) que chamou, rotulado pelo
+   *  consumidor (nosso código). Usado para rastrear origem de cooldown.
+   *  Consumidores legados não passam — saude ainda funciona, sem origem. */
+  etapaId?: string;
   /** Deadline (ms) global DESTA chamada: cada tentativa herda o teto
    *  restante (mínimo 5s). Default: 240s (orçamento P1, ver §9 do FIX). */
   prazoMs?: number;
@@ -1275,8 +1298,18 @@ export async function gerarTextoCascata(
   const providerEmCooldown = (provider: string): boolean => {
     const saude = opcoes.saude;
     if (!saude) return false;
-    const estado = saude.get(provider);
+    const reg = saude.get(provider);
+    const estado: SaudeProvider | undefined = reg && typeof reg === "object" ? reg.estado : (reg as SaudeProvider | undefined);
     return estado === "quota_limited" || estado === "unavailable_for_run";
+  };
+
+  /** ARC-02B.3 · FASE 4: rastreie a origem do cooldown (categoria + etapa)
+   *  para poder explicar "pulado porque [cat] ocorreu na etapa [X]". */
+  const cooldownOrigemDe = (provider: string): string | null => {
+    const reg = opcoes.saude?.get(provider);
+    if (!reg || typeof reg !== "object" || !reg.categoriaOrigem) return null;
+    const etapa = reg.etapaOrigem ? ` na etapa "${reg.etapaOrigem}"` : "";
+    return `${reg.categoriaOrigem}${etapa}`;
   };
   const registrarTentativa = (
     provider: string,
@@ -1290,6 +1323,7 @@ export async function gerarTextoCascata(
         duracaoMs: 0,
         categoria: "SKIPPED_PROVIDER_COOLDOWN",
         status: null,
+        cooldownOrigem: cooldownOrigemDe(provider) ?? null,
       });
       return;
     }
@@ -1304,7 +1338,7 @@ export async function gerarTextoCascata(
       return;
     }
     if (resultado.ok === true) {
-      opcoes.saude?.set(provider, "healthy");
+      opcoes.saude?.set(provider, { estado: "healthy" });
       tentativas.push({
         provider,
         redeHouve: true,
@@ -1318,7 +1352,13 @@ export async function gerarTextoCascata(
       return;
     }
     const novoEstado = categoriaParaSaude(resultado.categoria);
-    if (novoEstado) opcoes.saude?.set(provider, novoEstado);
+    if (novoEstado) opcoes.saude?.set(provider, {
+      estado: novoEstado,
+      // ARC-02B.3 · FASE 4: falha com cooldown futuro (categoria NOSSA) —
+      // força intencional mesmo quando o estado não muda (refresh da origem).
+      categoriaOrigem: resultado.categoria,
+      etapaOrigem: opcoes.etapaId,
+    });
     tentativas.push({
       provider,
       redeHouve: true,
@@ -1348,7 +1388,7 @@ export async function gerarTextoCascata(
       };
     }
   } else if (chaveGemini) {
-    console.log("[motor-ia] Gemini: em cooldown nesta execução — skipando");
+    console.log(`[motor-ia] Gemini: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("Gemini") ?? "não registrada"})`);
     registrarTentativa("Gemini", 0, { cooldown: true });
   } else {
     console.log("[motor-ia] sem GEMINI_API_KEY — indo direto pros reservas");
@@ -1385,7 +1425,7 @@ export async function gerarTextoCascata(
       };
     }
   } else if (chaveGroq && providerEmCooldown("Groq")) {
-    console.log("[motor-ia] Groq: em cooldown nesta execução — skipando");
+    console.log(`[motor-ia] Groq: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("Groq") ?? "não registrada"})`);
     registrarTentativa("Groq", 0, { cooldown: true });
   } else {
     if (!chaveGroq) console.log("[motor-ia] Groq: sem GROQ_API_KEY — fora da fila");
@@ -1411,7 +1451,7 @@ export async function gerarTextoCascata(
       };
     }
   } else if (chaveOpenRouter && providerEmCooldown("OpenRouter")) {
-    console.log("[motor-ia] OpenRouter: em cooldown nesta execução — skipando");
+    console.log(`[motor-ia] OpenRouter: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("OpenRouter") ?? "não registrada"})`);
     registrarTentativa("OpenRouter", 0, { cooldown: true });
   } else {
     if (!chaveOpenRouter)
@@ -1449,7 +1489,7 @@ export async function gerarTextoCascata(
       };
     }
   } else if (chaveCerebras && providerEmCooldown("Cerebras")) {
-    console.log("[motor-ia] Cerebras: em cooldown nesta execução — skipando");
+    console.log(`[motor-ia] Cerebras: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("Cerebras") ?? "não registrada"})`);
     registrarTentativa("Cerebras", 0, { cooldown: true });
   } else {
     if (!chaveCerebras)
@@ -1485,7 +1525,7 @@ export async function gerarTextoCascata(
       };
     }
   } else if (cfArmado && providerEmCooldown("Cloudflare")) {
-    console.log("[motor-ia] Cloudflare: em cooldown nesta execução — skipando");
+    console.log(`[motor-ia] Cloudflare: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("Cloudflare") ?? "não registrada"})`);
     registrarTentativa("Cloudflare", 0, { cooldown: true });
   } else {
     if (!cfArmado)
