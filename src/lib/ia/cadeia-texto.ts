@@ -998,3 +998,563 @@ async function chamarOpenRouter(
         status: resposta.status,
         categoria: categorizarStatus(resposta.status),
         retryAfterMs: lerRetryAfterMs(resposta),
+      };
+    }
+    const texto = textoDeRespostaOpenAI(dados);
+    if (!texto) {
+      anotarDetalheIA(dados);
+      return { ok: false, status: 502, categoria: "INVALID_RESPONSE", retryAfterMs: null };
+    }
+    return { ok: true, texto, termino: terminoDeRespostaOpenAI(dados) };
+  } catch (excecao) {
+    console.error(`[motor-ia] Exceção no OpenRouter ${modelo}`);
+    return { ok: false, status: 0, categoria: categorizarExcecao(excecao), retryAfterMs: null };
+  }
+}
+
+// A camada OpenRouter em ação: descobre os free vivos e desfila até 3
+async function gerarViaOpenRouterFree(
+  chave: string,
+  prompt: EntradaPrompt,
+  temperatura: number,
+  maxTokens: number,
+  orc: Orcamento
+): Promise<TentativaInterna> {
+  let candidatos = await descobrirFreeOpenRouter(chave, orc);
+  if (!candidatos.length) return { ok: false, status: null, categoria: "HTTP_404_MODEL" };
+
+  let retentou5xx = false; // P2-2
+  let retentou429 = false; // P2-2
+  for (let tentativa = 0; tentativa < 3 && tentativa < candidatos.length; tentativa += 1) {
+    if (orc.esgotado()) {
+      return { ok: false, status: null, categoria: "TIMEOUT" };
+    }
+    const modelo = candidatos[tentativa];
+    const resultado = await chamarOpenRouter(chave, modelo, prompt, temperatura, maxTokens, orc);
+    if (resultado.ok) {
+      console.log(`[motor-ia] OpenRouter free respondeu: ${modelo}`);
+      // P3.2: término canônico + no máximo 1 continuação no MESMO modelo
+      let termino = resultado.termino;
+      let textoFinal = resultado.texto;
+      if (termino.status === "TRUNCATED_TOKEN_LIMIT") {
+        if (orc.restanteMs() >= ORCAMENTO_MINIMO_CONTINUACAO_MS) {
+          console.log(`[motor-ia] OpenRouter (${modelo}): length — 1 continuação automática`);
+          const cont = await continuarOpenAICompativel(
+            "https://openrouter.ai/api/v1/chat/completions",
+            chave, modelo, prompt, resultado.texto, temperatura, maxTokens, orc,
+            { "HTTP-Referer": "https://anuncia-three.vercel.app", "X-Title": "AnuncIA" }
+          );
+          if (cont) {
+            textoFinal = juntarContinuacao(resultado.texto, cont.texto);
+            termino = cont.termino;
+          } else {
+            console.log("[motor-ia] OpenRouter: continuação falhou — parcial mantido marcado");
+          }
+        } else {
+          console.log("[motor-ia] OpenRouter: length sem orçamento p/ continuação — parcial marcado");
+        }
+      }
+      return {
+        ok: true,
+        texto: textoFinal,
+        motor: `OpenRouter · ${modelo}`,
+        provider: "OpenRouter",
+        modelo,
+        termino,
+      };
+    }
+    if (resultado.ok === false && (resultado.status === 404 || resultado.status === 400)) {
+      // slug morto: hall dos reprovados e re-descobre
+      openRouterFreeReprovados.add(modelo);
+      if (openRouterFreeAprovados) {
+        openRouterFreeAprovados = openRouterFreeAprovados.filter((m) => m !== modelo);
+      }
+      candidatos = (await descobrirFreeOpenRouter(chave, orc)).filter((m) => m !== modelo);
+      if (!candidatos.length) break;
+      tentativa -= 1; // reposiciona pro próximo vivo
+    } else if (resultado.ok === false && resultado.status >= 500 && !retentou5xx && orc.restanteMs() > ESPERA_5XX_MS + 5000) {
+      // P2 Fase 2: 5xx transitório → 1 retentativa com espera curta
+      retentou5xx = true;
+      console.log(`[motor-ia] OpenRouter 5xx transitório — 1 retentativa em ${ESPERA_5XX_MS}ms`);
+      await esperarRespeitando(ESPERA_5XX_MS, orc);
+      tentativa -= 1;
+    } else if (resultado.ok === false && resultado.status === 429 && !retentou429 && valeEsperarRetryAfter(resultado.retryAfterMs, orc)) {
+      // P2 Fase 2: 429 → só espera se Retry-After PEQUENO couber no orçamento
+      retentou429 = true;
+      console.log(`[motor-ia] OpenRouter 429 — Retry-After ${resultado.retryAfterMs}ms respeitado (1 retentativa)`);
+      await esperarRespeitando(resultado.retryAfterMs ?? 0, orc);
+      tentativa -= 1;
+    } else if (resultado.ok === false && resultado.status === 429 && !retentou429) {
+      console.log(`[motor-ia] OpenRouter 429 — sem Retry-After compatível: NÃO esperar`);
+      return { ok: false, status: resultado.status, categoria: resultado.categoria };
+    } else if (resultado.ok === false) {
+      return { ok: false, status: resultado.status, categoria: resultado.categoria };
+    }
+  }
+  return { ok: false, status: 404, categoria: "HTTP_404_MODEL" };
+}
+
+// ---------- Camada 5: Cloudflare Workers AI (P3 — expansão free-first) ----------
+// REST oficial: POST /client/v4/accounts/{ACCOUNT_ID}/ai/run/{model}
+// Auth: Bearer {CLOUDFLARE_API_TOKEN} (token com permissão Workers AI).
+// Free: 10.000 Neurons/dia (hard quota, sem cartão). NÃO usamos discovery:
+// allowance explícita abaixo — mudança de catálogo NUNCA pode escolher um
+// modelo que exija Workers Paid silenciosamente. Modelos pagos conhecidos
+// (Kimi K2.x, GLM 5.x, DeepSeek V4) NÃO constam nesta lista.
+export const CLOUDFLARE_MODELOS_FREE_PERMITIDOS: readonly string[] = [
+  // principal P3.1 (estratégia B): FAILOVER precisa de latência baixa —
+  // 8B instrutivo, ativo, GA, PT aceitável, contexto documentado ≥ ~16k
+  // (cabe a etapa inteira: prompt real ~1-2k tokens + max_tokens 3000).
+  // Free confirmado (Workers Free 10k neurons/dia, sem cartão).
+  "@cf/meta/llama-3.1-8b-instruct",
+  // reserva: família DIFERENTE (proteção contra outage específico de
+  // Llama). "flash" = otimizado p/ latência. Free idem. NB: o 70B
+  // (llama-3.3-70b-instruct-fp8-fast) foi REMOVIDO da allowlist — com
+  // apenas 24k de contexto documentado e latência muito alta, não
+  // justificava o espaço para um provider cuja função é resgatar rápido.
+  "@cf/zai-org/glm-4.7-flash",
+];
+
+function textoDaRespostaCloudflare(dados: unknown): string | null {
+  // formato REST: { success: true, result: { response: "..." } }
+  const raiz = dados as { result?: { response?: unknown } } | null;
+  const texto = raiz?.result?.response;
+  return typeof texto === "string" && texto.trim() ? texto.trim() : null;
+}
+
+async function gerarViaCloudflare(
+  accountId: string,
+  token: string,
+  prompt: EntradaPrompt,
+  temperatura: number,
+  maxTokens: number,
+  orc: Orcamento
+): Promise<TentativaInterna> {
+  const particoes = particionar(prompt); // P4.1.2
+  let retentou5xx = false; // P2-2
+  let retentou429 = false; // P2-2
+  for (let tentativa = 0; tentativa < CLOUDFLARE_MODELOS_FREE_PERMITIDOS.length; tentativa += 1) {
+    if (orc.esgotado()) {
+      return { ok: false, status: null, categoria: "TIMEOUT" };
+    }
+    const modelo = CLOUDFLARE_MODELOS_FREE_PERMITIDOS[tentativa];
+    // FREE GUARD: somente IDs que constam na allowlist explícita (fail-closed)
+    if (!CLOUDFLARE_MODELOS_FREE_PERMITIDOS.includes(modelo)) break; // defensivo; hoje identidade
+    if (!modelo.startsWith("@cf/")) break; // malformado não vaza de casa
+    try {
+      const resposta = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${modelo}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            messages: [
+              // P4.1.2: canal system nativo quando houver particionamento
+              ...(particoes.system ? [{ role: "system", content: particoes.system }] : []),
+              { role: "user", content: particoes.user },
+            ],
+            temperature: temperatura,
+            max_tokens: maxTokens,
+          }),
+          // P3.1: última camada → respeita o ORÇAMENTO REMANESCENTE da
+          // etapa (com margem de 1,5s), nunca o teto artificial dos 20s.
+          signal: orc.sinalRestante(45000),
+        }
+      );
+      const dados: unknown = await resposta.json().catch(() => null);
+      if (resposta.ok) {
+        const texto = textoDaRespostaCloudflare(dados);
+        if (!texto) {
+          anotarDetalheIA(dados);
+          console.error(`[motor-ia] Cloudflare ${modelo} respondeu sem texto utilizável`);
+          return { ok: false, status: 502, categoria: "INVALID_RESPONSE", modelo };
+        }
+        console.log(`[motor-ia] Cloudflare respondeu (${modelo})`);
+        // P3.2: a REST nativa do Workers AI não publica finish_reason/usage
+        // no result — honestamente UNKNOWN_COMPLETION (nunca inventar
+        // COMPLETE). Texto continua truncável ATÉ a soma de max_tokens do
+        // lado de lá; como não há sinal, segue o fluxo como sucesso.
+        const termino = terminoDeRespostaOpenAI(dados);
+        return {
+          ok: true,
+          texto,
+          motor: `Cloudflare · ${modelo}`,
+          provider: "Cloudflare",
+          modelo,
+          termino,
+        };
+      }
+      anotarDetalheIA(dados);
+      console.error(`[motor-ia] Cloudflare ${modelo} recusou. status:`, resposta.status);
+      // FREE GUARD: 402/403 (plan/billing/paid-required) — fail-closed, NUNCA
+      // re-tentar, NUNCA buscar modelo pago alternativo.
+      if (resposta.status === 402 || resposta.status === 403) {
+        return { ok: false, status: resposta.status, categoria: categorizarStatus(resposta.status), modelo };
+      }
+      // 400/404: slug saiu do ar ou input recusado → próximo da allowlist
+      if (resposta.status === 404 || resposta.status === 400) continue;
+      // P2 Fase 2: 5xx transitório → 1 retentativa com espera curta
+      if (resposta.status >= 500 && !retentou5xx && orc.restanteMs() > ESPERA_5XX_MS + 5000) {
+        retentou5xx = true;
+        console.log(`[motor-ia] Cloudflare 5xx transitório — 1 retentativa em ${ESPERA_5XX_MS}ms`);
+        await esperarRespeitando(ESPERA_5XX_MS, orc);
+        tentativa -= 1;
+        continue;
+      }
+      // P2 Fase 2: 429 → Retry-After pequeno ou nada (quota de Neurons)
+      if (resposta.status === 429 && !retentou429) {
+        const raMs = lerRetryAfterMs(resposta);
+        if (valeEsperarRetryAfter(raMs, orc)) {
+          retentou429 = true;
+          console.log(`[motor-ia] Cloudflare 429 — Retry-After ${raMs}ms respeitado (1 retentativa)`);
+          await esperarRespeitando(raMs, orc);
+          tentativa -= 1;
+          continue;
+        }
+        console.log(`[motor-ia] Cloudflare 429 — quota de Neurons incompatível nesta execução: NÃO esperar`);
+      }
+      return {
+        ok: false,
+        status: resposta.status,
+        categoria: categorizarStatus(resposta.status),
+        modelo,
+      };
+    } catch (excecao) {
+      const categoria = categorizarExcecao(excecao);
+      console.error(`[motor-ia] Exceção no Cloudflare ${modelo} (${categoria})`);
+      // P3.1: TIMEOUT do modelo é "falha elegível" — se houver RESERVA
+      // FREE na allowlist e orçamento suficiente (≥7s), tenta o próximo.
+      // Nunca rotaciona para modelo pago (allowlist 100% free, hard-coded).
+      const haReservaFree = tentativa + 1 < CLOUDFLARE_MODELOS_FREE_PERMITIDOS.length;
+      if (categoria === "TIMEOUT" && haReservaFree && orc.restanteMs() >= 7000) {
+        console.log("[motor-ia] Cloudflare: timeout do principal — tentando a RESERVA FREE");
+        continue;
+      }
+      return { ok: false, status: null, categoria, modelo };
+    }
+  }
+  return { ok: false, status: 404, categoria: "HTTP_404_MODEL" };
+}
+
+// ---------- API canônica ----------
+
+/** Espelho da mesa (booleanos — NUNCA as chaves). */
+export function motoresArmados(): { id: string; armado: boolean }[] {
+  return [
+    { id: "gemini", armado: Boolean(process.env.GEMINI_API_KEY) },
+    { id: "groq", armado: Boolean(process.env.GROQ_API_KEY) },
+    { id: "openrouter", armado: Boolean(process.env.OPENROUTER_API_KEY) },
+    { id: "cerebras", armado: Boolean(process.env.CEREBRAS_API_KEY) },
+    // P3: "armado" = account id + token presentes (NUNCA testar/expor valores)
+    {
+      id: "cloudflare",
+      armado: Boolean(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN),
+    },
+  ];
+}
+
+/** Detalhe sanitizado do último erro (sem segredo) — usado na resposta 502. */
+export function detalheSanitizadoUltimoErro(): string | null {
+  return ultimoDetalheMotorIA;
+}
+
+/**
+ * Gera texto desfilando a Mesa (Gemini → Groq → OpenRouter → Cerebras).
+ * ÚNICA implementação de transporte provider do produto a partir daqui.
+ */
+export async function gerarTextoCascata(
+  prompt: EntradaPrompt, // P4.1.2: aceita string (legado) ou { system, user }
+  opcoes: OpcoesCascata = {}
+): Promise<ResultadoCascata> {
+  const inicio = Date.now();
+  const temperatura = pegarTemperatura(opcoes.temperatura);
+  const maxTokens = pegarMaxTokens(opcoes.maxTokens);
+  const orc = criarOrcamento(
+    Number.isFinite(opcoes.prazoMs) ? Math.max(15000, Math.floor(opcoes.prazoMs as number)) : 240000
+  );
+
+  const tentativas: TentativaCascata[] = [];
+
+  // P2 Fase 2: saúde efêmera por EXECUÇÃO (apenas memória deste request; ZERO persistência).
+  // Categoria da falha → estado do provider, nesta execução apenas:
+  const categoriaParaSaude = (categoria: CategoriaFalhaCascata): SaudeProvider | null => {
+    if (categoria === "HTTP_429_QUOTA") return "quota_limited"; // quota esgotada: re-martelar é inútil
+    if (categoria === "HTTP_402_PAYMENT_REQUIRED") return "unavailable_for_run"; // "Payment Required" (não reutilizável nesta execução)
+    // 401/403: credencial sem autorização/permissão (inclui "paid plan required"
+    // da FREE GUARD do Cloudflare) — não se recupera dentro do mesmo request.
+    if (categoria === "HTTP_401" || categoria === "HTTP_403") return "unavailable_for_run";
+    if (categoria === "HTTP_5XX") return "temporary_failure"; // transitório: próxima etapa pode tentar de novo
+    // P3.1: TIMEOUT isolado NÃO é indisponibilidade permanente (pode ser
+    // prompt grande/modelo/latência transitória) — marca transitório e deixa
+    // a etapa seguinte tentar com orçamento novo. NÃO criamos cooldown em
+    // timeout: a última camada já é a última chance, e derrubá-la para toda
+    // a execução só custaria resgates que poderiam ter sucesso em poucos s.
+    if (categoria === "TIMEOUT") return "temporary_failure";
+    return null;
+  };
+  const providerEmCooldown = (provider: string): boolean => {
+    const saude = opcoes.saude;
+    if (!saude) return false;
+    const reg = saude.get(provider);
+    const estado: SaudeProvider | undefined = reg && typeof reg === "object" ? reg.estado : (reg as SaudeProvider | undefined);
+    return estado === "quota_limited" || estado === "unavailable_for_run";
+  };
+
+  /** ARC-02B.3 · FASE 4: rastreie a origem do cooldown (categoria + etapa)
+   *  para poder explicar "pulado porque [cat] ocorreu na etapa [X]". */
+  const cooldownOrigemDe = (provider: string): string | null => {
+    const reg = opcoes.saude?.get(provider);
+    if (!reg || typeof reg !== "object" || !reg.categoriaOrigem) return null;
+    const etapa = reg.etapaOrigem ? ` na etapa "${reg.etapaOrigem}"` : "";
+    return `${reg.categoriaOrigem}${etapa}`;
+  };
+  const registrarTentativa = (
+    provider: string,
+    inicioEtapa: number,
+    resultado: TentativaInterna | { skip: true } | { cooldown: true }
+  ) => {
+    if ("cooldown" in resultado) {
+      tentativas.push({
+        provider,
+        redeHouve: false,
+        duracaoMs: 0,
+        categoria: "SKIPPED_PROVIDER_COOLDOWN",
+        status: null,
+        cooldownOrigem: cooldownOrigemDe(provider) ?? null,
+      });
+      return;
+    }
+    if ("skip" in resultado) {
+      tentativas.push({
+        provider,
+        redeHouve: false,
+        duracaoMs: 0,
+        categoria: "SKIPPED_NO_KEY",
+        status: null,
+      });
+      return;
+    }
+    if (resultado.ok === true) {
+      opcoes.saude?.set(provider, { estado: "healthy" });
+      tentativas.push({
+        provider,
+        redeHouve: true,
+        duracaoMs: Date.now() - inicioEtapa,
+        categoria: "SUCCESS",
+        status: 200,
+        modelo: resultado.modelo ?? null,
+        terminoStatus: resultado.termino.status,
+        saidaTokens: resultado.termino.outputTokens,
+      });
+      return;
+    }
+    const novoEstado = categoriaParaSaude(resultado.categoria);
+    if (novoEstado) opcoes.saude?.set(provider, {
+      estado: novoEstado,
+      // ARC-02B.3 · FASE 4: falha com cooldown futuro (categoria NOSSA) —
+      // força intencional mesmo quando o estado não muda (refresh da origem).
+      categoriaOrigem: resultado.categoria,
+      etapaOrigem: opcoes.etapaId,
+    });
+    tentativas.push({
+      provider,
+      redeHouve: true,
+      duracaoMs: Date.now() - inicioEtapa,
+      categoria: resultado.categoria,
+      status: resultado.status,
+      modelo: resultado.modelo ?? null,
+    });
+  };
+
+  // 1) Gemini
+  const chaveGemini = process.env.GEMINI_API_KEY;
+  if (chaveGemini && !providerEmCooldown("Gemini")) {
+    const t0 = Date.now();
+    const r = await gerarViaGemini(chaveGemini, prompt, temperatura, maxTokens, orc);
+    registrarTentativa("Gemini", t0, r);
+    if (r.ok) {
+      return {
+        ok: true,
+        texto: r.texto,
+        motor: r.motor,
+        provider: r.provider,
+        modelo: r.modelo,
+        termino: r.termino,
+        tentativas,
+        duracaoMs: Date.now() - inicio,
+      };
+    }
+  } else if (chaveGemini) {
+    console.log(`[motor-ia] Gemini: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("Gemini") ?? "não registrada"})`);
+    registrarTentativa("Gemini", 0, { cooldown: true });
+  } else {
+    console.log("[motor-ia] sem GEMINI_API_KEY — indo direto pros reservas");
+    registrarTentativa("Gemini", 0, { skip: true });
+  }
+
+  // 2) Groq
+  const chaveGroq = process.env.GROQ_API_KEY;
+  if (chaveGroq && !orc.esgotado() && !providerEmCooldown("Groq")) {
+    const t0 = Date.now();
+    const r = await gerarViaCompativel(
+      "GROQ_API_KEY",
+      "https://api.groq.com/openai/v1/chat/completions",
+      "https://api.groq.com/openai/v1/models",
+      chaveGroq,
+      prompt,
+      temperatura,
+      maxTokens,
+      ["llama-4", "gpt-oss", "llama-3.3", "qwen", "mistral"],
+      "Groq",
+      orc
+    );
+    registrarTentativa("Groq", t0, r);
+    if (r.ok) {
+      return {
+        ok: true,
+        texto: r.texto,
+        motor: r.motor,
+        provider: r.provider,
+        modelo: r.modelo,
+        termino: r.termino,
+        tentativas,
+        duracaoMs: Date.now() - inicio,
+      };
+    }
+  } else if (chaveGroq && providerEmCooldown("Groq")) {
+    console.log(`[motor-ia] Groq: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("Groq") ?? "não registrada"})`);
+    registrarTentativa("Groq", 0, { cooldown: true });
+  } else {
+    if (!chaveGroq) console.log("[motor-ia] Groq: sem GROQ_API_KEY — fora da fila");
+    registrarTentativa("Groq", 0, { skip: true });
+  }
+
+  // 3) OpenRouter (free auto)
+  const chaveOpenRouter = process.env.OPENROUTER_API_KEY;
+  if (chaveOpenRouter && !orc.esgotado() && !providerEmCooldown("OpenRouter")) {
+    const t0 = Date.now();
+    const r = await gerarViaOpenRouterFree(chaveOpenRouter, prompt, temperatura, maxTokens, orc);
+    registrarTentativa("OpenRouter", t0, r);
+    if (r.ok) {
+      return {
+        ok: true,
+        texto: r.texto,
+        motor: r.motor,
+        provider: r.provider,
+        modelo: r.modelo,
+        termino: r.termino,
+        tentativas,
+        duracaoMs: Date.now() - inicio,
+      };
+    }
+  } else if (chaveOpenRouter && providerEmCooldown("OpenRouter")) {
+    console.log(`[motor-ia] OpenRouter: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("OpenRouter") ?? "não registrada"})`);
+    registrarTentativa("OpenRouter", 0, { cooldown: true });
+  } else {
+    if (!chaveOpenRouter)
+      console.log("[motor-ia] OpenRouter: sem OPENROUTER_API_KEY — fora da fila");
+    registrarTentativa("OpenRouter", 0, { skip: true });
+  }
+
+  // 4) Cerebras (opcional)
+  const chaveCerebras = process.env.CEREBRAS_API_KEY;
+  if (chaveCerebras && !orc.esgotado() && !providerEmCooldown("Cerebras")) {
+    const t0 = Date.now();
+    const r = await gerarViaCompativel(
+      "CEREBRAS_API_KEY",
+      "https://api.cerebras.ai/v1/chat/completions",
+      "https://api.cerebras.ai/v1/models",
+      chaveCerebras,
+      prompt,
+      temperatura,
+      maxTokens,
+      ["llama-3.3", "llama-4", "gpt-oss", "qwen"],
+      "Cerebras",
+      orc
+    );
+    registrarTentativa("Cerebras", t0, r);
+    if (r.ok) {
+      return {
+        ok: true,
+        texto: r.texto,
+        motor: r.motor,
+        provider: r.provider,
+        modelo: r.modelo,
+        termino: r.termino,
+        tentativas,
+        duracaoMs: Date.now() - inicio,
+      };
+    }
+  } else if (chaveCerebras && providerEmCooldown("Cerebras")) {
+    console.log(`[motor-ia] Cerebras: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("Cerebras") ?? "não registrada"})`);
+    registrarTentativa("Cerebras", 0, { cooldown: true });
+  } else {
+    if (!chaveCerebras)
+      console.log("[motor-ia] Cerebras: sem CEREBRAS_API_KEY — fora da fila (opcional)");
+    registrarTentativa("Cerebras", 0, { skip: true });
+  }
+
+  // 5) Cloudflare Workers AI (P3 — expansão free-first; ADICIONAL, não substitui)
+  const cfAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const cfApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const cfArmado = Boolean(cfAccountId && cfApiToken);
+  if (cfArmado && !orc.esgotado() && !providerEmCooldown("Cloudflare")) {
+    const t0 = Date.now();
+    const r = await gerarViaCloudflare(
+      cfAccountId as string,
+      cfApiToken as string,
+      prompt,
+      temperatura,
+      maxTokens,
+      orc
+    );
+    registrarTentativa("Cloudflare", t0, r);
+    if (r.ok) {
+      return {
+        ok: true,
+        texto: r.texto,
+        motor: r.motor,
+        provider: r.provider,
+        modelo: r.modelo,
+        termino: r.termino,
+        tentativas,
+        duracaoMs: Date.now() - inicio,
+      };
+    }
+  } else if (cfArmado && providerEmCooldown("Cloudflare")) {
+    console.log(`[motor-ia] Cloudflare: em cooldown nesta execução — skipando (origem: ${cooldownOrigemDe("Cloudflare") ?? "não registrada"})`);
+    registrarTentativa("Cloudflare", 0, { cooldown: true });
+  } else {
+    if (!cfArmado)
+      console.log("[motor-ia] Cloudflare: sem CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN — fora da fila (opcional)");
+    registrarTentativa("Cloudflare", 0, { skip: true });
+  }
+
+  // Fail-closed:
+  //  - houve tentativa real OU skip por cooldown (há chave, mas o provider já
+  //    provou indisponibilidade NESTA execução) → ALL_PROVIDERS_UNAVAILABLE
+  //    (agregado; categorias originais preservadas em `tentativas`)
+  //  - nenhuma chave plantada → SKIPPED_NO_KEY (preserva a compatibilidade
+  //    da rota /api/ia: 503 "nenhuma chave")
+  const houveTentativaReal = tentativas.some((t) => t.redeHouve === true);
+  const houveCooldown = tentativas.some((t) => t.categoria === "SKIPPED_PROVIDER_COOLDOWN");
+  const categoriaFinal: CategoriaFalhaCascata =
+    houveTentativaReal || houveCooldown
+      ? "ALL_PROVIDERS_UNAVAILABLE"
+      : "SKIPPED_NO_KEY";
+
+  console.error(
+    "[motor-ia] TODOS os motores falharam. fila:",
+    tentativas.map((t) => `${t.provider}→${t.categoria}`).join(" | ")
+  );
+
+  return {
+    ok: false,
+    tentativas,
+    categoriaFinal,
+    duracaoMs: Date.now() - inicio,
+  };
+}
