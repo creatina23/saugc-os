@@ -79,6 +79,19 @@ export interface EtapaOrquestracao {
     readonly status: "conforme" | "fora-do-contrato";
     readonly motivo?: string;
     readonly faltam?: readonly string[];
+    /** ARC-02B.3 · FASE 1 — prévia DIAGNÓSTICA capada + sanitizada do
+     *  output que o contrato rejeitou (só quando o provider respondeu
+     *  texto + contrato recusou). Destino EXCLUSIVO: camada técnica
+     *  colapsável da rota autenticada. NUNCA entra em `resultado`, em
+     *  repasse (working context) ou em qualquer texto de autoridade —
+     *  e NÃO é persistida em store/raw de cliente. */
+    readonly rejectedOutputPreview?: string;
+    /** ARC-02B.3 · FASE 5 — classificação canônica do evento. Só presente
+     *  quando status="fora-do-contrato": o transporte chegou com texto
+     *  (TRANSPORT_SUCCESS) mas o contrato recusou (CONTRACT_FAILURE) —
+     *  NÃO é TASK SUCCESS. Registro estrutural destinado ao futuro
+     *  Provider Capability Routing (não roteia nada hoje). */
+    readonly classificacao?: "TRANSPORT_SUCCESS_CONTRACT_FAILURE";
   };
   /** P4: veredito publicável DETERMINÍSTICO do Claim Guard (calculado pela
    *  máquina a partir dos achados — o texto do Auditor não o decide). */
@@ -141,6 +154,11 @@ export interface TentativaDiagnostico {
   readonly terminoStatus?: string | null;
   /** P3.2: tokens de saída quando informados (número puro). */
   readonly saidaTokens?: number | null;
+  /** ARC-02B.3 · FASE 4 — por que o provider foi pulado nesta execução
+   *  (rótulo NOSSO composto de categoria+etapa da falha que causou o
+   *  cooldown, ambas geradas pelo nosso código; nunca texto do provider).
+   *  Presente só em tentativas SKIPPED_PROVIDER_COOLDOWN. */
+  readonly cooldownOrigem?: string | null;
 }
 
 export interface DiagnosticoEtapa {
@@ -157,6 +175,21 @@ export interface DiagnosticoEtapa {
   readonly ecoBlocosAmbiguosPreservados?: number;
   readonly repasseCharsAntes?: number;
   readonly repasseCharsDepois?: number;
+  /** ARC-02B.3 · FASE 2 — telemetria sanitizada do pacote enviado ao
+   *  provider nesta etapa. Apenas COMPOSIÇÃO/TAMANHO (nosso código mediu);
+   *  NUNCA texto/prompt/secrets. `EstimativaTokensCh4` é rótulo explícito
+   *  de estimativa (~4 chars/token), não valor do provider. */
+  readonly payload?: TelemetriaPayloadEtapa;
+}
+
+export interface TelemetriaPayloadEtapa {
+  readonly systemChars: number;
+  readonly userChars: number;
+  readonly totalChars: number;
+  readonly blocosDados: number;
+  readonly charsPorBloco: readonly number[];
+  readonly EstimativaTokensCh4: number;
+  readonly maxTokensSolicitado: number;
 }
 
 export interface ResultadoPipeline {
@@ -186,6 +219,27 @@ export const LIMITE_CARACTERES_SAIDA = 2000;
 // para preservar import sites existentes (harness, view).
 
 import { META_AGENTES_PIPELINE } from "../agentes/pipeline";
+/** ARC-02B.3 · FASE 1 — gera a prévia diagnóstica do output rejeitado.
+ *  Cap de tamanho + redação de padrões de secret (defesa em profundidade:
+ *  se o provider ecoasse uma chave no corpo, ela NÃO atravessa à UI).
+ *  A UI exibe sob rótulo explícito "RESPOSTA REJEITADA". */
+export const CAP_REJEITADO_PREVIEW_CHARS = 600;
+export function previewRejeitadoDiagnostico(raw: string): string {
+  const PADROES_SECRET: readonly RegExp[] = [
+    /sk-[A-Za-z0-9_-]{16,}/g,           // OpenAI / OpenRouter
+    /sk-ant-[A-Za-z0-9_-]{16,}/g,       // Anthropic
+    /gsk_[A-Za-z0-9_-]{16,}/g,          // Groq
+    /AIza[0-9A-Za-z_-]{20,}/g,          // Google
+    /ghp_[A-Za-z0-9]{16,}/g,            // GitHub (defesa genérica)
+    /Bearer\s+[A-Za-z0-9._~-]{16,}/g,   // Authorization vazado no corpo
+  ];
+  let limpo = raw;
+  for (const re of PADROES_SECRET) limpo = limpo.replace(re, "[REDACTED-POSSIVEL-SECRET]");
+  return limpo.length > CAP_REJEITADO_PREVIEW_CHARS
+    ? limpo.slice(0, CAP_REJEITADO_PREVIEW_CHARS) + "…[capado]"
+    : limpo;
+}
+
 import { higienizarRepasse, diagnosticoEco } from "./repasse";
 import {
   calcularStatusGeral,
@@ -349,8 +403,13 @@ export async function executarPipeline(
     // cobre as 6 personas da cadeia (assert em T1/harnesses).
     const dependencias =
       DEPENDENCIAS_ETAPAS[persona.id] ?? anteriores.map((a) => a.etapaId);
+
     // ARC-02B.1 · A-02 FAIL-CLOSED DE DEPENDÊNCIA OBRIGATÓRIA (R2–R4):
-    // o filtro acima SELECIONA; aqui se EXIGE presença.
+    // o filtro acima SELECIONA; aqui se EXIGE presença. Etapa cuja
+    // dependência obrigatória falhou/não existe NÃO executa como operação
+    // normal: sai em "erro" degradado-explícito, com as ausências
+    // registradas deterministicamente; nenhum conteúdo é simulado e a
+    // trilha auditável dos que executaram permanece íntegra (raw intocado).
     const ausentes = dependencias.filter(
       (dep) => !anteriores.some((a) => a.etapaId === dep)
     );
@@ -359,7 +418,7 @@ export async function executarPipeline(
       etapa.resultado = "";
       etapa.erro = `Dependência(s) obrigatória(s) indisponível(is): ${ausentes.join(", ")} — etapa NÃO executada (cadeia estruturalmente quebrada, fail-closed ARC-02B.1). Nenhum conteúdo foi simulado.`;
       etapa.dependenciasAusentes = ausentes;
-      continue;
+      continue; // não entra no repasse de ninguém (R12)
     }
 
     const anterioresPermitidos = anteriores.filter((a) =>
@@ -433,6 +492,12 @@ export async function executarPipeline(
         status: "fora-do-contrato",
         motivo: conformidade.motivo ?? undefined,
         faltam: [...conformidade.faltam],
+        // ARC-02B.3 · FASE 1: o provider RESPONDEU texto e o contrato
+        // recusou — a prévia é a única evidência preservada do raw.
+        rejectedOutputPreview: previewRejeitadoDiagnostico(raw),
+        // ARC-02B.3 · FASE 5: resposta chegou + contrato recusou =
+        // TRANSPORT_SUCCESS_CONTRACT_FAILURE (distinto de TASK SUCCESS).
+        classificacao: "TRANSPORT_SUCCESS_CONTRACT_FAILURE",
       };
       continue; // T9: downstream NÃO consome artefato inválido como concluído
     }
@@ -501,7 +566,10 @@ export async function executarPipeline(
   }
 
   const etapasComErro = etapas.filter((e) => e.status === "erro").length;
-  // ARC-02B.1 · A-02/R5: cadeia estruturalmente quebrada nunca é sucesso.
+  // ARC-02B.1 · A-02/R5: cadeia ESTRUTURALMENTE QUEBRADA (qualquer etapa
+  // com dependência obrigatória ausente) NUNCA é sucesso — ok:false
+  // honesto com a lista das etapas degradadas. A trilha auditável dos
+  // executados fica íntegra em `etapas` (raw intocado).
   const degradadas = etapas.filter((e) => (e.dependenciasAusentes?.length ?? 0) > 0);
   if (degradadas.length > 0) {
     return {
