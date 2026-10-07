@@ -63,7 +63,9 @@ const STATUS_TEXTO: Record<EtapaOrquestracao["status"], string> = {
 /** ARC-02B.2 · UI TRUTHFULNESS: o rótulo "Sem resposta do motor" SÓ vale
  *  quando o provedor realmente não respondeu (texto:null). ``status=erro``
  *  com o provider em SUCCESS = resposta rejeitada pelo contrato da etapa
- *  (B); dependências ausentes = fail-closed estrutural (C). */
+ *  (B); dependências ausentes = fail-closed estrutural (C). Os três estados
+ *  ficam distintos; a mensagem detalhada `etapa.erro` e o raw/audit trail
+ *  (camada 2 de diagnóstico) permanecem intactos abaixo. */
 function statusTextoEtapa(etapa: EtapaOrquestracao): string {
   if (etapa.status !== "erro") return STATUS_TEXTO[etapa.status];
   if ((etapa.dependenciasAusentes?.length ?? 0) > 0)
@@ -325,6 +327,11 @@ export function OrquestradorView() {
                                 </span>
                               )}
                               <span className="font-mono text-muted-foreground">{tentativa.duracaoMs.toLocaleString("pt-BR")} ms</span>
+                              {tentativa.cooldownOrigem && (
+                                <span className="font-mono text-muted-foreground">
+                                  · Pulado porque {tentativa.cooldownOrigem}
+                                </span>
+                              )}
                             </div>
                           ))}
                           <div className="pt-1 border-t border-border/30">
@@ -340,6 +347,18 @@ export function OrquestradorView() {
                           )}
                           {etapa.diagnostico.fila && (
                             <div className="font-mono text-muted-foreground break-all">Fila: {etapa.diagnostico.fila}</div>
+                          )}
+                          {etapa.diagnostico.payload && (
+                            <div className="font-mono text-muted-foreground">
+                              Pacote enviado ao provider:{" "}
+                              {etapa.diagnostico.payload.totalChars.toLocaleString("pt-BR")} caracteres
+                              (sistema: {etapa.diagnostico.payload.systemChars.toLocaleString("pt-BR")} ·
+                              dados: {etapa.diagnostico.payload.userChars.toLocaleString("pt-BR")}) ·{" "}
+                              {etapa.diagnostico.payload.blocosDados} bloco(s) de dados ·
+                              resposta solicitada: {etapa.diagnostico.payload.maxTokensSolicitado.toLocaleString("pt-BR")} tokens ·
+                              entrada: ~{etapa.diagnostico.payload.EstimativaTokensCh4.toLocaleString("pt-BR")} tokens
+                              (ESTIMATIVA ~4 chars/token, medida pelo nosso código — não é valor do provider)
+                            </div>
                           )}
                           <div className="font-mono text-muted-foreground">
                             Duração total: {etapa.diagnostico.duracaoMs.toLocaleString("pt-BR")} ms
@@ -362,6 +381,25 @@ export function OrquestradorView() {
                             </div>
                           )}
                         </div>
+                      </details>
+                    )}
+                    {etapa.conformidade?.rejectedOutputPreview && (
+                      <details className="rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-[11px]">
+                        <summary className="cursor-pointer select-none font-semibold text-warning">
+                          Resposta rejeitada — ver conteúdo recebido{" "}
+                          <span className="font-normal text-muted-foreground">
+                            (prévia diagnóstica; recusada pelo contrato — não é entrega e não alimentou a cadeia)
+                          </span>
+                        </summary>
+                        {etapa.conformidade.classificacao && (
+                          <p className="font-mono text-[10px] text-muted-foreground mt-2 m-0">
+                            Classificação: {etapa.conformidade.classificacao} — o provedor respondeu
+                            texto (transporte ok), mas o conteúdo não cumpriu o contrato (não conta como tarefa concluída).
+                          </p>
+                        )}
+                        <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-muted-foreground">
+                          {etapa.conformidade.rejectedOutputPreview}
+                        </pre>
                       </details>
                     )}
                     {etapa.resultado && (
