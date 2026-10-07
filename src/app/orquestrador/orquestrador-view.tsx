@@ -60,6 +60,22 @@ const STATUS_TEXTO: Record<EtapaOrquestracao["status"], string> = {
   erro: "Sem resposta do motor",
 };
 
+/** ARC-02B.2 · UI TRUTHFULNESS: o rótulo "Sem resposta do motor" SÓ vale
+ *  quando o provedor realmente não respondeu (texto:null). ``status=erro``
+ *  com o provider em SUCCESS = resposta rejeitada pelo contrato da etapa
+ *  (B); dependências ausentes = fail-closed estrutural (C). */
+function statusTextoEtapa(etapa: EtapaOrquestracao): string {
+  if (etapa.status !== "erro") return STATUS_TEXTO[etapa.status];
+  if ((etapa.dependenciasAusentes?.length ?? 0) > 0)
+    return "Bloqueada: dependência anterior ausente";
+  if (
+    etapa.diagnostico?.categoriaFinal === "SUCCESS" ||
+    etapa.conformidade?.status === "fora-do-contrato"
+  )
+    return "Resposta recebida, mas rejeitada pelo contrato da etapa";
+  return STATUS_TEXTO.erro;
+}
+
 const STATUS_BADGE: Record<EtapaOrquestracao["status"], "outline" | "success" | "warning" | "secondary"> = {
   pendente: "secondary",
   processando: "outline",
@@ -275,7 +291,7 @@ export function OrquestradorView() {
                       </h3>
                       <span className="flex shrink-0 items-center gap-1.5">
                         {etapa.resultado && <BotaoCopiar texto={etapa.resultado} />}
-                        <Badge variant={STATUS_BADGE[etapa.status]}>{STATUS_TEXTO[etapa.status]}</Badge>
+                        <Badge variant={STATUS_BADGE[etapa.status]}>{statusTextoEtapa(etapa)}</Badge>
                       </span>
                     </header>
                     {etapa.erro && (
