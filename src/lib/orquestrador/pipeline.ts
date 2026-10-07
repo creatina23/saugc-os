@@ -67,6 +67,10 @@ export interface EtapaOrquestracao {
   nota?: number;
   iteracao?: number;
   erro?: string; // mensagem HONESTA quando o motor não responde (C-17)
+  /** ARC-02B.1 · A-02 (aditivo, whitelist): dependências obrigatórias
+   *  indisponíveis no momento da execução — registro determinístico da
+   *  execução degradada (fail-closed). Ausente/vazio = execução normal. */
+  dependenciasAusentes?: readonly string[];
   /** ARC-02B · P3 (aditivo, whitelist): veredito estrutural do contrato
    *  (seções faltantes/eco gerados pelo NOSSO código — nunca texto do
    *  provider). "conforme" não afirma qualidade; apenas que o contrato
@@ -345,6 +349,19 @@ export async function executarPipeline(
     // cobre as 6 personas da cadeia (assert em T1/harnesses).
     const dependencias =
       DEPENDENCIAS_ETAPAS[persona.id] ?? anteriores.map((a) => a.etapaId);
+    // ARC-02B.1 · A-02 FAIL-CLOSED DE DEPENDÊNCIA OBRIGATÓRIA (R2–R4):
+    // o filtro acima SELECIONA; aqui se EXIGE presença.
+    const ausentes = dependencias.filter(
+      (dep) => !anteriores.some((a) => a.etapaId === dep)
+    );
+    if (ausentes.length > 0) {
+      etapa.status = "erro";
+      etapa.resultado = "";
+      etapa.erro = `Dependência(s) obrigatória(s) indisponível(is): ${ausentes.join(", ")} — etapa NÃO executada (cadeia estruturalmente quebrada, fail-closed ARC-02B.1). Nenhum conteúdo foi simulado.`;
+      etapa.dependenciasAusentes = ausentes;
+      continue;
+    }
+
     const anterioresPermitidos = anteriores.filter((a) =>
       dependencias.includes(a.etapaId)
     );
@@ -409,7 +426,9 @@ export async function executarPipeline(
       etapa.erro =
         conformidade.motivo === "eco"
           ? `Resposta recebida, mas é eco da instrução do contrato, não entrega (${persona.id}). Não tratada como conclusão.`
-          : `Resposta fora do contrato AGT (${persona.id}) — faltam seções: ${conformidade.faltam.join(", ")}. Não tratada como entrega.`;
+          : conformidade.motivo === "secoes-vazias"
+            ? `Resposta com cabeçalhos, mas sem conteúdo substantivo nas seções: ${conformidade.faltam.join(", ")} (${persona.id}). Cabeçalho ≠ entrega; não tratada como conclusão.`
+            : `Resposta fora do contrato AGT (${persona.id}) — faltam seções: ${conformidade.faltam.join(", ")}. Não tratada como entrega.`;
       etapa.conformidade = {
         status: "fora-do-contrato",
         motivo: conformidade.motivo ?? undefined,
@@ -482,6 +501,16 @@ export async function executarPipeline(
   }
 
   const etapasComErro = etapas.filter((e) => e.status === "erro").length;
+  // ARC-02B.1 · A-02/R5: cadeia estruturalmente quebrada nunca é sucesso.
+  const degradadas = etapas.filter((e) => (e.dependenciasAusentes?.length ?? 0) > 0);
+  if (degradadas.length > 0) {
+    return {
+      ok: false,
+      etapas,
+      erro: `Cadeia estruturalmente quebrada: ${degradadas.map((e) => e.id).join(", ")} executaram sem dependência obrigatória. O resultado global NÃO é sucesso (fail-closed ARC-02B.1) — nenhum conteúdo foi simulado.`,
+      ...(entendimento ? { entendimento: resumirEntendimento(entendimento) } : {}),
+    };
+  }
   if (etapasComErro === etapas.length) {
     return {
       ok: false,
