@@ -81,16 +81,43 @@ export function normalizarParaVerificacao(texto: string): string {
   return texto
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\*\*?([^*\n]+)\*\*?/g, "$1")
+    .replace(/\r/g, "")
+    // feat: marcacao de negrito (pares ** e __) — se o interior nao acabar
+    // em delimitador, devolve ":" (cabecalho-like real-world: "**CABECALHO**
+    // conteudo" com negrito fazendo o delimitador). Conteudo tocado so no
+    // fechamento do par; ":" nao e letra, nao afeta medicao de substancia.
+    .replace(/\*\*([^*\n]+)\*\*/g, (_m, inner: string) => (/[:\u2013\u2014-]\s*$/.test(inner) ? inner : inner + ":"))
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, (_m, inner: string) => (/[:\u2013\u2014-]\s*$/.test(inner) ? inner : inner + ":"))
+    .replace(/_([^_\n]+)_/g, "$1")
     .replace(/[ \t]+/g, " ")
     .toUpperCase();
 }
 
-/** Cabeçalho de seção tolerante: aceita prefixo de lista/markdown e
- *  variações de espaço internas; exige ":" final no mesmo cabeçalho. */
+/** ARC-02B.2 · REAL-WORLD TOLERANT CONTRACT (H3, causa-raiz comprovada):
+ *  o ":" final do cabeçalho deixa de ser OBRIGATÓRIO — mas SÓ quando o
+ *  cabeçalho encerra a linha (`MAPA DO CONTEXTO\n`). Com conteúdo INLINE
+ *  na mesma linha, exige-se delimitador — `:` ou travessão `—/–/-` idioma-
+ *  grafo real de LLM (`SEÇÃO: conteúdo` / `SEÇÃO — conteúdo`). Assim:
+ *   · formas reais de LLM ("**SEÇÃO**", "## SEÇÃO", "1. SEÇÃO", a seção
+ *     pura numa linha, com/sem dois-pontos, prefixo emoji/símbolo) funcionam;
+ *   · prosa que apenas COMEÇA com o nome da seção ("MAPA DO CONTEXTO é...")
+ *     NÃO vira cabeçalho (fronteira determinística conservada);
+ *   · rejeição de vazio/"-" /lixo permanece a cargo da SUBSTÂNCIA mínima
+ *     pós-cabeçalho (ARC-02B.1 · A-03) — cabeçalho ≠ entrega.
+ *  Prefixo aceito: marcadores markdown/lista, numeração, parênteses e
+ *  símbolos Unicode (emoji) — tudo que NÃO é letra, antes do nome. */
 function rxSecao(asciiPattern: string): RegExp {
-  const flex = asciiPattern.replace(/ /g, "\\s+");
-  return new RegExp(`(^|\\n)[#>*\\-\\u2022\\d. )]*${flex}[ \\t]*:`, "m");
+  return rxCabecalho(asciiPattern.replace(/ /g, "\\s+"));
+}
+
+/** Cabeçalho tolerante (ARC-02B.2) a partir de um NÚCLEO regex já ASCII. */
+function rxCabecalho(core: string): RegExp {
+  return new RegExp(
+    `(^|\\n)[#>*\\-\\u2022\\d. )\\p{S}]*${core}` +
+      `(?:[ \\t]*[:\\u2013\\u2014-]|[ \\t]*(?=\\n|$))`,
+    "mu"
+  );
 }
 
 /** As seções derivam DO PRÓPRIO bloco SAÍDA: de cada contrato (verbatim
@@ -107,7 +134,7 @@ const SECOES: Readonly<Record<string, readonly SecaoContrato[]>> = {
   estrategista: [
     { nome: "OBJETIVO E RESTRIÇÕES", rx: rxSecao("OBJETIVO E RESTRICOES") },
     { nome: "DIAGNÓSTICO DO FUNIL", rx: rxSecao("DIAGNOSTICO DO FUNIL") },
-    { nome: "MÉTRICA-MESTRE", rx: /(^|\n)[#>*\-•\d. )]*METRICA\s*-\s*MESTRE[ \t]*:/m },
+    { nome: "MÉTRICA-MESTRE", rx: rxCabecalho("METRICA\\s*[-\\u2013\\u2014]\\s*MESTRE") },
     { nome: "HIPÓTESES DE CRESCIMENTO", rx: rxSecao("HIPOTESES DE CRESCIMENTO") },
     { nome: "PRIORIDADE", rx: rxSecao("PRIORIDADE") },
     { nome: "PLANO DE TESTE", rx: rxSecao("PLANO DE TESTE") },
@@ -116,9 +143,9 @@ const SECOES: Readonly<Record<string, readonly SecaoContrato[]>> = {
   copywriter: [
     { nome: "DIAGNÓSTICO", rx: rxSecao("DIAGNOSTICO") },
     { nome: "MUDANÇA DE CRENÇA", rx: rxSecao("MUDANCA DE CRENCA") },
-    { nome: "HOOKS (5)", rx: /(^|\n)[#>*\-•\d. )]*HOOKS\s*\(\s*5\s*\)[ \t]*:/m },
-    { nome: "HEADLINES (3)", rx: /(^|\n)[#>*\-•\d. )]*HEADLINES\s*\(\s*3\s*\)[ \t]*:/m },
-    { nome: "CTAS (3)", rx: /(^|\n)[#>*\-•\d. )]*CTAS\s*\(\s*3\s*\)[ \t]*:/m },
+    { nome: "HOOKS (5)", rx: rxCabecalho("HOOKS\\s*\\(\\s*5\\s*\\)") },
+    { nome: "HEADLINES (3)", rx: rxCabecalho("HEADLINES\\s*\\(\\s*3\\s*\\)") },
+    { nome: "CTAS (3)", rx: rxCabecalho("CTAS\\s*\\(\\s*3\\s*\\)") },
     { nome: "ROTEIRO UGC", rx: rxSecao("ROTEIRO UGC") },
     { nome: "MAIS FORTE", rx: rxSecao("MAIS FORTE") },
     { nome: "PONTOS A VALIDAR", rx: rxSecao("PONTOS A VALIDAR") },
@@ -154,34 +181,79 @@ const SECOES: Readonly<Record<string, readonly SecaoContrato[]>> = {
 /** Marcador sancionado pelo próprio AGT-012 para material não avaliável. */
 const RX_ANALISTA_NAO_AVALIADO = /STATUS\s*:\s*NAO AVALIADO/;
 
-// ---------- ARC-02B.1 · A-03 — SUBSTÂNCIA MÍNIMA PÓS-CABEÇALHO ----------
+// ---------- ARC-02B.1 · A-03 — SUBSTÂNCIA MÍNIMA PÓS-CABEÇALHO (R6–R9) ----------
+// Presença de cabeçalho ≠ entrega. Para CADA seção obrigatória, o conteúdo
+// entre o seu cabeçalho e o próximo (ou EOF) precisa de ENTREGA substantiva
+// MÍNIMA, provada deterministicamente — sem LLM, sem semântica pesada:
+//   · MIN_LETRAS_SECAO letras UNICODE (rejeita: vazio, whitespace, pontuação,
+//     somente marcador/lista, traço);
+//   · razão de vogais ≥ RAZAO_VOGAL_MIN (rejeita lixo trivial de teclado
+//     tipo "asdf qwer", PT/EN reais — mesmo telegráficos — são vocálicos).
+// Exceção: "NOTA: X/10" é marcador de hard-contract — a entrega dela é o
+// próprio número (não se exige prosa ao redor).
 const MIN_LETRAS_SECAO = 8;
 const RAZAO_VOGAL_MIN = 0.25;
+/** Nº de letras (Unicode) examinadas para a razão de vogais — medida na
+ *  cabeça do conteúdo, não no inteiro (preenchedores longos não mascaram). */
 const JANELA_LETRAS = 24;
 const RX_LETRA = /[\p{L}]/gu;
 const RX_VOGAL = /[aeiouáéíóúâêîôûãõàèìòù]/giu;
+
+/** Seções cujo conteúdo é marcador por contrato — isentas de substância. */
 const SECOES_ISENTAS_SUBSTANCIA = new Set(["NOTA: X/10"]);
-interface LocalizacaoSecao { readonly nome: string; readonly inicio: number; readonly inicioConteudo: number; }
+
+interface LocalizacaoSecao {
+  readonly nome: string;
+  /** índice do INÍCIO do cabeçalho no texto normalizado */
+  readonly inicio: number;
+  /** índice do FIM do cabeçalho (início do conteúdo) no texto normalizado */
+  readonly inicioConteudo: number;
+}
+
+/** Localiza (em `norm`, já normalizado) cada seção presente (1ª ocorrência);
+ *  retorna ordenado por posição no texto. */
 function localizarSecoes(norm: string, secoes: readonly SecaoContrato[]): LocalizacaoSecao[] {
   const achados: LocalizacaoSecao[] = [];
-  for (const s of secoes) { const m = s.rx.exec(norm); if (m) achados.push({ nome:s.nome, inicio:m.index, inicioConteudo:m.index+m[0].length }); }
-  achados.sort((a,b)=>a.inicio-b.inicio); return achados;
+  for (const s of secoes) {
+    const m = s.rx.exec(norm);
+    if (m) {
+      achados.push({ nome: s.nome, inicio: m.index, inicioConteudo: m.index + m[0].length });
+    }
+  }
+  achados.sort((a, b) => a.inicio - b.inicio);
+  return achados;
 }
-function secoesSemSubstancia(norm:string, localizadas:readonly LocalizacaoSecao[]):string[] {
-  const vazias:string[]=[];
-  for(let i=0;i<localizadas.length;i+=1){
-    const sec=localizadas[i]; if(SECOES_ISENTAS_SUBSTANCIA.has(sec.nome)) continue;
-    const fim=i+1<localizadas.length?localizadas[i+1].inicio:norm.length;
-    const trecho=norm.slice(sec.inicioConteudo,fim); const letrasArr=trecho.match(RX_LETRA)??[]; const letras=letrasArr.length;
-    const janela=letrasArr.slice(0,JANELA_LETRAS).join(" "); const vogais=(janela.match(RX_VOGAL)??[]).length;
-    const temSubstancia=letras>=MIN_LETRAS_SECAO && vogais>=Math.ceil(Math.min(letras,JANELA_LETRAS)*RAZAO_VOGAL_MIN);
-    if(!temSubstancia) vazias.push(sec.nome);
-  } return vazias;
+
+/** Lista as seções PRESENTES cujo conteúdo falta substância mínima:
+ *  conteúdo = texto entre o fim do cabeçalho próprio e o INÍCIO do
+ *  cabeçalho seguinte (exato, independente do conteúdo). */
+function secoesSemSubstancia(
+  norm: string,
+  localizadas: readonly LocalizacaoSecao[]
+): string[] {
+  const vazias: string[] = [];
+  for (let i = 0; i < localizadas.length; i += 1) {
+    const sec = localizadas[i];
+    if (SECOES_ISENTAS_SUBSTANCIA.has(sec.nome)) continue;
+    const fim = i + 1 < localizadas.length ? localizadas[i + 1].inicio : norm.length;
+    const trecho = norm.slice(sec.inicioConteudo, fim);
+    const letrasArr = trecho.match(RX_LETRA) ?? [];
+    const letras = letrasArr.length;
+    // Razão de vogais medida na JANELA inicial das letras (não no inteiro):
+    // seção legítima pode conter preenchimento estrutural longo; lixo
+    // determinínistico ("asdf qwer") falha já na janela inicial. Só o começo
+    // importa — prosa real abre com prosa real.
+    const janela = letrasArr.slice(0, JANELA_LETRAS).join(" ");
+    const vogais = (janela.match(RX_VOGAL) ?? []).length;
+    const temSubstancia = letras >= MIN_LETRAS_SECAO && vogais >= Math.ceil(Math.min(letras, JANELA_LETRAS) * RAZAO_VOGAL_MIN);
+    if (!temSubstancia) vazias.push(sec.nome);
+  }
+  return vazias;
 }
 
 export interface VeredictoConformidade {
   readonly conforme: boolean;
-  /** "eco" | "secoes-faltantes" | null */
+  /** "eco" | "secoes-faltantes" | "secoes-vazias" | null */
   readonly motivo: "eco" | "secoes-faltantes" | "secoes-vazias" | null;
   /** Seções ausentes (rótulos canônicos do contrato) — mensagem honesta. */
   readonly faltam: readonly string[];
@@ -239,6 +311,9 @@ export function verificarConformidadeContrato(
   if (faltam.length > 0) {
     return { conforme: false, motivo: "secoes-faltantes", faltam, ecoDetectado: false };
   }
+  // ARC-02B.1 · A-03: todos os cabeçalhos presentes — agora EXIGE substância
+  // mínima em cada seção obrigatória (vazio/whitespace/pontuação/marcador/
+  // lixo trivial = fora do contrato; ver constantes acima).
   const vazias = secoesSemSubstancia(norm, localizarSecoes(norm, secoes));
   if (vazias.length > 0) {
     return { conforme: false, motivo: "secoes-vazias", faltam: vazias, ecoDetectado: false };
