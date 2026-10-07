@@ -67,6 +67,15 @@ export interface EtapaOrquestracao {
   nota?: number;
   iteracao?: number;
   erro?: string; // mensagem HONESTA quando o motor não responde (C-17)
+  /** ARC-02B · P3 (aditivo, whitelist): veredito estrutural do contrato
+   *  (seções faltantes/eco gerados pelo NOSSO código — nunca texto do
+   *  provider). "conforme" não afirma qualidade; apenas que o contrato
+   *  estrutural mínimo foi cumprido. */
+  conformidade?: {
+    readonly status: "conforme" | "fora-do-contrato";
+    readonly motivo?: string;
+    readonly faltam?: readonly string[];
+  };
   /** P4: veredito publicável DETERMINÍSTICO do Claim Guard (calculado pela
    *  máquina a partir dos achados — o texto do Auditor não o decide). */
   veredito?: import("./epistemico").VereditoEpistemico;
@@ -195,6 +204,11 @@ import {
   type EntendimentoResolvido,
   type ResumoEntendimento,
 } from "./entendimento";
+// ARC-02B · P1 (matriz de dependências) + P3 (verificação de contrato)
+import {
+  DEPENDENCIAS_ETAPAS,
+  verificarConformidadeContrato,
+} from "./conformidade";
 
 export const PERSONAS_ORQUESTRADOR = META_AGENTES_PIPELINE;
 
@@ -225,9 +239,22 @@ export const MSG_ERRO_IA =
   "Nenhuma análise foi substituída por conteúdo simulado. Tente novamente.";
 
 function capTexto(texto: string): string {
-  return texto.length <= LIMITE_CARACTERES_SAIDA
-    ? texto
-    : texto.slice(0, LIMITE_CARACTERES_SAIDA);
+  /** ARC-02B · P5 SAFE TRUNCATION — corte em FRONTEIRA, nunca no meio de
+   *  uma sentença/qualificador. Um corte duro podia transformar UNKNOWN em
+   *  FACT truncando a oração qualificadora (ex.: cortar a negação final).
+   *  Regra: último fechamento de linha (`\n`) dentro do limite; na falta,
+   *  último fechamento de frase (`. `/`! `/`? `); na falta de ambos, corte
+   *  duro (caso degenerado, raro). A redução de contexto (P1) ocorre ANTES de qualquer
+   *  aumento de cap — e o cap NÃO foi aumentado nesta missão. */
+  if (texto.length <= LIMITE_CARACTERES_SAIDA) return texto;
+  const janela = texto.slice(0, LIMITE_CARACTERES_SAIDA);
+  const corteLinha = janela.lastIndexOf("\n");
+  if (corteLinha > 0) return janela.slice(0, corteLinha);
+  const corteFrase = Math.max(
+    janela.lastIndexOf(". "), janela.lastIndexOf("! "), janela.lastIndexOf("? ")
+  );
+  if (corteFrase > 0) return janela.slice(0, corteFrase + 1);
+  return janela; // fronteira inexistente: corte duro honesto (sem ellipsis forjada)
 }
 
 /** Monta o input geral declarando APENAS campos de facto fornecidos
@@ -309,10 +336,22 @@ export async function executarPipeline(
     // cada um capado; proveniência explícita na ferramenta).
     // P4: o envelope epistêmico SEMPRE na frente de tudo — proveniência
     // disponível antes de qualquer síntese do agente.
+    // ARC-02B · P1 CONTEXT MINIMALITY (T1/T2): o working context desta
+    // etapa recebe SOMENTE as dependências declaradas na matriz — fim do
+    // repasse all-to-all. Os outputs restantes NÃO desaparecem: vivem na
+    // trilha auditável (P6) que alimenta o Auditor/gate abaixo.
+    // Fallback compat: persona fora da matriz = configuração ausente — NÃO
+    // perde contexto silenciosamente (comportamento legado da V1). A matriz
+    // cobre as 6 personas da cadeia (assert em T1/harnesses).
+    const dependencias =
+      DEPENDENCIAS_ETAPAS[persona.id] ?? anteriores.map((a) => a.etapaId);
+    const anterioresPermitidos = anteriores.filter((a) =>
+      dependencias.includes(a.etapaId)
+    );
     const dados: BlocoDado[] = [
       envelopeEpistemico,
       ...(blocoEntendimento ? [blocoEntendimento] : []),
-      ...anteriores.map((anterior) => ({
+      ...anterioresPermitidos.map((anterior) => ({
         tipo: "toolOutput" as const,
         fonteOuFerramenta: `etapa-${anterior.etapaId} (${anterior.agente}) — CONTEXTO NÃO AUTORITATIVO`,
         // P4.1: o aviso (quando há) viaja DENTRO do bloco, antes do texto —
@@ -358,6 +397,28 @@ export async function executarPipeline(
     }
 
     const raw = resposta.texto; // rawOutput — integral imutável
+
+    // ARC-02B · P3 CONTRACT FULFILLMENT (T5–T9): resposta tecnicamente
+    // não-vazia ≠ contrato cumprido. "ok", eco de instrução e resposta
+    // incompleta NÃO viram `concluido` — falham honesto como "erro"
+    // (C-17), NÃO entram no repasse (T9) nem na trilha publicável.
+    const conformidade = verificarConformidadeContrato(persona.id, persona.prompt, raw);
+    if (!conformidade.conforme) {
+      etapa.resultado = "";
+      etapa.status = "erro";
+      etapa.erro =
+        conformidade.motivo === "eco"
+          ? `Resposta recebida, mas é eco da instrução do contrato, não entrega (${persona.id}). Não tratada como conclusão.`
+          : `Resposta fora do contrato AGT (${persona.id}) — faltam seções: ${conformidade.faltam.join(", ")}. Não tratada como entrega.`;
+      etapa.conformidade = {
+        status: "fora-do-contrato",
+        motivo: conformidade.motivo ?? undefined,
+        faltam: [...conformidade.faltam],
+      };
+      continue; // T9: downstream NÃO consome artefato inválido como concluído
+    }
+    etapa.conformidade = { status: "conforme" };
+
     // P4.1.2: propagationOutput/publicOutput = raw higienizado. SÓ
     // delimitadores estruturais exatos; bloco ambíguo é PRESERVADO (e
     // contado no diagnóstico) — nunca apagamos conteúdo incerto.
@@ -427,6 +488,10 @@ export async function executarPipeline(
       etapas,
       erro:
         "Nenhum motor de IA respondeu. A operação não foi executada — nenhuma etapa possui análise. Tente novamente em instantes.",
+      // ARC-02B: o resumo do entendimento (estado honesto — resolvida,
+      // ambígua com candidatas, precisa-confirmar) NÃO cai no poço quando
+      // a cadeia falha inteira: a UI continua vendo a leitura da entrada.
+      ...(entendimento ? { entendimento: resumirEntendimento(entendimento) } : {}),
     };
   }
 
