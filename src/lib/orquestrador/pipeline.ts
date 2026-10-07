@@ -238,14 +238,14 @@ export const MSG_ERRO_IA =
   "O motor de IA não conseguiu gerar uma resposta para esta etapa. " +
   "Nenhuma análise foi substituída por conteúdo simulado. Tente novamente.";
 
+/** ARC-02B · P5 SAFE TRUNCATION — corte em FRONTEIRA, nunca no meio de
+ *  uma sentença/qualificador. Um corte duro podia transformar UNKNOWN em
+ *  FACT truncando a oração qualificadora (ex.: cortar a negação final).
+ *  Regra: último fechamento de linha (`\n`) dentro do limite; na falta,
+ *  último fechamento de frase (`. `/`! `/`? `); na falta de ambos, corte
+ *  duro (caso degenerado, raro). A redução de contexto (P1) ocorre ANTES de qualquer
+ *  aumento de cap — e o cap NÃO foi aumentado nesta missão. */
 function capTexto(texto: string): string {
-  /** ARC-02B · P5 SAFE TRUNCATION — corte em FRONTEIRA, nunca no meio de
-   *  uma sentença/qualificador. Um corte duro podia transformar UNKNOWN em
-   *  FACT truncando a oração qualificadora (ex.: cortar a negação final).
-   *  Regra: último fechamento de linha (`\n`) dentro do limite; na falta,
-   *  último fechamento de frase (`. `/`! `/`? `); na falta de ambos, corte
-   *  duro (caso degenerado, raro). A redução de contexto (P1) ocorre ANTES de qualquer
-   *  aumento de cap — e o cap NÃO foi aumentado nesta missão. */
   if (texto.length <= LIMITE_CARACTERES_SAIDA) return texto;
   const janela = texto.slice(0, LIMITE_CARACTERES_SAIDA);
   const corteLinha = janela.lastIndexOf("\n");
