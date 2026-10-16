@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Award, Sparkles, TrendingUp, Filter, Play, CheckCircle2, Star, ShieldCheck } from "lucide-react";
+import { Award, TrendingUp, Filter, Play, Star, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/lib/toast";
 

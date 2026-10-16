@@ -25,9 +25,15 @@ Os testes da Action Layer cobrem o executor extraído, ownership, allowlist,
 idempotência por estado, Receipt e negação antes do payload. Todos os Route
 Handlers também são examinados quanto a exports incompatíveis com Next.js.
 
-Abrir Configurações não pode executar limpeza remota. Os testes exigem ação
+Abrir Configurações não pode executar limpeza local nem remota. Os testes exigem ação
 explícita, confirmação e nova autenticação; cancelamento ou sessão inválida
 não podem atualizar metadados.
+
+As regressões de lint verificam carregamento real/vazio/erro de Clientes e
+Dashboard, seleção de workspace durante consulta pendente, tooltip e erros do
+serviço de IA. Os 16 casos sintéticos em `fixtures/epistemico-regression.json`
+registram os resultados do guardião no commit de referência `5678e42`, antes
+da remoção de código morto; preservam achados e vereditos desses casos.
 
 Esses testes não substituem testes de navegador nem homologação com Supabase ou
 provedores reais. Nenhum teste altera serviços externos.

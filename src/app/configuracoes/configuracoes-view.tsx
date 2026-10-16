@@ -127,13 +127,11 @@ export function ConfiguracoesView() {
 
   useEffect(() => {
     let ativo = true;
-    const limpezaLocalOk = limparCredenciaisDoNavegador();
     const supabase = getSupabaseBrowser();
     if (!supabase) {
       Promise.resolve().then(() => {
         if (!ativo) return;
         setSemBanco(true);
-        setLimpezaLegada(limpezaLocalOk ? "local" : "falhou");
         setCarregando(false);
       });
       return () => {
@@ -144,7 +142,6 @@ export function ConfiguracoesView() {
     supabase.auth.getUser().then(async ({ data: { user }, error }) => {
       if (!ativo) return;
       if (error || !user) {
-        setLimpezaLegada(limpezaLocalOk ? "local" : "falhou");
         setCarregando(false);
         return;
       }
@@ -164,8 +161,7 @@ export function ConfiguracoesView() {
       setWsFuso(meta.workspace?.fuso ?? "sp");
       setNotifications({ ...NOTIFS_PADRAO, ...(meta.notificacoes ?? {}) });
 
-      // Abrir Configurações nunca altera credenciais na conta remota.
-      setLimpezaLegada(limpezaLocalOk ? "local" : "falhou");
+      // Abrir Configurações não remove credenciais locais nem remotas.
 
       const [resClientes, resBiblioteca, resAssets] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
@@ -183,7 +179,6 @@ export function ConfiguracoesView() {
       setCarregando(false);
     }).catch(() => {
       if (!ativo) return;
-      setLimpezaLegada("falhou");
       setCarregando(false);
     });
 
@@ -709,10 +704,10 @@ export function ConfiguracoesView() {
                     ? "A entrada antiga deste navegador foi removida. A limpeza da conta só será executada após sua confirmação e validação da sessão."
                     : limpezaLegada === "falhou"
                       ? "Não foi possível concluir a limpeza das credenciais antigas. Tente novamente."
-                      : "Preparando a limpeza local das credenciais antigas…"}
+                      : "Nenhuma credencial é removida automaticamente. Revise e confirme a limpeza abaixo."}
               </p>
               <p className="text-xs text-muted-foreground">
-                A limpeza não lê nem exibe os valores antigos. Se você já salvou chaves aqui, revogue-as ou substitua-as nos provedores: cópias em outros dispositivos e sessões anteriores não são removidas por esta operação.
+                A limpeza só ocorre após sua confirmação e não lê nem exibe os valores antigos. Se você já salvou chaves aqui, revogue-as ou substitua-as nos provedores: cópias em outros dispositivos e sessões anteriores não são removidas por esta operação.
               </p>
               {limpezaLegada !== "concluida" && (
                 <Button variant="outline" onClick={() => void handleLimparCredenciaisAntigas()} disabled={salvando === "limpeza"}>

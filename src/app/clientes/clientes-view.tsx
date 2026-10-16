@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import React from "react";
 import {
   Building2,
@@ -22,7 +22,15 @@ import { Input } from "@/components/ui/input";
 
 // TR-04B: converte uma linha REAL da tabela clients (Supabase) no tipo da UI.
 // Nenhuma outra fonte de dados é aceita nesta tela.
-function clienteDaLinha(c: any): Client {
+type LinhaCliente = Omit<Client, "tier" | "status" | "mrr" | "logoInitials" | "since"> & {
+  tier: Client["tier"] | null;
+  status: Client["status"] | null;
+  mrr: number | string | null;
+  logo_initials: string | null;
+  since: string | null;
+};
+
+function clienteDaLinha(c: LinhaCliente): Client {
   return {
     id: c.id,
     name: c.name,
@@ -35,6 +43,15 @@ function clienteDaLinha(c: any): Client {
     logoInitials: c.logo_initials || String(c.name || "").slice(0, 2).toUpperCase(),
     since: c.since || "2026-01",
   };
+}
+
+async function consultarClientes() {
+  const supabase = getSupabaseBrowser();
+  if (!supabase) return {
+    data: null,
+    error: { message: "Supabase não configurado neste ambiente (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). Nenhum cliente pode ser carregado." },
+  };
+  return supabase.from("clients").select("*").order("created_at", { ascending: false });
 }
 
 export function ClientesView() {
@@ -56,22 +73,7 @@ export function ClientesView() {
 
   // TR-04B: SELECT real é a ÚNICA fonte. [] = vazio verdadeiro; erro = erro real.
   // Nunca há fallback para dados fictícios.
-  async function carregarClientes() {
-    setStatusBase("carregando");
-    setErroMsg("");
-    const supabase = getSupabaseBrowser();
-    if (!supabase) {
-      setClientes([]);
-      setErroMsg(
-        "Supabase não configurado neste ambiente (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). Nenhum cliente pode ser carregado."
-      );
-      setStatusBase("erro");
-      return;
-    }
-    const { data, error } = await supabase
-      .from("clients")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const aplicarClientes = useCallback(({ data, error }: Awaited<ReturnType<typeof consultarClientes>>) => {
     if (error) {
       setClientes([]);
       setErroMsg(error.message);
@@ -79,13 +81,16 @@ export function ClientesView() {
       return;
     }
     setClientes((data ?? []).map(clienteDaLinha));
+    setErroMsg("");
     setStatusBase("pronto");
-  }
-
-  useEffect(() => {
-    carregarClientes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const carregarClientes = useCallback(() => consultarClientes().then(aplicarClientes), [aplicarClientes]);
+  useEffect(() => {
+    let ativo = true;
+    void consultarClientes().then((resultado) => { if (ativo) aplicarClientes(resultado); });
+    return () => { ativo = false; };
+  }, [aplicarClientes]);
 
   const clientesFiltrados = clientes.filter(
     (c) =>
@@ -277,7 +282,7 @@ export function ClientesView() {
         <Card className="border-border bg-surface/60 p-8 text-center">
           <p className="text-sm font-semibold text-red-400">Falha ao carregar os clientes</p>
           <p className="mx-auto mt-2 max-w-md break-words text-xs text-muted-foreground">{erroMsg}</p>
-          <Button variant="outline" className="mt-4" onClick={() => carregarClientes()}>
+          <Button variant="outline" className="mt-4" onClick={() => { setStatusBase("carregando"); setErroMsg(""); void carregarClientes(); }}>
             Tentar novamente
           </Button>
         </Card>

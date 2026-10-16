@@ -1335,7 +1335,7 @@ const RX_ZERO_DEFEITO =
  *  "traz quando puder", "acerta depois com calma"). */
 const RX_CONVENIENCIA_TRANSACIONAL =
   /\b(?:pode|podes|podem)\s+(?:pagar|acertar|resolver|combinar|fechar|parcelar|dividir|trazer|buscar|receber|pegar|solicitar|agendar|instalar|devolver|trocar|cancelar|retirar)\s+(?:quando\s+(?:der|quiser|puder|melhor)|depois|com\s+calma|na\s+seguinte|na\s+volta)|\b(?:pague|acerte|resolva|combine|traga|busque|pegue)\s+(?:quando|depois\s+que)\s+(?:der|quiser|puder)|\b(?:acert\w+|pag\w+)\s+(?:depois|na\s+semana\s+que\s+vem|com\s+calma)\b/i;
-const _unused_marker = 0;
+
 
 /** Unificador CP-01 (consolidação de TODAS as classes C-01..C-20). */
 function temSinalFechamentoCP01(t: string, opcoes?: { tolerarCadenciaCriativa?: boolean }): boolean {
@@ -1576,17 +1576,7 @@ function quadroDominante(t: string): boolean {
   const cine = RX_SAFE_HARBOR_CINE.test(t) ? 1 : 0;
   return quadro + cine > 0;
 }
-function vetoDuroParaQuadro(t: string): boolean {
-  if (nucleoHardNaoNegado(t)) return true;
-  if (RX_POSSE_COMERCIAL.test(t)) return true;
-  if (RX_SATELITE_AVALIATIVO.test(t)) return true;
-  if (RX_ESCOPO_EXAUSTIVO.test(t)) return true;
-  if (RX_PROPORCAO_SOCIAL.test(t) || RX_PROPORCAO_SOCIAL2.test(t) || RX_MAIS_DE_NUMERICO.test(t)) return true;
-  if (RX_COMPARATIVO_MATERIAL.test(t)) return true;
-  if (RX_IDIOMA_PRAZO.test(t)) return true;
-  if (RX_PARTICIPIO_COMPLEMENTO.test(t)) return true;
-  return false;
-}
+
 
 // ======================================================================
 // R6 — SUPRESSÕES ESTRUTURAIS DO GATE INDETERMINADO (creative freedom)
@@ -1727,7 +1717,7 @@ function detectarAssercaoMaterialAberta(
     // ("Aprovado em teste de queda.", "Testado em cem cabeles diferentes.",
     // "Devolucao simplificada.") — cai no gate indeterminado antes do null.
     const stemsN = stemsSignificativos(t).filter((x) => !stemEhGenericoAberta(x));
-    if (sinalAssercaoPotencialIndeterminada(t, stemsN, verboFactual)) {
+    if (sinalAssercaoPotencialIndeterminada(t, stemsN)) {
       return { motivo: "INDETERMINADO" };
     }
     return null;
@@ -1743,7 +1733,7 @@ function detectarAssercaoMaterialAberta(
   // declarativa com predicação factual plausível e SEM porto-seguro
   // comprovável não recebe silêncio-aprovado: UNKNOWN material-plausível
   // → INDETERMINADO (o chamador converte em QUALIFICAR/REVISÃO).
-  if (sinalAssercaoPotencialIndeterminada(t, stems, verboFactual)) {
+  if (sinalAssercaoPotencialIndeterminada(t, stems)) {
     return { motivo: "INDETERMINADO" };
   }
   return null;
@@ -1768,8 +1758,7 @@ const RX_INSTRUCAO_DIRECAO =
   /^\s{0,20}(?:abre|fecha|encerra|inicia|termina|congela|corta\w*)\s+(?:com|em|na|no|pelo|pela|de|do|da)\b|^\s{0,20}(?:nada\s+de|sem)\s+(?:satura[çc][ãa]\w*|gr[ãa]o\b|vinhet\w*|exagero\w*|efeito\w*|zoom|transi[çc][ãa]o\w*|narrador\w*|trilha\w*|teleprompter\w*)/i;
 /** Unidade de artefato medida por quantificador ("três takes de trinta
  *  segundos", "quinze segundos de corte"). */
-const RX_UNIDADE_ARTEFATO =
-  /\b(?:takes?|cortes?|cenas?|atos?|quadros?|blocos?|frames?|shots?|ganchos?|hooks?|segundos?|minutos?)\b/i;
+
 function quantMedeApenasArtefato(t: string): boolean {
   if (!RX_QUANTIFICACAO_MATERIAL.test(t)) return false;
   // qualquer unidade claramente comercial na frase desqualifica o carve
@@ -2054,8 +2043,7 @@ function hipoteseCondicionalMarcada(t: string): boolean {
 
 function sinalAssercaoPotencialIndeterminada(
   t: string,
-  stems: readonly string[],
-  verboFactual: boolean
+  stems: readonly string[]
 ): boolean {
   // CP-01: stems vazios NÃO silenciam idioma material-fechado auto-suficiente
   // ("Garante-se o resultado." tem os dois stems no banco genérico e AINDA
@@ -2242,7 +2230,6 @@ function autorizacaoAberta(sentenca: string, textoAutoritativo: string): boolean
   const target = new Set(stemsSignificativosComValor(sentenca).filter((s) => !stemEhGenericoAberta(s)));
   if (target.size === 0) return false;
   const numsClaim = tokensNumericos(sentenca);
-  let numsSup: ReadonlySet<string> = new Set<string>();
   let cursor = 0;
   for (const fr of sentencasDe(textoAutoritativo)) {
     const ini = textoAutoritativo.indexOf(fr, cursor);
@@ -2985,7 +2972,6 @@ export function varrerClaimsMateriais(
         let temFactualTema = false;
         const sClaim = sentencaAoRedor(textoAnalisado, alvo.index);
         const numsCl = tokensNumericos(sClaim);
-        const numsValCl = tokensNumericosValor(sClaim);
         for (const fr of sentencasDe(textoAutoritativo)) {
           const iniF = textoAutoritativo.indexOf(fr);
           if (!cat.detector.test(fr)) continue;

@@ -38,7 +38,6 @@ import {
   pipelineValueByStage as funilMock,
 } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
-import { toast } from "@/lib/toast";
 
 // TR-04.8D.2c-2: motor PURO de attention (regras R1–R4/R6) + painel.
 import {
@@ -667,6 +666,10 @@ const SEM_ERROS: FonteErro = {
   assets: null,
 };
 
+async function lerFonteDashboard(supabase: SupabaseClient | null) {
+  return supabase ? coletarDadosReais(supabase) : null;
+}
+
 export function DashboardView() {
   const supabase = useMemo(() => getSupabaseBrowser(), []);
   // TR-04.8D.1: nasce em LOADING — nenhum mock aparece antes do dado real.
@@ -718,40 +721,31 @@ export function DashboardView() {
     pedirReconciliacao?.();
   }, [pedirReconciliacao]);
 
-  const carregar = useCallback(async () => {
-    if (!supabase) {
+  const aplicarFonte = useCallback((fonte: Awaited<ReturnType<typeof lerFonteDashboard>>) => {
+    if (!fonte) {
       const fim = new Date();
-      setPainel({
-        estado: "demo",
-        dados: montarDadosDemo(),
-        calculadoEm: fim.toISOString(),
-      });
-      setAtualizadoEm(
-        fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-      );
+      setPainel({ estado: "demo", dados: montarDadosDemo(), calculadoEm: fim.toISOString() });
+      setAtualizadoEm(fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
       return;
     }
-    setPainel({ estado: "loading" });
-    try {
-      const { dados, erros } = await coletarDadosReais(supabase);
-      const todasFalharam =
-        erros.clientes && erros.campanhas && erros.negocios &&
-        erros.briefings && erros.commercials && erros.assets;
-      if (todasFalharam) {
-        setPainel({ estado: "erro" }); // ERROR: nenhuma fonte respondeu
-      } else {
-        aplicarDadosProntos(dados, erros);
-      }
-    } catch (err) {
-      // Rejeição explícita: nunca skeleton eterno, nunca demo disfarçada.
-      console.error("Erro ao carregar dados do dashboard:", err);
-      setPainel({ estado: "erro" });
-    }
-  }, [supabase, aplicarDadosProntos]);
+    const { dados, erros } = fonte;
+    const todasFalharam = erros.clientes && erros.campanhas && erros.negocios && erros.briefings && erros.commercials && erros.assets;
+    if (todasFalharam) setPainel({ estado: "erro" });
+    else aplicarDadosProntos(dados, erros);
+  }, [aplicarDadosProntos]);
+  const aplicarErro = useCallback(() => {
+    console.error("Erro ao carregar dados do dashboard.");
+    setPainel({ estado: "erro" });
+  }, []);
+  const carregar = useCallback(() => lerFonteDashboard(supabase).then(aplicarFonte).catch(aplicarErro), [supabase, aplicarFonte, aplicarErro]);
 
   useEffect(() => {
-    void carregar();
-  }, [carregar]);
+    let ativo = true;
+    void lerFonteDashboard(supabase)
+      .then((fonte) => { if (ativo) aplicarFonte(fonte); })
+      .catch(() => { if (ativo) aplicarErro(); });
+    return () => { ativo = false; };
+  }, [supabase, aplicarFonte, aplicarErro]);
 
   // ---------- LOADING: skeleton real, zero mock ----------
   if (painel.estado === "loading") {
@@ -794,7 +788,7 @@ export function DashboardView() {
           <p className="mt-1 text-sm text-muted-foreground">
             As fontes de dados não responderam. Nada aqui é ilustração — tente novamente.
           </p>
-          <Button size="sm" className="mt-4" onClick={() => void carregar()}>
+          <Button size="sm" className="mt-4" onClick={() => { setPainel({ estado: "loading" }); void carregar(); }}>
             <RefreshCw /> Tentar novamente
           </Button>
         </CardContent>
@@ -898,7 +892,7 @@ export function DashboardView() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void carregar()}
+            onClick={() => { setPainel({ estado: "loading" }); void carregar(); }}
             aria-label="Recarregar dados do painel"
             className="gap-1.5"
           >
@@ -940,7 +934,7 @@ export function DashboardView() {
             Dados parciais: falha ao carregar {fontesFalhas.join(", ")}. Os demais
             números seguem reais — os blocos afetados avisam o que aconteceu.
           </p>
-          <Button variant="outline" size="sm" onClick={() => void carregar()}>
+          <Button variant="outline" size="sm" onClick={() => { setPainel({ estado: "loading" }); void carregar(); }}>
             <RefreshCw /> Recarregar
           </Button>
         </div>

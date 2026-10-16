@@ -51,16 +51,18 @@ export const iaService = {
         texto: dados.texto || "",
         provedorUsado: dados.provedor || "AnuncIA Multi-Chain",
       };
-    } catch (erro: any) {
+    } catch (erro: unknown) {
       return {
         ok: false,
         texto: "",
-        erro: erro?.message || "Erro de rede ao acionar a IA. Verifique sua conexão.",
+        erro: erro && typeof erro === "object" && "message" in erro && typeof erro.message === "string" && erro.message
+          ? erro.message
+          : "Erro de rede ao acionar a IA. Verifique sua conexão.",
       };
     }
   },
 
-  async statusMotores(): Promise<any[]> {
+  async statusMotores() {
     return [
       { id: "m1", name: "GPT-4o", provider: "OpenAI", category: "Texto", badge: "Supremo Mestre" },
       { id: "m2", name: "Claude 3.5 Sonnet", provider: "Anthropic", category: "Texto", badge: "Estratégico" },

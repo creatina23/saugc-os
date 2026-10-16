@@ -57,16 +57,16 @@ test("configurações preservam dados não sensíveis sem acessar o campo legado
   await setImmediate();
   assert.equal(readLegacy.mock.callCount(), 0);
   assert.equal(getItem.mock.callCount(), 0);
-  assert.equal(removeItem.mock.calls[0].arguments[0], "anuncia_api_keys");
+  assert.equal(removeItem.mock.callCount(), 0, "abrir a tela não remove credenciais locais");
   assert.equal(updateUser.mock.callCount(), 0, "abrir Configurações não pode alterar metadados remotos");
-  for (const value of ["Pessoa de Teste", "avatar-de-teste", "Workspace de teste", "Descrição de teste", "sp", "local"]) {
+  for (const value of ["Pessoa de Teste", "avatar-de-teste", "Workspace de teste", "Descrição de teste", "sp"]) {
     assert.ok(h.updates.includes(value));
   }
   assert.ok(h.updates.some((value) => value && typeof value === "object" && value.campanhas === false));
   unmount();
 });
 
-test("configurações sem backend removem cópia local sem tentar gravar metadados", async () => {
+test("configurações sem backend não removem credenciais automaticamente", async () => {
   const h = hooks();
   const removeItem = mock.fn();
   const { ConfiguracoesView } = loadTypescript("src/app/configuracoes/configuracoes-view.tsx", {
@@ -76,8 +76,8 @@ test("configurações sem backend removem cópia local sem tentar gravar metadad
   ConfiguracoesView();
   const unmount = h.effects[0]();
   await setImmediate();
-  assert.equal(removeItem.mock.callCount(), 1);
-  assert.ok(h.updates.includes("local"));
+  assert.equal(removeItem.mock.callCount(), 0);
+  assert.equal(h.updates.includes("local"), false);
   assert.equal(h.updates.includes("concluida"), false);
   unmount();
 });
@@ -101,6 +101,7 @@ for (const scenario of [
   test(`limpeza remota explícita: ${scenario.name}`, async () => {
     const h = hooks();
     const events = [];
+    const removeItem = mock.fn(() => events.push("local"));
     const confirm = mock.fn((message) => { events.push("confirmar"); assert.match(message, /não revoga chaves/); return scenario.confirmation; });
     const updateUser = mock.fn(async () => {
       events.push("limpar");
@@ -120,13 +121,14 @@ for (const scenario of [
         react: h.react,
         "@/lib/supabase/client": { getSupabaseBrowser: () => ({ auth: { getUser, updateUser }, from: () => ({ select: async () => ({ count: 0, data: [] }) }) }) },
       },
-      globals: { window: { confirm, localStorage: { removeItem() {}, getItem() { throw new Error("Leitura proibida"); } } } },
+      globals: { window: { confirm, localStorage: { removeItem, getItem() { throw new Error("Leitura proibida"); } } } },
     });
     h.render(ConfiguracoesView);
     const unmount = h.effects[0]();
     await setImmediate();
     assert.equal(updateUser.mock.callCount(), 0);
     assert.equal(confirm.mock.callCount(), 0);
+    assert.equal(removeItem.mock.callCount(), 0);
     initialLoad = false;
     events.length = 0;
     const button = cleanupButton(h.render(ConfiguracoesView));
@@ -134,8 +136,9 @@ for (const scenario of [
     button.props.onClick();
     await setImmediate();
     assert.equal(confirm.mock.callCount(), 1);
+    assert.equal(removeItem.mock.callCount(), scenario.confirmation ? 1 : 0);
     assert.equal(updateUser.mock.callCount(), scenario.writes);
-    assert.deepEqual(events, scenario.confirmation ? scenario.writes ? ["confirmar", "autenticar", "limpar"] : ["confirmar", "autenticar"] : ["confirmar"]);
+    assert.deepEqual(events, scenario.confirmation ? scenario.writes ? ["confirmar", "local", "autenticar", "limpar"] : ["confirmar", "local", "autenticar"] : ["confirmar"]);
     if (scenario.writes) assert.deepEqual(JSON.parse(JSON.stringify(updateUser.mock.calls[0].arguments)), [{ data: { api_keys: null } }]);
     if (scenario.writeFailure || scenario.authFailure) assert.ok(h.updates.includes("falhou"));
     if (!scenario.writes || scenario.writeFailure) assert.equal(h.updates.includes("concluida"), false);

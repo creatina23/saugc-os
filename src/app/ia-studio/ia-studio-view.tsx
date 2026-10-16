@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   AlertTriangle,
   Bot,
@@ -9,17 +10,14 @@ import {
   Copy,
   Cpu,
   Download,
-  Layers,
   Loader2,
   Sparkles,
-  Terminal,
   Wand2,
   Image as ImageIcon,
   MessageSquareText,
   ShieldCheck,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -45,7 +43,7 @@ export function IaStudioView() {
   const [promptUsuario, setPromptUsuario] = useState("");
   const [resultadoIa, setResultadoIa] = useState("");
   const [carregando, setCarregando] = useState(false);
-  const [historico, setHistorico] = useState(aiHistory);
+  const [, setHistorico] = useState(aiHistory);
 
   // Aba ativa: "chat" (Mesa de Agentes) ou "imagem" (Engenheiro de Prompts Visuais)
   const [abaAtiva, setAbaAtiva] = useState<"chat" | "imagem">("chat");
@@ -428,7 +426,7 @@ Estruture a resposta EXATamente assim:
                         {imagemReal && infoImagem && (
                           <div className="space-y-2">
                             <div className="rounded-2xl overflow-hidden border border-border/60 shadow-2xl max-w-md mx-auto">
-                              <img src={imagemReal} alt="Imagem gerada pelo sistema agora" className="w-full h-auto object-cover" />
+                              <Image src={imagemReal} alt="Imagem gerada pelo sistema agora" width={768} height={960} unoptimized className="w-full h-auto object-cover" />
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">

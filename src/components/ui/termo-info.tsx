@@ -32,7 +32,7 @@
 // dentro da viewport (12px de respiro) e giro para cima quando não cabe
 // embaixo (estimativa, sem medição — sem custo de layout).
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 import { entradaDoGlossario } from "@/lib/glossario";
@@ -62,11 +62,8 @@ export function TermoInfo({ slug, className }: TermoInfoProps) {
   // 8D.3.4.9 — posição do painel em coordenadas de VIEWPORT (o portal vive
   // em <body>). Recalcula ao rolar/redimensionar para continuar colado
   // no ⓘ mesmo quando o painel está fixado.
-  useEffect(() => {
-    if (!visivel) {
-      setPosicionamento(null);
-      return;
-    }
+  useLayoutEffect(() => {
+    if (!visivel) return;
     const calcular = () => {
       const alvo = raizRef.current;
       if (alvo === null) return;
