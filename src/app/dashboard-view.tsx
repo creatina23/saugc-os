@@ -863,10 +863,10 @@ export function DashboardView() {
     <>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-8">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight">Central</h1>
             {modoDemo && (
-              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning text-xs">
+              <Badge variant="outline" className="max-w-full whitespace-normal border-warning/40 bg-warning/10 text-warning text-xs">
                 Modo Demonstração (Conecte o Supabase)
               </Badge>
             )}
@@ -888,7 +888,7 @@ export function DashboardView() {
             {atualizadoEm && <> Atualizado às {atualizadoEm}.</>}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             variant="outline"
             size="sm"
@@ -908,9 +908,9 @@ export function DashboardView() {
       </div>
 
       {modoDemo && (
-        <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/20 text-primary">
+        <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 basis-full items-center gap-3 sm:flex-1 sm:basis-auto">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary">
               <Zap className="size-5" />
             </div>
             <div>
@@ -1030,7 +1030,7 @@ export function DashboardView() {
           <Link key={action.label} href={action.href} title={action.description}>
             <Button
               variant="outline"
-              className="h-11 w-full justify-start gap-2 px-4 font-medium md:w-auto"
+              className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal px-4 font-medium md:w-auto"
             >
               <action.icon className="size-4 text-muted-foreground" />
               {action.label}

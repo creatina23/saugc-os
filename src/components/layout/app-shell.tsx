@@ -343,7 +343,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div
         className={cn(
-          "flex min-h-screen flex-1 flex-col transition-[margin] duration-300",
+          "flex min-h-screen min-w-0 flex-1 flex-col transition-[margin] duration-300",
           collapsed ? "md:ml-[88px]" : "md:ml-[280px]",
         )}
       >
@@ -364,7 +364,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="truncate font-medium">{currentItem.label}</span>
           </nav>
 
-          <div className="flex flex-1 items-center justify-end gap-2">
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
@@ -493,8 +493,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 md:px-8 md:py-8">
-          <div className="animate-fade-in mx-auto w-full max-w-[1440px]">{children}</div>
+        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
+          <div className="animate-fade-in mx-auto min-w-0 w-full max-w-[1440px]">{children}</div>
         </main>
       </div>
 

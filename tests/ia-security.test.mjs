@@ -42,6 +42,7 @@ function setup(entry, { backend = true, getUser = async () => ({ data: { user },
 }
 
 const denied = [
+  { name: "auth indisponível prevalece sobre user ausente", options: { getUser: async () => ({ data: { user: null }, error: { status: 500 } }) }, status: 503 },
   { name: "sem sessão", options: { getUser: async () => ({ data: { user: null }, error: null }) }, status: 401 },
   { name: "backend ausente", options: { backend: false }, status: 503 },
   { name: "serviço de autenticação lança exceção", options: { getUser: async () => { throw new Error("detalhe-interno-nao-publicavel"); } }, status: 503 },

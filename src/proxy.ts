@@ -10,6 +10,14 @@ const ROTAS_PUBLICAS = ["/login"];
 // hibernação do plano Free), o app NÃO morre em tela 500 — segue aberto e
 // as telas caem em modo demonstração com selo visível. Queda vira aviso.
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  // APIs não recebem redirecionamentos HTML. Cada handler mantém seu gate
+  // obrigatório: sem backend = 503; sem sessão = 401; falha de auth = 503.
+  // Esta passagem não autoriza execução: o gate do handler continua soberano.
+  if (pathname === "/api" || pathname.startsWith("/api/")) {
+    return NextResponse.next({ request });
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -54,7 +62,6 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  const pathname = request.nextUrl.pathname;
   const ehRotaPublica = ROTAS_PUBLICAS.some((rota) => pathname.startsWith(rota));
 
   // Sem login tentando acessar área protegida → manda pro /login

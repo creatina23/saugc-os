@@ -710,7 +710,7 @@ export function ConfiguracoesView() {
                 A limpeza só ocorre após sua confirmação e não lê nem exibe os valores antigos. Se você já salvou chaves aqui, revogue-as ou substitua-as nos provedores: cópias em outros dispositivos e sessões anteriores não são removidas por esta operação.
               </p>
               {limpezaLegada !== "concluida" && (
-                <Button variant="outline" onClick={() => void handleLimparCredenciaisAntigas()} disabled={salvando === "limpeza"}>
+                <Button variant="outline" className="h-auto min-h-10 max-w-full whitespace-normal" onClick={() => void handleLimparCredenciaisAntigas()} disabled={salvando === "limpeza"}>
                   {salvando === "limpeza" ? "Limpando…" : "Revisar e confirmar limpeza da conta"}
                 </Button>
               )}

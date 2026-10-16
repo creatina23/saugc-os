@@ -20,20 +20,20 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-end md:justify-between",
+        "mb-6 flex min-w-0 flex-col gap-4 md:mb-8 md:flex-row md:items-end md:justify-between",
         className
       )}
     >
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{title}</h1>
+          <h1 className="break-words text-2xl font-bold tracking-tight md:text-3xl">{title}</h1>
           {badge ? <Badge variant="violet">{badge}</Badge> : null}
         </div>
         {description ? (
           <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
         ) : null}
       </div>
-      {children ? <div className="flex flex-wrap items-center gap-2">{children}</div> : null}
+      {children ? <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div> : null}
     </div>
   );
 }

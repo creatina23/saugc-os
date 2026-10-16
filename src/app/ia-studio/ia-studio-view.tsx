@@ -186,18 +186,18 @@ Estruture a resposta EXATamente assim:
         title="IA Studio — Bancada de Agentes"
         description="Geração de texto por IA real (via iaService), direção de arte + prompt visual e geração real de imagem sob demanda (via imagemService)."
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant={abaAtiva === "chat" ? "default" : "outline"}
             onClick={() => setAbaAtiva("chat")}
-            className="gap-2"
+            className="h-auto min-h-10 max-w-full gap-2 whitespace-normal"
           >
             <Brain className="size-4" /> Mesa de Agentes
           </Button>
           <Button
             variant={abaAtiva === "imagem" ? "default" : "outline"}
             onClick={() => setAbaAtiva("imagem")}
-            className="gap-2"
+            className="h-auto min-h-10 max-w-full gap-2 whitespace-normal"
           >
             <ImageIcon className="size-4" /> Engenheiro de Prompts Visuais
           </Button>
@@ -304,7 +304,7 @@ Estruture a resposta EXATamente assim:
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+                <div className="pt-4 border-t border-border flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1"><ShieldCheck className="size-4 text-success" /> Texto gerado por IA (chamada real via iaService)</span>
                   <span>{provedorReal ? `Provedor: ${provedorReal}` : "Provedor: definido automaticamente na execução"}</span>
                 </div>
