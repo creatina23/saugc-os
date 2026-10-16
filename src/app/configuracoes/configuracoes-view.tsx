@@ -164,9 +164,8 @@ export function ConfiguracoesView() {
       setWsFuso(meta.workspace?.fuso ?? "sp");
       setNotifications({ ...NOTIFS_PADRAO, ...(meta.notificacoes ?? {}) });
 
-      const limpezaContaOk = await neutralizarCredenciaisDoUsuario(supabase.auth);
-      if (!ativo) return;
-      setLimpezaLegada(limpezaLocalOk && limpezaContaOk ? "concluida" : "falhou");
+      // Abrir Configurações nunca altera credenciais na conta remota.
+      setLimpezaLegada(limpezaLocalOk ? "local" : "falhou");
 
       const [resClientes, resBiblioteca, resAssets] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
@@ -336,6 +335,14 @@ export function ConfiguracoesView() {
   }
 
   async function handleLimparCredenciaisAntigas() {
+    if (salvando === "limpeza") return;
+    const confirmou = window.confirm(
+      "Remover o campo antigo de credenciais da sua conta e a entrada deste navegador? " +
+      "Os valores não serão lidos nem exibidos. Perfil, workspace e notificações serão preservados. " +
+      "Esta operação não revoga chaves nos provedores nem remove cópias de outros dispositivos ou sessões anteriores. " +
+      "A limpeza da conta exige uma sessão válida. Deseja continuar?"
+    );
+    if (!confirmou) return;
     setSalvando("limpeza");
     try {
       const localOk = limparCredenciaisDoNavegador();
@@ -699,17 +706,17 @@ export function ConfiguracoesView() {
                 {limpezaLegada === "concluida"
                   ? "A entrada antiga deste navegador foi removida e o campo de credenciais da sua conta foi neutralizado."
                   : limpezaLegada === "local"
-                    ? "A entrada antiga deste navegador foi removida. Entre com uma sessão válida para concluir a limpeza da conta."
+                    ? "A entrada antiga deste navegador foi removida. A limpeza da conta só será executada após sua confirmação e validação da sessão."
                     : limpezaLegada === "falhou"
                       ? "Não foi possível concluir a limpeza das credenciais antigas. Tente novamente."
-                      : "Preparando a limpeza das credenciais antigas…"}
+                      : "Preparando a limpeza local das credenciais antigas…"}
               </p>
               <p className="text-xs text-muted-foreground">
                 A limpeza não lê nem exibe os valores antigos. Se você já salvou chaves aqui, revogue-as ou substitua-as nos provedores: cópias em outros dispositivos e sessões anteriores não são removidas por esta operação.
               </p>
               {limpezaLegada !== "concluida" && (
                 <Button variant="outline" onClick={() => void handleLimparCredenciaisAntigas()} disabled={salvando === "limpeza"}>
-                  {salvando === "limpeza" ? "Limpando…" : "Tentar limpeza novamente"}
+                  {salvando === "limpeza" ? "Limpando…" : "Revisar e confirmar limpeza da conta"}
                 </Button>
               )}
             </CardContent>

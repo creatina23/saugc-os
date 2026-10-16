@@ -21,5 +21,13 @@ Pedidos negados não podem ler o payload nem alcançar provedores. Também são
 verificadas a limpeza sem leitura de valores, a preservação das configurações
 não sensíveis e a apresentação de status indisponível.
 
+Os testes da Action Layer cobrem o executor extraído, ownership, allowlist,
+idempotência por estado, Receipt e negação antes do payload. Todos os Route
+Handlers também são examinados quanto a exports incompatíveis com Next.js.
+
+Abrir Configurações não pode executar limpeza remota. Os testes exigem ação
+explícita, confirmação e nova autenticação; cancelamento ou sessão inválida
+não podem atualizar metadados.
+
 Esses testes não substituem testes de navegador nem homologação com Supabase ou
 provedores reais. Nenhum teste altera serviços externos.
