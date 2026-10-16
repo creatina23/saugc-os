@@ -1,6 +1,6 @@
 // TR-04.8D.2b: Assets por categoria real (null/vazio = "Sem categoria").
 // TR-04.8D.2c-0: movido 1:1 de src/app/dashboard-view.tsx.
-import { Image } from "lucide-react";
+import { Image as ImageIcon } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -18,7 +18,7 @@ export function AssetsCategoria({
     <Card className="lg:col-span-6 self-start card-glow">
       <CardHeader className="pb-2">
         <CardTitle className="text-base font-semibold flex items-center gap-2">
-          <Image className="size-4 text-ai" /> Assets por Categoria
+          <ImageIcon aria-hidden="true" className="size-4 text-ai" /> Assets por Categoria
         </CardTitle>
         <CardDescription>Contagem real de arquivos por categoria na biblioteca</CardDescription>
       </CardHeader>

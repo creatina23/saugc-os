@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { montarPromptFinalImagem } from "@/lib/imagem/nucleo-qualidade";
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { verificarSessao } from "@/lib/actions/gate";
 
 // MESA DE IMAGENS — v12.3 FIX CONGRUÊNCIA (25 ago noite)
 // Fix do erro: prompt 10/10 EN elite gerava fruta amarela pintada em pedestal
@@ -439,14 +439,9 @@ async function gerarViaGeminiImagem(chave: string, prompt: string): Promise<Tent
 }
 
 export async function GET() {
-  const supabase = await getSupabaseServer();
-  if (supabase) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ erro: "Faça login para ver os geradores de imagem." }, { status: 401 });
-    }
+  const sessao = await verificarSessao();
+  if (!sessao.autorizada) {
+    return NextResponse.json({ erro: sessao.erro }, { status: sessao.httpStatus });
   }
 
   const cloudflareArmado = Boolean(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN);
@@ -461,14 +456,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await getSupabaseServer();
-  if (supabase) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ erro: "Faça login para gerar imagens." }, { status: 401 });
-    }
+  const sessao = await verificarSessao();
+  if (!sessao.autorizada) {
+    return NextResponse.json({ erro: sessao.erro }, { status: sessao.httpStatus });
   }
 
   let corpo: PedidoImagem;

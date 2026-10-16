@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Cpu, CheckCircle2, Key, RefreshCw, ShieldCheck, Webhook, Globe, Zap } from "lucide-react";
+import { Cpu, CheckCircle2, Key, RefreshCw, Webhook, Globe, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,6 @@ export function IntegracoesView() {
   const [metaToken, setMetaToken] = useState("");
   const [tiktokKey, setTiktokKey] = useState("");
   const [googleId, setGoogleId] = useState("");
-  const [whatsappToken, setWhatsappToken] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   function handleSalvar(e: React.FormEvent) {

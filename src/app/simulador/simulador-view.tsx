@@ -6,7 +6,6 @@ import {
   DollarSign,
   TrendingUp,
   Target,
-  Sparkles,
   ShieldAlert,
   BarChart3,
   ArrowUpRight,

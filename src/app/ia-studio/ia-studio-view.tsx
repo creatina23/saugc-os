@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   AlertTriangle,
   Bot,
@@ -9,17 +10,14 @@ import {
   Copy,
   Cpu,
   Download,
-  Layers,
   Loader2,
   Sparkles,
-  Terminal,
   Wand2,
   Image as ImageIcon,
   MessageSquareText,
   ShieldCheck,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -45,7 +43,7 @@ export function IaStudioView() {
   const [promptUsuario, setPromptUsuario] = useState("");
   const [resultadoIa, setResultadoIa] = useState("");
   const [carregando, setCarregando] = useState(false);
-  const [historico, setHistorico] = useState(aiHistory);
+  const [, setHistorico] = useState(aiHistory);
 
   // Aba ativa: "chat" (Mesa de Agentes) ou "imagem" (Engenheiro de Prompts Visuais)
   const [abaAtiva, setAbaAtiva] = useState<"chat" | "imagem">("chat");
@@ -188,18 +186,18 @@ Estruture a resposta EXATamente assim:
         title="IA Studio — Bancada de Agentes"
         description="Geração de texto por IA real (via iaService), direção de arte + prompt visual e geração real de imagem sob demanda (via imagemService)."
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant={abaAtiva === "chat" ? "default" : "outline"}
             onClick={() => setAbaAtiva("chat")}
-            className="gap-2"
+            className="h-auto min-h-10 max-w-full gap-2 whitespace-normal"
           >
             <Brain className="size-4" /> Mesa de Agentes
           </Button>
           <Button
             variant={abaAtiva === "imagem" ? "default" : "outline"}
             onClick={() => setAbaAtiva("imagem")}
-            className="gap-2"
+            className="h-auto min-h-10 max-w-full gap-2 whitespace-normal"
           >
             <ImageIcon className="size-4" /> Engenheiro de Prompts Visuais
           </Button>
@@ -306,7 +304,7 @@ Estruture a resposta EXATamente assim:
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+                <div className="pt-4 border-t border-border flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1"><ShieldCheck className="size-4 text-success" /> Texto gerado por IA (chamada real via iaService)</span>
                   <span>{provedorReal ? `Provedor: ${provedorReal}` : "Provedor: definido automaticamente na execução"}</span>
                 </div>
@@ -428,7 +426,7 @@ Estruture a resposta EXATamente assim:
                         {imagemReal && infoImagem && (
                           <div className="space-y-2">
                             <div className="rounded-2xl overflow-hidden border border-border/60 shadow-2xl max-w-md mx-auto">
-                              <img src={imagemReal} alt="Imagem gerada pelo sistema agora" className="w-full h-auto object-cover" />
+                              <Image src={imagemReal} alt="Imagem gerada pelo sistema agora" width={768} height={960} unoptimized className="w-full h-auto object-cover" />
                             </div>
                             <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Video, Sparkles, CheckCircle2, Loader2, Play, Flame, Target } from "lucide-react";
+import { Video, CheckCircle2, Loader2, Play, Flame, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";

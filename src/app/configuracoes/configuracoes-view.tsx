@@ -1,31 +1,24 @@
 "use client";
 
 // ------------------------------------------------------------------
-// Configurações — AnuncIA OS (Com Gerenciador de Chaves de API Real)
+// Configurações — AnuncIA OS (status de provedores sem segredos no navegador)
 // ------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Bell,
-  Bot,
   Check,
   CheckCircle2,
   Crown,
-  Database,
   Eye,
   ImagePlus,
   Key,
   Loader2,
   Mail,
   Megaphone,
-  MessageCircle,
   Save,
   ShieldCheck,
   Sparkles,
   UserPlus,
-  Workflow,
-  Globe,
-  Zap,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -50,7 +43,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
-import { toast } from "@/lib/toast";
+import { ProviderStatus } from "@/components/settings/provider-status";
+import { limparCredenciaisDoNavegador, neutralizarCredenciaisDoUsuario } from "@/lib/security/provider-credentials";
 
 const fieldLabel = "mb-1.5 block text-xs font-medium text-muted-foreground";
 const ABAS = ["Geral", "Perfil", "Notificações", "Equipe & Permissões", "Faturamento & Plano", "Integrações API"];
@@ -121,13 +115,7 @@ export function ConfiguracoesView() {
   // Notificações
   const [notifications, setNotifications] = useState<Record<string, boolean>>(NOTIFS_PADRAO);
 
-  // Chaves de API (Integrações)
-  const [apiKeyOpenAI, setApiKeyOpenAI] = useState("");
-  const [apiKeyAnthropic, setApiKeyAnthropic] = useState("");
-  const [apiKeyGemini, setApiKeyGemini] = useState("");
-  const [apiKeyMeta, setApiKeyMeta] = useState("");
-  const [apiKeyWhatsapp, setApiKeyWhatsapp] = useState("");
-  const [apiKeyStripe, setApiKeyStripe] = useState("");
+  const [limpezaLegada, setLimpezaLegada] = useState<"pendente" | "local" | "concluida" | "falhou">("pendente");
 
   // Métricas reais
   const [usoClientes, setUsoClientes] = useState(0);
@@ -144,18 +132,6 @@ export function ConfiguracoesView() {
       Promise.resolve().then(() => {
         if (!ativo) return;
         setSemBanco(true);
-        try {
-          const keysLocal = localStorage.getItem("anuncia_api_keys");
-          if (keysLocal) {
-            const parsed = JSON.parse(keysLocal);
-            setApiKeyOpenAI(parsed.openai || "");
-            setApiKeyAnthropic(parsed.anthropic || "");
-            setApiKeyGemini(parsed.gemini || "");
-            setApiKeyMeta(parsed.meta || "");
-            setApiKeyWhatsapp(parsed.whatsapp || "");
-            setApiKeyStripe(parsed.stripe || "");
-          }
-        } catch {}
         setCarregando(false);
       });
       return () => {
@@ -163,9 +139,9 @@ export function ConfiguracoesView() {
       };
     }
 
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user }, error }) => {
       if (!ativo) return;
-      if (!user) {
+      if (error || !user) {
         setCarregando(false);
         return;
       }
@@ -174,9 +150,7 @@ export function ConfiguracoesView() {
         avatar_url?: string;
         workspace?: { nome?: string; descricao?: string; fuso?: string };
         notificacoes?: Record<string, boolean>;
-        api_keys?: { openai?: string; anthropic?: string; gemini?: string; meta?: string; whatsapp?: string; stripe?: string };
       };
-      const nome = meta.full_name?.trim() || user.email?.split("@")[0] || "Administrador";
       setUserId(user.id);
       setEmail(user.email ?? "");
       setPerfilNome(meta.full_name ?? "");
@@ -187,14 +161,7 @@ export function ConfiguracoesView() {
       setWsFuso(meta.workspace?.fuso ?? "sp");
       setNotifications({ ...NOTIFS_PADRAO, ...(meta.notificacoes ?? {}) });
 
-      if (meta.api_keys) {
-        setApiKeyOpenAI(meta.api_keys.openai || "");
-        setApiKeyAnthropic(meta.api_keys.anthropic || "");
-        setApiKeyGemini(meta.api_keys.gemini || "");
-        setApiKeyMeta(meta.api_keys.meta || "");
-        setApiKeyWhatsapp(meta.api_keys.whatsapp || "");
-        setApiKeyStripe(meta.api_keys.stripe || "");
-      }
+      // Abrir Configurações não remove credenciais locais nem remotas.
 
       const [resClientes, resBiblioteca, resAssets] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
@@ -209,6 +176,9 @@ export function ConfiguracoesView() {
         0
       );
       setUsoStorageBytes(soma);
+      setCarregando(false);
+    }).catch(() => {
+      if (!ativo) return;
       setCarregando(false);
     });
 
@@ -359,34 +329,35 @@ export function ConfiguracoesView() {
     });
   }
 
-  async function handleSalvarApiKeys() {
-    const payloadKeys = {
-      openai: apiKeyOpenAI.trim(),
-      anthropic: apiKeyAnthropic.trim(),
-      gemini: apiKeyGemini.trim(),
-      meta: apiKeyMeta.trim(),
-      whatsapp: apiKeyWhatsapp.trim(),
-      stripe: apiKeyStripe.trim(),
-    };
-
-    const supabase = getSupabaseBrowser();
-    if (supabase) {
-      setSalvando("apikeys");
-      const { error } = await supabase.auth.updateUser({
-        data: { api_keys: payloadKeys },
-      });
-      setSalvando(null);
-      if (error) {
-        toast("Erro ao salvar chaves", { description: error.message, type: "error" });
+  async function handleLimparCredenciaisAntigas() {
+    if (salvando === "limpeza") return;
+    const confirmou = window.confirm(
+      "Remover o campo antigo de credenciais da sua conta e a entrada deste navegador? " +
+      "Os valores não serão lidos nem exibidos. Perfil, workspace e notificações serão preservados. " +
+      "Esta operação não revoga chaves nos provedores nem remove cópias de outros dispositivos ou sessões anteriores. " +
+      "A limpeza da conta exige uma sessão válida. Deseja continuar?"
+    );
+    if (!confirmou) return;
+    setSalvando("limpeza");
+    try {
+      const localOk = limparCredenciaisDoNavegador();
+      const supabase = getSupabaseBrowser();
+      if (!supabase) {
+        setLimpezaLegada(localOk ? "local" : "falhou");
         return;
       }
-    } else {
-      try {
-        localStorage.setItem("anuncia_api_keys", JSON.stringify(payloadKeys));
-      } catch {}
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        setLimpezaLegada(localOk ? "local" : "falhou");
+        return;
+      }
+      const contaOk = await neutralizarCredenciaisDoUsuario(supabase.auth);
+      setLimpezaLegada(localOk && contaOk ? "concluida" : "falhou");
+    } catch {
+      setLimpezaLegada("falhou");
+    } finally {
+      setSalvando(null);
     }
-
-    toast("Credenciais de API e Tokens salvos com sucesso!", { type: "success" });
   }
 
   const usoArmazenamentoRotulo = formatarTamanho(usoStorageBytes);
@@ -711,102 +682,38 @@ export function ConfiguracoesView() {
           <Card className="border-border bg-surface/65 backdrop-blur-xl">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Key className="size-4 text-primary" /> Chaves de API & Tokens Oficiais
+                <Key className="size-4 text-primary" /> Status dos provedores de IA
               </CardTitle>
               <CardDescription>
-                Insira e salve as chaves secretas dos motores de IA, plataformas de anúncio e automação.
+                As credenciais são administradas no servidor. Esta tela mostra somente o status de configuração.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                    <Bot className="size-3.5 text-primary" /> OpenAI API Key (GPT-4o)
-                  </label>
-                  <Input
-                    type="password"
-                    value={apiKeyOpenAI}
-                    onChange={(e) => setApiKeyOpenAI(e.target.value)}
-                    placeholder="sk-proj-..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                    <Sparkles className="size-3.5 text-violet-400" /> Anthropic API Key (Claude 3.5)
-                  </label>
-                  <Input
-                    type="password"
-                    value={apiKeyAnthropic}
-                    onChange={(e) => setApiKeyAnthropic(e.target.value)}
-                    placeholder="sk-ant-..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                    <Globe className="size-3.5 text-emerald-400" /> Google Gemini API Key
-                  </label>
-                  <Input
-                    type="password"
-                    value={apiKeyGemini}
-                    onChange={(e) => setApiKeyGemini(e.target.value)}
-                    placeholder="AIzaSy..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                    <Zap className="size-3.5 text-blue-400" /> Meta Marketing API Token
-                  </label>
-                  <Input
-                    type="password"
-                    value={apiKeyMeta}
-                    onChange={(e) => setApiKeyMeta(e.target.value)}
-                    placeholder="EAAQ..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                    <MessageCircle className="size-3.5 text-success" /> WhatsApp Cloud API Token
-                  </label>
-                  <Input
-                    type="password"
-                    value={apiKeyWhatsapp}
-                    onChange={(e) => setApiKeyWhatsapp(e.target.value)}
-                    placeholder="EAAG..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                    <Workflow className="size-3.5 text-amber-400" /> Stripe Secret Key (Faturamento)
-                  </label>
-                  <Input
-                    type="password"
-                    value= {apiKeyStripe}
-                    onChange={(e) => setApiKeyStripe(e.target.value)}
-                    placeholder="rk_live_..."
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
-                <Button onClick={() => void handleSalvarApiKeys()} disabled={salvando === "apikeys"} className="gap-2">
-                  {salvando === "apikeys" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                  Salvar Chaves de API
-                </Button>
-              </div>
-            </CardContent>
+            <CardContent><ProviderStatus /></CardContent>
           </Card>
-
           <Card>
-            <CardContent className="flex items-start gap-3 p-4">
-              <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
-              <p className="text-sm text-muted-foreground">
-                Criptografia de ponta a ponta: as chaves são armazenadas com segurança no banco de dados e nunca são expostas no front-end após salvas.
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShieldCheck className="size-4 text-primary" /> Credenciais antigas
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p role={limpezaLegada === "falhou" ? "alert" : "status"} className="text-sm text-muted-foreground">
+                {limpezaLegada === "concluida"
+                  ? "A entrada antiga deste navegador foi removida e o campo de credenciais da sua conta foi neutralizado."
+                  : limpezaLegada === "local"
+                    ? "A entrada antiga deste navegador foi removida. A limpeza da conta só será executada após sua confirmação e validação da sessão."
+                    : limpezaLegada === "falhou"
+                      ? "Não foi possível concluir a limpeza das credenciais antigas. Tente novamente."
+                      : "Nenhuma credencial é removida automaticamente. Revise e confirme a limpeza abaixo."}
               </p>
+              <p className="text-xs text-muted-foreground">
+                A limpeza só ocorre após sua confirmação e não lê nem exibe os valores antigos. Se você já salvou chaves aqui, revogue-as ou substitua-as nos provedores: cópias em outros dispositivos e sessões anteriores não são removidas por esta operação.
+              </p>
+              {limpezaLegada !== "concluida" && (
+                <Button variant="outline" className="h-auto min-h-10 max-w-full whitespace-normal" onClick={() => void handleLimparCredenciaisAntigas()} disabled={salvando === "limpeza"}>
+                  {salvando === "limpeza" ? "Limpando…" : "Revisar e confirmar limpeza da conta"}
+                </Button>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

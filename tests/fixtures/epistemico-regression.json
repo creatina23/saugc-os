@@ -1,0 +1,153 @@
+[
+  {
+    "texto": "Desconto de 30% hoje.",
+    "fonte": "",
+    "achados": [
+      {
+        "categoria": "DESCONTO_PERCENTUAL",
+        "trecho": "Desconto de 30% hoje.",
+        "norma": "BLOQUEIO",
+        "porque": "oferta/percentual de desconto sem autorização explícita no briefing (valor-específica)"
+      }
+    ],
+    "veredito": "BLOQUEADO_POR_EVIDENCIA"
+  },
+  {
+    "texto": "Desconto de 30% hoje.",
+    "fonte": "Oferta: desconto de 30% hoje.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "Frete grátis para todo o Brasil.",
+    "fonte": "",
+    "achados": [
+      {
+        "categoria": "GRATUIDADE",
+        "trecho": "Frete grátis para todo o Brasil.",
+        "norma": "BLOQUEIO",
+        "porque": "afirmação de gratuidade sem evidência de gratuidade no briefing"
+      }
+    ],
+    "veredito": "BLOQUEADO_POR_EVIDENCIA"
+  },
+  {
+    "texto": "Frete grátis para todo o Brasil.",
+    "fonte": "A oferta inclui frete grátis para todo o Brasil.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "Garantia de 90 dias.",
+    "fonte": "Garantia de 30 dias.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "Garantia de 90 dias.",
+    "fonte": "Garantia de 90 dias.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "Rende 12 aplicações.",
+    "fonte": "Rende de 8 a 10 aplicações.",
+    "achados": [
+      {
+        "categoria": "ASSERCAO_MATERIAL_ABERTA",
+        "trecho": "Rende 12 aplicações.",
+        "norma": "QUALIFICAR",
+        "porque": "incerteza material: predicação factual sobre entidade comercial (IDIOMA_MATERIAL) fora das famílias conhecidas e SEM autoridade aberta no Nível A — open-world gate, REVISÃO conservadora (não-APROVADO silencioso)"
+      }
+    ],
+    "veredito": "APROVADO_COM_AJUSTES"
+  },
+  {
+    "texto": "Rende de 8 a 10 aplicações.",
+    "fonte": "Rende de 8 a 10 aplicações.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "Três takes de trinta segundos, com corte e luz suave.",
+    "fonte": "Criar um roteiro UGC.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "E se oferecêssemos frete grátis?",
+    "fonte": "Sem oferta confirmada.",
+    "achados": [
+      {
+        "categoria": "GRATUIDADE",
+        "trecho": "oferecêssemos frete grátis?",
+        "norma": "BLOQUEIO",
+        "porque": "afirmação de gratuidade sem evidência de gratuidade no briefing"
+      }
+    ],
+    "veredito": "BLOQUEADO_POR_EVIDENCIA"
+  },
+  {
+    "texto": "Não prometemos resultados garantidos.",
+    "fonte": "Não há garantia de resultado.",
+    "achados": [
+      {
+        "categoria": "EXPANSAO_FORCA_SEMANTICA",
+        "trecho": "Não prometemos resultados garantidos.",
+        "norma": "BLOQUEIO",
+        "porque": "força da afirmação (8) excede a força do suporte alinhado (2) — SPECIFIC AUTHORITY DOES NOT IMPLY BROADER AUTHORITY"
+      }
+    ],
+    "veredito": "BLOQUEADO_POR_EVIDENCIA"
+  },
+  {
+    "texto": "Entrega em um dia útil.",
+    "fonte": "Podemos estudar entrega em um dia útil.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "O produto custa R$ 99.",
+    "fonte": "Preço confirmado: R$ 99.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "Mais de 500 clientes satisfeitos.",
+    "fonte": "",
+    "achados": [
+      {
+        "categoria": "ASSERCAO_MATERIAL_ABERTA",
+        "trecho": "Mais de 500 clientes satisfeitos.",
+        "norma": "QUALIFICAR",
+        "porque": "incerteza material: predicação factual sobre entidade comercial (IDIOMA_MATERIAL) fora das famílias conhecidas e SEM autoridade aberta no Nível A — open-world gate, REVISÃO conservadora (não-APROVADO silencioso)"
+      }
+    ],
+    "veredito": "APROVADO_COM_AJUSTES"
+  },
+  {
+    "texto": "Crie um personagem e uma metáfora visual.",
+    "fonte": "Direção criativa livre.",
+    "achados": [],
+    "veredito": "APROVADO"
+  },
+  {
+    "texto": "Ganhe 10% de desconto.",
+    "fonte": "Não oferecer desconto.",
+    "achados": [
+      {
+        "categoria": "DESCONTO_PERCENTUAL",
+        "trecho": "Ganhe 10% de desconto.",
+        "norma": "BLOQUEIO",
+        "porque": "oferta/percentual de desconto sem autorização explícita no briefing (valor-específica)"
+      },
+      {
+        "categoria": "DESCONTO_COMERCIAL",
+        "trecho": "Ganhe 10% de desconto.",
+        "norma": "BLOQUEIO",
+        "porque": "condição comercial de desconto sem autorização positiva no Nível A (lineage: hipótese não vira oferta)"
+      }
+    ],
+    "veredito": "BLOQUEADO_POR_EVIDENCIA"
+  }
+]

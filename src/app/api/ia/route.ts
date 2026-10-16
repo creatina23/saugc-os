@@ -16,7 +16,7 @@
 // ======================================================================
 
 import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { verificarSessao } from "@/lib/actions/gate";
 import { BASE_EXCELENCIA } from "@/lib/base-excelencia";
 import { montarPromptCognitivo } from "@/lib/constituicao/composicao";
 import {
@@ -92,18 +92,10 @@ function traduzErroIA(status: number): string {
 // ---------- GET: espelho da mesa (quais motores têm chave plantada) ----------
 
 export async function GET() {
-  // Mesma porta do POST: com Supabase configurado, só usuário logado espia
-  const supabase = await getSupabaseServer();
-  if (supabase) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json(
-        { erro: "Faça login para ver os motores." },
-        { status: 401 }
-      );
-    }
+  // Mesma porta do POST: backend configurado e sessão confirmada são obrigatórios.
+  const sessao = await verificarSessao();
+  if (!sessao.autorizada) {
+    return NextResponse.json({ erro: sessao.erro }, { status: sessao.httpStatus });
   }
 
   // Só booleanos — NUNCA as chaves (GitHub Models descansa em paz)
@@ -113,18 +105,10 @@ export async function GET() {
 // ---------- POST: gerar texto, caindo pela cascata canônica ----------
 
 export async function POST(request: Request) {
-  // 1) Porta: quando o Supabase está configurado, exige usuário logado
-  const supabase = await getSupabaseServer();
-  if (supabase) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json(
-        { erro: "Faça login para usar a IA." },
-        { status: 401 }
-      );
-    }
+  // 1) Porta obrigatória antes de ler o pedido ou chamar qualquer provedor.
+  const sessao = await verificarSessao();
+  if (!sessao.autorizada) {
+    return NextResponse.json({ erro: sessao.erro }, { status: sessao.httpStatus });
   }
 
   // 2) Pedido

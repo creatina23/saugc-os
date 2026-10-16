@@ -38,7 +38,6 @@ import {
   pipelineValueByStage as funilMock,
 } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
-import { toast } from "@/lib/toast";
 
 // TR-04.8D.2c-2: motor PURO de attention (regras R1–R4/R6) + painel.
 import {
@@ -667,6 +666,10 @@ const SEM_ERROS: FonteErro = {
   assets: null,
 };
 
+async function lerFonteDashboard(supabase: SupabaseClient | null) {
+  return supabase ? coletarDadosReais(supabase) : null;
+}
+
 export function DashboardView() {
   const supabase = useMemo(() => getSupabaseBrowser(), []);
   // TR-04.8D.1: nasce em LOADING — nenhum mock aparece antes do dado real.
@@ -718,40 +721,31 @@ export function DashboardView() {
     pedirReconciliacao?.();
   }, [pedirReconciliacao]);
 
-  const carregar = useCallback(async () => {
-    if (!supabase) {
+  const aplicarFonte = useCallback((fonte: Awaited<ReturnType<typeof lerFonteDashboard>>) => {
+    if (!fonte) {
       const fim = new Date();
-      setPainel({
-        estado: "demo",
-        dados: montarDadosDemo(),
-        calculadoEm: fim.toISOString(),
-      });
-      setAtualizadoEm(
-        fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-      );
+      setPainel({ estado: "demo", dados: montarDadosDemo(), calculadoEm: fim.toISOString() });
+      setAtualizadoEm(fim.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
       return;
     }
-    setPainel({ estado: "loading" });
-    try {
-      const { dados, erros } = await coletarDadosReais(supabase);
-      const todasFalharam =
-        erros.clientes && erros.campanhas && erros.negocios &&
-        erros.briefings && erros.commercials && erros.assets;
-      if (todasFalharam) {
-        setPainel({ estado: "erro" }); // ERROR: nenhuma fonte respondeu
-      } else {
-        aplicarDadosProntos(dados, erros);
-      }
-    } catch (err) {
-      // Rejeição explícita: nunca skeleton eterno, nunca demo disfarçada.
-      console.error("Erro ao carregar dados do dashboard:", err);
-      setPainel({ estado: "erro" });
-    }
-  }, [supabase, aplicarDadosProntos]);
+    const { dados, erros } = fonte;
+    const todasFalharam = erros.clientes && erros.campanhas && erros.negocios && erros.briefings && erros.commercials && erros.assets;
+    if (todasFalharam) setPainel({ estado: "erro" });
+    else aplicarDadosProntos(dados, erros);
+  }, [aplicarDadosProntos]);
+  const aplicarErro = useCallback(() => {
+    console.error("Erro ao carregar dados do dashboard.");
+    setPainel({ estado: "erro" });
+  }, []);
+  const carregar = useCallback(() => lerFonteDashboard(supabase).then(aplicarFonte).catch(aplicarErro), [supabase, aplicarFonte, aplicarErro]);
 
   useEffect(() => {
-    void carregar();
-  }, [carregar]);
+    let ativo = true;
+    void lerFonteDashboard(supabase)
+      .then((fonte) => { if (ativo) aplicarFonte(fonte); })
+      .catch(() => { if (ativo) aplicarErro(); });
+    return () => { ativo = false; };
+  }, [supabase, aplicarFonte, aplicarErro]);
 
   // ---------- LOADING: skeleton real, zero mock ----------
   if (painel.estado === "loading") {
@@ -794,7 +788,7 @@ export function DashboardView() {
           <p className="mt-1 text-sm text-muted-foreground">
             As fontes de dados não responderam. Nada aqui é ilustração — tente novamente.
           </p>
-          <Button size="sm" className="mt-4" onClick={() => void carregar()}>
+          <Button size="sm" className="mt-4" onClick={() => { setPainel({ estado: "loading" }); void carregar(); }}>
             <RefreshCw /> Tentar novamente
           </Button>
         </CardContent>
@@ -869,10 +863,10 @@ export function DashboardView() {
     <>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-8">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight">Central</h1>
             {modoDemo && (
-              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning text-xs">
+              <Badge variant="outline" className="max-w-full whitespace-normal border-warning/40 bg-warning/10 text-warning text-xs">
                 Modo Demonstração (Conecte o Supabase)
               </Badge>
             )}
@@ -894,11 +888,11 @@ export function DashboardView() {
             {atualizadoEm && <> Atualizado às {atualizadoEm}.</>}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void carregar()}
+            onClick={() => { setPainel({ estado: "loading" }); void carregar(); }}
             aria-label="Recarregar dados do painel"
             className="gap-1.5"
           >
@@ -914,9 +908,9 @@ export function DashboardView() {
       </div>
 
       {modoDemo && (
-        <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/20 text-primary">
+        <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 basis-full items-center gap-3 sm:flex-1 sm:basis-auto">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary">
               <Zap className="size-5" />
             </div>
             <div>
@@ -940,7 +934,7 @@ export function DashboardView() {
             Dados parciais: falha ao carregar {fontesFalhas.join(", ")}. Os demais
             números seguem reais — os blocos afetados avisam o que aconteceu.
           </p>
-          <Button variant="outline" size="sm" onClick={() => void carregar()}>
+          <Button variant="outline" size="sm" onClick={() => { setPainel({ estado: "loading" }); void carregar(); }}>
             <RefreshCw /> Recarregar
           </Button>
         </div>
@@ -1036,7 +1030,7 @@ export function DashboardView() {
           <Link key={action.label} href={action.href} title={action.description}>
             <Button
               variant="outline"
-              className="h-11 w-full justify-start gap-2 px-4 font-medium md:w-auto"
+              className="h-auto min-h-11 w-full justify-start gap-2 whitespace-normal px-4 font-medium md:w-auto"
             >
               <action.icon className="size-4 text-muted-foreground" />
               {action.label}
