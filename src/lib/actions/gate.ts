@@ -10,7 +10,7 @@
 //
 // Regras inegociáveis:
 // - sem sessão → 401 (sempre; o proxy de borda falha aberto, portanto
-//   o gate DEVE existir in-handler, padrão /api/ia);
+//   o gate DEVE existir in-handler, inclusive nas rotas de IA);
 // - backend não configurado → 503 honesto (nunca fingir sessão);
 // - decidirPorSessao é PURA (testável sem Supabase/rede).
 //
@@ -52,33 +52,38 @@ export function decidirPorSessao(user: User | null): SessaoConfirmada | SessaoNe
 /** Gate real: resolve client server-side + sessão autenticada.
  *  - sem env Supabase → 503 honesto;
  *  - auth.getUser → null → 401;
- *  - exceção da chamada de auth → 503 honesto (nunca 200 duvidoso). */
+ *  - erro de auth ou de inicialização → acesso negado, sem detalhe interno. */
 export async function verificarSessao(): Promise<DecisaoSessao> {
-  const supabase = await getSupabaseServer();
-  if (!supabase) {
-    return {
-      autorizada: false,
-      httpStatus: 503,
-      erro: "Backend não configurado neste ambiente; nenhuma ação pode ser executada.",
-    };
-  }
   try {
+    const supabase = await getSupabaseServer();
+    if (!supabase) {
+      return {
+        autorizada: false,
+        httpStatus: 503,
+        erro: "Backend não configurado neste ambiente; nenhuma ação pode ser executada.",
+      };
+    }
     const {
       data: { user },
+      error,
     } = await supabase.auth.getUser();
+    if (error) {
+      return {
+        autorizada: false,
+        httpStatus: error.status === 401 || error.status === 403 || error.name === "AuthSessionMissingError" ? 401 : 503,
+        erro: "Não foi possível confirmar a sessão. Entre novamente ou tente mais tarde.",
+      };
+    }
     const decisao = decidirPorSessao(user);
     if (!decisao.autorizada) {
       return decisao;
     }
     return { autorizada: true, supabase, user: decisao.user };
-  } catch (erro) {
+  } catch {
     return {
       autorizada: false,
       httpStatus: 503,
-      erro:
-        "Não foi possível confirmar a sessão agora (" +
-        (erro instanceof Error ? erro.message : "erro desconhecido") +
-        "). Incerteza não autoriza.",
+      erro: "Não foi possível confirmar a sessão agora. Tente novamente mais tarde.",
     };
   }
 }
