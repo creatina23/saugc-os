@@ -53,6 +53,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { commercials } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { camposParaAtualizacao } from "@/lib/supabase/editable-fields";
 import { cn } from "@/lib/utils";
 import type { CommercialStatus, ThumbnailTone } from "@/types";
 
@@ -376,7 +377,7 @@ export function ComerciaisView() {
     if (editingId) {
       const { data: linha, error } = await supabase
         .from("commercials")
-        .update(registro)
+        .update(camposParaAtualizacao(registro))
         .eq("id", editingId)
         .select(COLUNAS)
         .single();

@@ -20,6 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { dataIsoDoServidor } from "@/lib/date-only";
 import { verificarSessao } from "@/lib/actions/gate";
 import {
   montarPromptParticionado,
@@ -117,9 +118,9 @@ export async function POST(req: Request) {
       const { error } = await supabase.from("briefings").insert([
         {
           title: dados.titulo,
-          client: dados.cliente,
+          client_name: dados.cliente,
           status: "Em Aprovação",
-          deadline: new Date(Date.now() + 7 * 86400000).toLocaleDateString("pt-BR"),
+          deadline: dataIsoDoServidor(new Date(Date.now() + 7 * 86400000)),
           tags: ["Orquestrador", "UGC", "IA"],
         },
       ]);

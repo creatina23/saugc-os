@@ -1,0 +1,26 @@
+{
+  "source_repository": "creatina23/saugc-os",
+  "source_branch": "codex/p0-seguranca-ia",
+  "source_commit": "636f6d45e91b5e1bed898ff5512b4d8393b5396f",
+  "m22_zip_sha256": "34aaa3878b584ad1e5a02925d2f9dc4c06e60712799f7e271d26ca99d7ef4004",
+  "homologated_files": {
+    "revisao-m17/COMPATIBILIDADE_STORAGE_M19.sql.proposed": "dd8187e0f03a4214a752face1a6b86129f8765d5da61a4be1f98fd819e0d899f",
+    "revisao-m17/INTEGRACAO_CONTROLADA_M20.md": "7f52550768ee76bb938d5c75359f4c4d6166215c0ac8d260a514eed81fb2d0d3",
+    "revisao-m17/LEIA-ME.md": "cc60e3b10220921f60f700a854a7c29b2cd7429f02c9a27cf03d838cd2dfaa7c",
+    "revisao-m17/RUNTIME_STORAGE_M19.json": "11377bcb170d1873625daf92aec672cb8eef0aa3f58adf4d6d1e9271496feca5",
+    "revisao-m17/SCHEMA_CONSOLIDADO_M17.sql.proposed": "ea56a3a542ab38c34a49724396edc53ce6940fe4b452fcdd12ce885c5483742b",
+    "src/lib/date-only.ts": "dc0647944a636e37faa3da3d965092fa5a0a68cbcf911ecc8200df922cf378e3",
+    "src/lib/supabase/editable-fields.ts": "78f1b582a2cdf9b1cbe9d95deb0c00d19cb0fd7a5aaa009e028133e9e6a8621e",
+    "src/lib/upload-rules.ts": "9d7d733528ef07ca89a04a053adacb871e1803f3ea8489263ade9024dd34dd0e",
+    "tests/crm-persistence.test.mjs": "afa7d3cd7d6ea0a53e74ae9e40c3d1fde0c78bf5f8165dd619f95a649a61b468",
+    "tests/t10-compatibility.test.mjs": "a5a9374269534a9e8d94ec427785b01c35350a5465e86c7592db4fbf3d34e356",
+    "src/app/api/orquestrador/route.ts": "012a790f3014a17e9026122ac34cc7ad5676c70607aba462f44b17fa69202cf3",
+    "src/app/assets/assets-view.tsx": "f7e564964a19b6e3010fc305ffa0f763f9e663462ed5e38c78caf26e2ef8da61",
+    "src/app/biblioteca/biblioteca-view.tsx": "1e6dbe8b2353170efb61f329ddaae979e072d6ae4e8cd9dac6edaca7331f1305",
+    "src/app/briefings/briefings-view.tsx": "caf2942ad03d08753ba0941f99f812dbfbf02e68b10919d38a4415e7b58126a3",
+    "src/app/campanhas/campanhas-view.tsx": "0f37ebac93baa13aa87e29ff877902e244ab1517dd50bbba41fcb92ae625f583",
+    "src/app/comerciais/comerciais-view.tsx": "4aa03752770fecf634192a51dc63f21c9bc8e49b73283053f500fa9c7d37b674",
+    "src/app/crm/crm-view.tsx": "5788dec166cc58398e72decbc11eccbf9a6dc1962d2c91d3fd56031d02b9bd9e",
+    "src/app/prompts/prompts-view.tsx": "9b30f2d9ed948447a780c594f867d61c6ce9b8b6dde43906aa9ffdd9c800667a"
+  }
+}

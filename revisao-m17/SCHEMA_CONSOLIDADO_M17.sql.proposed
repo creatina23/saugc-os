@@ -1,0 +1,528 @@
+-- CONSOLIDADO M17: banco Supabase local NOVO, com schemas geridos ja inicializados.
+-- Nao e migration de upgrade de banco existente. Nao sobrescreve dados ou schema.
+-- Comentarios historicos dos modulos sao mantidos; a autorizacao vale so no laboratorio.
+-- Os tres GUCs exigidos sao travas de acidente, NAO comprovam isolamento.
+-- Nao define as travas automaticamente. Verificar daemon, DB, rede e baseline fora do SQL.
+-- Aplicar de forma atomica: nenhuma janela com apenas T10 visivel a outros clientes.
+BEGIN;
+-- MODULO: SCHEMA_T10.sql.proposed
+-- PROPOSTA T10: nao executada. Somente Supabase LOCAL novo e descartavel.
+-- Decisoes de produto aprovadas; execucao ainda NAO autorizada.
+-- Trava contra acidente: nao prova consentimento nem identifica o ambiente.
+DO $review$
+BEGIN
+  IF current_setting('anuncia.t10_review', true) IS DISTINCT FROM 'REVIEWED_LOCAL_ONLY' THEN
+    RAISE EXCEPTION 'T10: exige autorizacao separada e verificacao do alvo LOCAL';
+  END IF;
+  IF current_user <> 'postgres' OR NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=current_user AND (rolsuper OR rolbypassrls)
+  ) THEN
+    RAISE EXCEPTION 'T10: revisar o executor local; esperado postgres com bypass de RLS';
+  END IF;
+END
+$review$;
+
+-- CREATE SCHEMA/TABLE falham se ja houver recursos: nao sobrescrever schema desconhecido.
+DO $roles_guard$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles AS api CROSS JOIN pg_catalog.pg_roles AS elevated
+    WHERE api.rolname IN ('anon','authenticated') AND (elevated.rolsuper OR elevated.rolbypassrls)
+      AND pg_catalog.pg_has_role(api.oid,elevated.oid,'MEMBER')) THEN
+    RAISE EXCEPTION 'Roles API nao podem ser superuser ou BYPASSRLS';
+  END IF;
+END
+$roles_guard$;
+CREATE SCHEMA anuncia_private;
+REVOKE ALL ON SCHEMA anuncia_private FROM PUBLIC, anon, authenticated;
+-- sem CREATE para roles de API; somente objetos declarados abaixo recebem grants.
+REVOKE CREATE ON SCHEMA public FROM PUBLIC, anon, authenticated;
+GRANT USAGE ON SCHEMA public TO authenticated;
+
+CREATE FUNCTION anuncia_private.t10_immutable_identity() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog AS $fn$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.user_id IS DISTINCT FROM OLD.user_id
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'Identidade, proprietario e data de criacao sao imutaveis' USING ERRCODE='42501';
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION anuncia_private.t10_immutable_identity() FROM PUBLIC, anon, authenticated;
+
+CREATE TABLE public.clients (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE NO ACTION,
+  name text NOT NULL DEFAULT '',
+  company text NOT NULL DEFAULT '',
+  email text NOT NULL DEFAULT '',
+  phone text NOT NULL DEFAULT '',
+  tier text NOT NULL DEFAULT 'Growth' CHECK (tier IN ('Enterprise','Growth','Starter')),
+  status text NOT NULL DEFAULT 'Ativo' CHECK (status IN ('Ativo','Inativo','Em onboarding')),
+  mrr numeric NOT NULL DEFAULT 0,
+  logo_initials text,
+  since text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.clients FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.clients FROM PUBLIC, anon, authenticated;
+CREATE INDEX clients_user_created_idx ON public.clients (user_id, created_at DESC);
+CREATE TRIGGER a10_immutable BEFORE UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_immutable_identity();
+
+CREATE TABLE public.campaigns (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE NO ACTION,
+  name text NOT NULL DEFAULT 'Campanha sem nome',
+  client_name text,
+  platform text NOT NULL CHECK (platform IN ('Meta Ads','Google Ads','TikTok')),
+  status text NOT NULL DEFAULT 'Rascunho' CHECK (status IN ('Ativa','Pausada','Rascunho')),
+  stage text,
+  goal text,
+  budget numeric NOT NULL DEFAULT 0,
+  spend numeric NOT NULL DEFAULT 0,
+  impressions bigint NOT NULL DEFAULT 0,
+  clicks bigint NOT NULL DEFAULT 0,
+  conversions bigint NOT NULL DEFAULT 0,
+  revenue numeric NOT NULL DEFAULT 0,
+  roas_meta numeric,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.campaigns FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.campaigns FROM PUBLIC, anon, authenticated;
+CREATE INDEX campaigns_user_created_idx ON public.campaigns (user_id, created_at DESC);
+CREATE TRIGGER a10_immutable BEFORE UPDATE ON public.campaigns FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_immutable_identity();
+
+CREATE TABLE public.briefings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE NO ACTION,
+  title text NOT NULL DEFAULT 'Briefing sem titulo',
+  client_name text,
+  creator text,
+  status text NOT NULL DEFAULT 'Rascunho' CHECK (status IN ('Em Aprovação','Aprovado','Rascunho')),
+  deadline date,
+  tags text[] NOT NULL DEFAULT '{}'::text[],
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.briefings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.briefings FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.briefings FROM PUBLIC, anon, authenticated;
+CREATE INDEX briefings_user_created_idx ON public.briefings (user_id, created_at DESC);
+CREATE TRIGGER a10_immutable BEFORE UPDATE ON public.briefings FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_immutable_identity();
+
+CREATE TABLE public.commercials (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE NO ACTION,
+  title text NOT NULL DEFAULT 'Comercial sem titulo',
+  client_name text,
+  creator text,
+  format text NOT NULL CHECK (format IN ('Reels','TikTok','Shorts','Feed')),
+  script text,
+  deadline date,
+  status text NOT NULL DEFAULT 'Rascunho' CHECK (status IN ('Rascunho','Produção','Revisão','Aprovado')),
+  thumbnail_tone text NOT NULL DEFAULT 'blue' CHECK (thumbnail_tone IN ('blue','violet','emerald','amber','pink')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.commercials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.commercials FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.commercials FROM PUBLIC, anon, authenticated;
+CREATE INDEX commercials_user_created_idx ON public.commercials (user_id, created_at DESC);
+CREATE TRIGGER a10_immutable BEFORE UPDATE ON public.commercials FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_immutable_identity();
+
+CREATE TABLE public.library_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE NO ACTION,
+  title text NOT NULL DEFAULT 'Item sem titulo',
+  category text NOT NULL CHECK (category IN ('UGC Script Templates','Ad Copy Hooks','Criador Guidelines','Strategy Guides')),
+  author text NOT NULL DEFAULT 'Equipe AnuncIA',
+  description text,
+  content text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.library_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.library_items FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.library_items FROM PUBLIC, anon, authenticated;
+CREATE INDEX library_items_user_created_idx ON public.library_items (user_id, created_at DESC);
+CREATE TRIGGER a10_immutable BEFORE UPDATE ON public.library_items FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_immutable_identity();
+
+CREATE TABLE public.deals (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE NO ACTION,
+  title text NOT NULL DEFAULT 'Negocio sem titulo',
+  client_name text,
+  value numeric NOT NULL DEFAULT 0,
+  stage text NOT NULL DEFAULT 'Qualificação' CHECK (stage IN ('Qualificação','Proposta Enviada','Negociação','Contrato Fechado')),
+  probability numeric NOT NULL DEFAULT 0,
+  owner text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.deals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.deals FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.deals FROM PUBLIC, anon, authenticated;
+CREATE INDEX deals_user_created_idx ON public.deals (user_id, created_at DESC);
+CREATE TRIGGER a10_immutable BEFORE UPDATE ON public.deals FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_immutable_identity();
+
+CREATE TABLE public.assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE NO ACTION,
+  name text NOT NULL DEFAULT '',
+  client_name text,
+  category text NOT NULL CHECK (category IN ('Video Ads','Hook Clips','B-Roll','Product Photos')),
+  format text NOT NULL,
+  size_bytes bigint NOT NULL CHECK (size_bytes >= 0),
+  tags text[] NOT NULL DEFAULT '{}'::text[],
+  storage_path text CHECK (storage_path IS NULL OR (split_part(storage_path,'/',1) = user_id::text AND position('/' IN storage_path) > 0 AND split_part(storage_path,'/',2) <> '' AND storage_path !~ '(^|/)[.]{1,2}(/|$)' AND storage_path !~ '//' AND right(storage_path,1) <> '/' AND position('%' IN storage_path) = 0 AND position(chr(92) IN storage_path) = 0 AND storage_path !~ '[[:cntrl:]]')),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.assets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.assets FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.assets FROM PUBLIC, anon, authenticated;
+CREATE INDEX assets_user_created_idx ON public.assets (user_id, created_at DESC);
+CREATE TRIGGER a10_immutable BEFORE UPDATE ON public.assets FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_immutable_identity();
+
+CREATE TABLE public.prompts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE NO ACTION,
+  title text NOT NULL DEFAULT 'Prompt sem titulo',
+  description text,
+  content text NOT NULL DEFAULT 'Sem conteudo',
+  models text[] NOT NULL DEFAULT '{}'::text[],
+  tags text[] NOT NULL DEFAULT '{}'::text[],
+  parameters jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(parameters) = 'object'),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.prompts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.prompts FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.prompts FROM PUBLIC, anon, authenticated;
+CREATE INDEX prompts_user_created_idx ON public.prompts (user_id, created_at DESC);
+CREATE TRIGGER a10_immutable BEFORE UPDATE ON public.prompts FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_immutable_identity();
+
+CREATE POLICY clients_select_own ON public.clients FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY clients_insert_own ON public.clients FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY clients_delete_own ON public.clients FOR DELETE TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE UPDATE (user_id, id, created_at) ON public.clients FROM PUBLIC, anon, authenticated;
+GRANT SELECT, DELETE ON TABLE public.clients TO authenticated;
+GRANT INSERT (id, user_id, name, company, email, phone, tier, status, mrr, logo_initials, since) ON public.clients TO authenticated;
+-- Sem GRANT UPDATE: nenhum UPDATE deste recurso foi encontrado no app atual.
+
+CREATE POLICY campaigns_select_own ON public.campaigns FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY campaigns_insert_own ON public.campaigns FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY campaigns_update_own ON public.campaigns FOR UPDATE TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY campaigns_delete_own ON public.campaigns FOR DELETE TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE UPDATE (user_id, id, created_at) ON public.campaigns FROM PUBLIC, anon, authenticated;
+GRANT SELECT, DELETE ON TABLE public.campaigns TO authenticated;
+GRANT INSERT (id, user_id, name, client_name, platform, status, stage, goal, budget, spend, impressions, clicks, conversions, revenue, roas_meta) ON public.campaigns TO authenticated;
+GRANT UPDATE (name, client_name, platform, status, stage, goal, budget, spend, impressions, clicks, conversions, revenue, roas_meta) ON public.campaigns TO authenticated;
+
+CREATE POLICY briefings_select_own ON public.briefings FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY briefings_insert_own ON public.briefings FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY briefings_update_own ON public.briefings FOR UPDATE TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY briefings_delete_own ON public.briefings FOR DELETE TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE UPDATE (user_id, id, created_at) ON public.briefings FROM PUBLIC, anon, authenticated;
+GRANT SELECT, DELETE ON TABLE public.briefings TO authenticated;
+GRANT INSERT (id, user_id, title, client_name, creator, status, deadline, tags, notes) ON public.briefings TO authenticated;
+GRANT UPDATE (title, client_name, creator, status, deadline, tags, notes) ON public.briefings TO authenticated;
+
+CREATE POLICY commercials_select_own ON public.commercials FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY commercials_insert_own ON public.commercials FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY commercials_update_own ON public.commercials FOR UPDATE TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY commercials_delete_own ON public.commercials FOR DELETE TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE UPDATE (user_id, id, created_at) ON public.commercials FROM PUBLIC, anon, authenticated;
+GRANT SELECT, DELETE ON TABLE public.commercials TO authenticated;
+GRANT INSERT (id, user_id, title, client_name, creator, format, script, deadline, status, thumbnail_tone) ON public.commercials TO authenticated;
+GRANT UPDATE (title, client_name, creator, format, script, deadline, status) ON public.commercials TO authenticated;
+
+CREATE POLICY library_items_select_own ON public.library_items FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY library_items_insert_own ON public.library_items FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY library_items_update_own ON public.library_items FOR UPDATE TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY library_items_delete_own ON public.library_items FOR DELETE TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE UPDATE (user_id, id, created_at) ON public.library_items FROM PUBLIC, anon, authenticated;
+GRANT SELECT, DELETE ON TABLE public.library_items TO authenticated;
+GRANT INSERT (id, user_id, title, category, author, description, content) ON public.library_items TO authenticated;
+GRANT UPDATE (title, category, author, description, content) ON public.library_items TO authenticated;
+
+CREATE POLICY deals_select_own ON public.deals FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY deals_insert_own ON public.deals FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY deals_update_own ON public.deals FOR UPDATE TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY deals_delete_own ON public.deals FOR DELETE TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE UPDATE (user_id, id, created_at) ON public.deals FROM PUBLIC, anon, authenticated;
+GRANT SELECT, DELETE ON TABLE public.deals TO authenticated;
+GRANT INSERT (id, user_id, title, client_name, value, stage, probability, owner) ON public.deals TO authenticated;
+GRANT UPDATE (stage) ON public.deals TO authenticated;
+
+CREATE POLICY assets_select_own ON public.assets FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY assets_insert_own ON public.assets FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY assets_delete_own ON public.assets FOR DELETE TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE UPDATE (user_id, id, created_at) ON public.assets FROM PUBLIC, anon, authenticated;
+GRANT SELECT, DELETE ON TABLE public.assets TO authenticated;
+GRANT INSERT (id, user_id, name, client_name, category, format, size_bytes, tags, storage_path) ON public.assets TO authenticated;
+-- Sem GRANT UPDATE: nenhum UPDATE deste recurso foi encontrado no app atual.
+
+CREATE POLICY prompts_select_own ON public.prompts FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY prompts_insert_own ON public.prompts FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY prompts_update_own ON public.prompts FOR UPDATE TO authenticated USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY prompts_delete_own ON public.prompts FOR DELETE TO authenticated USING (user_id = (SELECT auth.uid()));
+REVOKE UPDATE (user_id, id, created_at) ON public.prompts FROM PUBLIC, anon, authenticated;
+GRANT SELECT, DELETE ON TABLE public.prompts TO authenticated;
+GRANT INSERT (id, user_id, title, description, content, models, tags, parameters) ON public.prompts TO authenticated;
+GRANT UPDATE (title, description, content, models, tags) ON public.prompts TO authenticated;
+
+-- Nao alterar ownership/defaults/triggers de storage.* geridos pelo Supabase.
+-- Guards rejeitam baseline com policies preexistentes que poderiam combinar por OR.
+DO $storage_guard$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_policies WHERE schemaname='storage' AND tablename='objects') THEN
+    RAISE EXCEPTION 'storage.objects ja tem policies; auditar baseline antes de prosseguir';
+  END IF;
+  IF EXISTS (SELECT 1 FROM storage.buckets WHERE id IN ('midias','avatars')) THEN
+    RAISE EXCEPTION 'Buckets ja existem; nao sobrescrever configuracao';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                 WHERE n.nspname='storage' AND c.relname='objects' AND c.relrowsecurity) THEN
+    RAISE EXCEPTION 'RLS de storage.objects deve existir no baseline Supabase';
+  END IF;
+  IF NOT has_table_privilege('authenticated','storage.objects','SELECT') OR
+     NOT has_table_privilege('authenticated','storage.objects','INSERT') OR
+     NOT has_table_privilege('authenticated','storage.objects','UPDATE') OR
+     NOT has_table_privilege('authenticated','storage.objects','DELETE') THEN
+    RAISE EXCEPTION 'Baseline de privilegios Storage deve ser revisado, nao modificado automaticamente';
+  END IF;
+END
+$storage_guard$;
+
+-- Lista inicial APROVADA na T10. MIME declarado nao verifica bytes/antivirus.
+INSERT INTO storage.buckets (id,name,public,file_size_limit,allowed_mime_types) VALUES
+ ('midias','midias',false,52428800,ARRAY['image/png','image/jpeg','image/webp','image/gif','video/mp4','video/quicktime','video/webm']::text[]),
+ ('avatars','avatars',true,2097152,ARRAY['image/png','image/jpeg','image/webp']::text[]);
+
+CREATE POLICY t10_midias_select_own ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'midias' AND split_part(name,'/',1) = (SELECT auth.uid())::text AND split_part(name,'/',2) <> '' AND name !~ '(^|/)[.]{1,2}(/|$)' AND name !~ '//' AND right(name,1) <> '/' AND position('%' IN name) = 0 AND position(chr(92) IN name) = 0 AND name !~ '[[:cntrl:]]');
+
+CREATE POLICY t10_midias_insert_own ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'midias' AND split_part(name,'/',1) = (SELECT auth.uid())::text AND split_part(name,'/',2) <> '' AND name !~ '(^|/)[.]{1,2}(/|$)' AND name !~ '//' AND right(name,1) <> '/' AND position('%' IN name) = 0 AND position(chr(92) IN name) = 0 AND name !~ '[[:cntrl:]]');
+
+CREATE POLICY t10_midias_delete_own ON storage.objects FOR DELETE TO authenticated
+USING (bucket_id = 'midias' AND split_part(name,'/',1) = (SELECT auth.uid())::text AND split_part(name,'/',2) <> '' AND name !~ '(^|/)[.]{1,2}(/|$)' AND name !~ '//' AND right(name,1) <> '/' AND position('%' IN name) = 0 AND position(chr(92) IN name) = 0 AND name !~ '[[:cntrl:]]');
+
+CREATE POLICY t10_avatars_select_own ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'avatars' AND name IN ((SELECT auth.uid())::text || '/avatar.png', (SELECT auth.uid())::text || '/avatar.jpg', (SELECT auth.uid())::text || '/avatar.webp') AND split_part(name,'/',1) = (SELECT auth.uid())::text AND split_part(name,'/',2) <> '' AND name !~ '(^|/)[.]{1,2}(/|$)' AND name !~ '//' AND right(name,1) <> '/' AND position('%' IN name) = 0 AND position(chr(92) IN name) = 0 AND name !~ '[[:cntrl:]]');
+
+CREATE POLICY t10_avatars_insert_own ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'avatars' AND name IN ((SELECT auth.uid())::text || '/avatar.png', (SELECT auth.uid())::text || '/avatar.jpg', (SELECT auth.uid())::text || '/avatar.webp') AND split_part(name,'/',1) = (SELECT auth.uid())::text AND split_part(name,'/',2) <> '' AND name !~ '(^|/)[.]{1,2}(/|$)' AND name !~ '//' AND right(name,1) <> '/' AND position('%' IN name) = 0 AND position(chr(92) IN name) = 0 AND name !~ '[[:cntrl:]]');
+
+CREATE POLICY t10_avatars_update_own ON storage.objects FOR UPDATE TO authenticated
+USING (bucket_id = 'avatars' AND name IN ((SELECT auth.uid())::text || '/avatar.png', (SELECT auth.uid())::text || '/avatar.jpg', (SELECT auth.uid())::text || '/avatar.webp') AND split_part(name,'/',1) = (SELECT auth.uid())::text AND split_part(name,'/',2) <> '' AND name !~ '(^|/)[.]{1,2}(/|$)' AND name !~ '//' AND right(name,1) <> '/' AND position('%' IN name) = 0 AND position(chr(92) IN name) = 0 AND name !~ '[[:cntrl:]]')
+WITH CHECK (bucket_id = 'avatars' AND name IN ((SELECT auth.uid())::text || '/avatar.png', (SELECT auth.uid())::text || '/avatar.jpg', (SELECT auth.uid())::text || '/avatar.webp') AND split_part(name,'/',1) = (SELECT auth.uid())::text AND split_part(name,'/',2) <> '' AND name !~ '(^|/)[.]{1,2}(/|$)' AND name !~ '//' AND right(name,1) <> '/' AND position('%' IN name) = 0 AND position(chr(92) IN name) = 0 AND name !~ '[[:cntrl:]]');
+
+-- NENHUMA policy anon ou PUBLIC. Public URL de avatars usa o endpoint publico do Storage,
+-- cujo bypass de leitura e intencional pelo bucket.public=true; listagem REST segue policies.
+-- Sem novos grants sobre schemas geridos; somente buckets e policies declarados.
+-- Bloqueia exclusao fisica e soft delete. Nao cria uma funcao de excluir contas.
+DO $auth_guard$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute
+    WHERE attrelid='auth.users'::regclass AND attname='deleted_at' AND NOT attisdropped) THEN
+    RAISE EXCEPTION 'Revisar baseline Auth: deleted_at nao encontrado';
+  END IF;
+END
+$auth_guard$;
+-- SECURITY DEFINER para consultar dados com RLS durante delete administrativo.
+-- Funcao privada, sem argumentos/SQL dinamico, EXECUTE revogado para API.
+CREATE FUNCTION anuncia_private.t10_block_account_with_data() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $account$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF NEW.deleted_at IS NULL OR NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.clients WHERE user_id=OLD.id)
+     OR EXISTS (SELECT 1 FROM public.campaigns WHERE user_id=OLD.id)
+     OR EXISTS (SELECT 1 FROM public.briefings WHERE user_id=OLD.id)
+     OR EXISTS (SELECT 1 FROM public.commercials WHERE user_id=OLD.id)
+     OR EXISTS (SELECT 1 FROM public.library_items WHERE user_id=OLD.id)
+     OR EXISTS (SELECT 1 FROM public.deals WHERE user_id=OLD.id)
+     OR EXISTS (SELECT 1 FROM public.assets WHERE user_id=OLD.id)
+     OR EXISTS (SELECT 1 FROM public.prompts WHERE user_id=OLD.id)
+     OR EXISTS (
+       SELECT 1 FROM storage.objects AS o
+       WHERE split_part(o.name,'/',1)=OLD.id::text
+          OR to_jsonb(o)->>'owner_id'=OLD.id::text
+          OR to_jsonb(o)->>'owner'=OLD.id::text
+     ) THEN
+    RAISE EXCEPTION 'Conta possui dados ou arquivos; exclusao automatica bloqueada' USING ERRCODE='23503';
+  END IF;
+  IF TG_OP='UPDATE' THEN RETURN NEW; END IF;
+  RETURN OLD;
+END
+$account$;
+REVOKE ALL ON FUNCTION anuncia_private.t10_block_account_with_data() FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER t10_block_account_with_data BEFORE DELETE OR UPDATE OF deleted_at ON auth.users
+FOR EACH ROW EXECUTE FUNCTION anuncia_private.t10_block_account_with_data();
+-- Sem cascade, exclusao de arquivos, alteracao de ownership ou criacao de usuarios.
+
+NOTIFY pgrst, 'reload schema';
+
+-- MODULO: CORRECAO_RLS_M16.sql.proposed
+-- M16: proposta adicional para laboratorio local; aplicar somente apos validar alvo.
+-- A T10 permanece imutavel. Nao exclui dados/arquivos nem altera buckets geridos.
+-- Bloqueia JWT ainda valido de conta fisicamente excluida ou soft-deleted.
+-- FOR SHARE serializa gravacoes com DELETE e UPDATE deleted_at da mesma conta.
+DO $guard$
+BEGIN
+  IF current_setting('anuncia.m16_review',true) IS DISTINCT FROM 'ISOLATED_LOCAL_M16' OR current_user <> 'postgres' THEN
+    RAISE EXCEPTION 'Exige alvo local M16 tecnicamente verificado';
+  END IF;
+  IF (SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public' AND tablename IN
+    ('clients','campaigns','briefings','commercials','library_items','deals','assets','prompts')) <> 8 THEN
+    RAISE EXCEPTION 'Baseline T10 incompleta';
+  END IF;
+END
+$guard$;
+-- Leitura: compativel com transacoes READ ONLY dos GETs do PostgREST.
+CREATE FUNCTION anuncia_private.t16_active_owner() RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $read$
+  SELECT EXISTS(SELECT 1 FROM auth.users AS u WHERE u.id=auth.uid() AND u.deleted_at IS NULL)
+$read$;
+-- Escrita: lock somente em INSERT/UPDATE, na mesma transacao da gravacao.
+CREATE FUNCTION anuncia_private.t16_lock_active_owner() RETURNS boolean
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog AS $fn$
+DECLARE
+  actor uuid := auth.uid();
+  locked_actor uuid;
+BEGIN
+  IF actor IS NULL THEN RETURN false; END IF;
+  SELECT u.id INTO locked_actor FROM auth.users AS u
+    WHERE u.id=actor AND u.deleted_at IS NULL FOR SHARE;
+  RETURN FOUND;
+END
+$fn$;
+REVOKE ALL ON FUNCTION anuncia_private.t16_active_owner() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION anuncia_private.t16_lock_active_owner() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION anuncia_private.t16_active_owner() TO authenticated;
+GRANT EXECUTE ON FUNCTION anuncia_private.t16_lock_active_owner() TO authenticated;
+-- Sem novo USAGE no schema privado. Referencias nas policies sao resolvidas pelo
+-- administrador na criacao; o helper so retorna booleano e nao recebe parametros.
+CREATE POLICY t16_active_account ON public.clients AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+CREATE POLICY t16_active_account ON public.campaigns AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+CREATE POLICY t16_active_account ON public.briefings AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+CREATE POLICY t16_active_account ON public.commercials AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+CREATE POLICY t16_active_account ON public.library_items AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+CREATE POLICY t16_active_account ON public.deals AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+CREATE POLICY t16_active_account ON public.assets AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+CREATE POLICY t16_active_account ON public.prompts AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+CREATE POLICY t16_active_account ON storage.objects AS RESTRICTIVE FOR ALL TO authenticated
+  USING ((SELECT anuncia_private.t16_active_owner())) WITH CHECK ((SELECT anuncia_private.t16_lock_active_owner()));
+NOTIFY pgrst, 'reload schema';
+
+-- MODULO: CORRECAO_STORAGE_M17.sql.proposed
+-- M17: complementar T10 + M16, apenas em laboratorio local tecnicamente verificado.
+-- Storage 1.19.3 finaliza uploads como role privilegiada: RLS de preflight nao basta.
+-- Novo trigger independente: nao substitui triggers/defaults/ownership geridos.
+DO $guard$
+BEGIN
+ IF current_setting('anuncia.m17_review',true) IS DISTINCT FROM 'ISOLATED_LOCAL_M17'
+    OR current_user <> 'postgres' THEN
+   RAISE EXCEPTION 'M17 exige verificacao externa do alvo local e executor postgres';
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=current_user AND rolbypassrls) THEN
+   RAISE EXCEPTION 'Executor precisa BYPASSRLS para consultar Auth de forma confiavel';
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_policies WHERE schemaname='storage'
+   AND tablename='objects' AND policyname='t16_active_account' AND permissive='RESTRICTIVE') THEN
+   RAISE EXCEPTION 'Baseline M16 ausente';
+ END IF;
+ IF (SELECT count(*) FROM pg_catalog.pg_attribute WHERE attrelid='storage.objects'::regclass
+     AND attname IN ('bucket_id','name','owner','owner_id') AND NOT attisdropped) <> 4 THEN
+   RAISE EXCEPTION 'Baseline Storage mudou: auditar colunas de ownership antes de executar';
+ END IF;
+END
+$guard$;
+CREATE FUNCTION anuncia_private.t17_storage_active_owner() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $fn$
+DECLARE
+ prefix text;
+ actor uuid;
+ locked_actor uuid;
+ max_size bigint;
+ allowed_mime text[];
+BEGIN
+ -- Nao interferir em buckets fora do escopo T10. Nao permitir mover para fora.
+ IF TG_OP='UPDATE' AND OLD.bucket_id IN ('midias','avatars') AND
+    NEW.bucket_id IS DISTINCT FROM OLD.bucket_id THEN
+   RAISE EXCEPTION 'M17: transferencia de bucket nao permitida' USING ERRCODE='42501';
+ END IF;
+ IF NEW.bucket_id NOT IN ('midias','avatars') THEN RETURN NEW; END IF;
+ prefix := pg_catalog.split_part(NEW.name,'/',1);
+ IF prefix IS NULL OR prefix !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    OR NEW.owner_id IS DISTINCT FROM prefix
+    OR (NEW.owner IS NOT NULL AND NEW.owner::text IS DISTINCT FROM prefix) THEN
+   RAISE EXCEPTION 'M17: ownership de arquivo inconsistente' USING ERRCODE='42501';
+ END IF;
+ IF TG_OP='UPDATE' AND (
+    pg_catalog.split_part(OLD.name,'/',1) IS DISTINCT FROM prefix
+    OR OLD.owner_id IS DISTINCT FROM NEW.owner_id
+    OR OLD.owner IS DISTINCT FROM NEW.owner) THEN
+   RAISE EXCEPTION 'M17: transferencia de proprietario nao permitida' USING ERRCODE='42501';
+ END IF;
+ -- Repete a forma de caminho da T10 tambem na finalizacao privilegiada.
+ IF pg_catalog.split_part(NEW.name,'/',2) = '' OR NEW.name ~ '(^|/)[.]{1,2}(/|$)'
+    OR NEW.name ~ '//' OR pg_catalog.right(NEW.name,1) = '/'
+    OR pg_catalog.strpos(NEW.name,'%') > 0
+    OR pg_catalog.strpos(NEW.name,pg_catalog.chr(92)) > 0
+    OR NEW.name ~ '[[:cntrl:]]'
+    OR NEW.name ~ '(^|/)\.emptyFolderPlaceholder(/|$)' THEN
+   RAISE EXCEPTION 'M17: caminho de arquivo nao permitido' USING ERRCODE='42501';
+ END IF;
+ IF NEW.bucket_id='avatars' AND NEW.name NOT IN
+    (prefix||'/avatar.png',prefix||'/avatar.jpg',prefix||'/avatar.webp') THEN
+   RAISE EXCEPTION 'M17: caminho de avatar nao permitido' USING ERRCODE='42501';
+ END IF;
+ -- O teste de permissao do Storage usa metadata NULL e e desfeito.
+ -- A finalizacao desta versao fornece tamanho real e MIME em metadata.
+ -- Nao e inspecao de bytes/antivirus e nao limita bytes em transito.
+ IF NEW.metadata IS NOT NULL THEN
+   IF NEW.bucket_id='avatars' THEN
+     max_size := 2097152;
+     allowed_mime := ARRAY['image/png','image/jpeg','image/webp'];
+   ELSE
+     max_size := 52428800;
+     allowed_mime := ARRAY['image/png','image/jpeg','image/webp','image/gif','video/mp4','video/quicktime','video/webm'];
+   END IF;
+   IF pg_catalog.jsonb_typeof(NEW.metadata) IS DISTINCT FROM 'object'
+      OR coalesce(NEW.metadata->>'size','') !~ '^[0-9]+$' THEN
+     RAISE EXCEPTION 'M17: metadados finais invalidos' USING ERRCODE='42501';
+   END IF;
+   IF (NEW.metadata->>'size')::numeric > max_size
+      OR ((NEW.metadata->>'mimetype') = ANY(allowed_mime)) IS DISTINCT FROM true THEN
+     RAISE EXCEPTION 'M17: formato ou tamanho nao permitido' USING ERRCODE='42501';
+   END IF;
+ END IF;
+ actor := prefix::uuid;
+ -- Inclusive na finalizacao administrativa: lock fica ate COMMIT/ROLLBACK.
+ -- FOR SHARE conflita com DELETE e com UPDATE de deleted_at (KEY SHARE nao basta).
+ SELECT u.id INTO locked_actor FROM auth.users AS u
+   WHERE u.id=actor AND u.deleted_at IS NULL FOR SHARE;
+ IF NOT FOUND THEN
+   RAISE EXCEPTION 'M17: conta de arquivo ausente ou excluida' USING ERRCODE='42501';
+ END IF;
+ RETURN NEW;
+END
+$fn$;
+REVOKE ALL ON FUNCTION anuncia_private.t17_storage_active_owner() FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER t17_storage_active_owner BEFORE INSERT OR UPDATE ON storage.objects
+FOR EACH ROW EXECUTE FUNCTION anuncia_private.t17_storage_active_owner();
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;

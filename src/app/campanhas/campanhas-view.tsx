@@ -62,6 +62,7 @@ import { formatBRL, formatCompact } from "@/lib/format";
 import { campaigns } from "@/lib/mock-data";
 import { iaService } from "@/lib/services/ia-service";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { camposParaAtualizacao } from "@/lib/supabase/editable-fields";
 import { cn } from "@/lib/utils";
 import type { CampaignPlatform, CampaignStatus } from "@/types";
 
@@ -443,7 +444,7 @@ export function CampanhasView() {
     if (editingId) {
       const { data: linha, error } = await supabase
         .from("campaigns")
-        .update(registro)
+        .update(camposParaAtualizacao(registro))
         .eq("id", editingId)
         .select(COLUNAS)
         .single();

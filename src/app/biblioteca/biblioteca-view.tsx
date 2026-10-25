@@ -54,6 +54,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { libraryItems } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { camposParaAtualizacao } from "@/lib/supabase/editable-fields";
 import type { LibraryCategory } from "@/types";
 
 
@@ -317,7 +318,7 @@ export function BibliotecaView() {
     if (editingId) {
       const { data: linha, error } = await supabase
         .from("library_items")
-        .update(registro)
+        .update(camposParaAtualizacao(registro))
         .eq("id", editingId)
         .select(COLUNAS)
         .single();

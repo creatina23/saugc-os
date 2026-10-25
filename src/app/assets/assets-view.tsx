@@ -55,13 +55,14 @@ import {
 import { assetsService } from "@/lib/services";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { MIME_MIDIAS, validarMidia } from "@/lib/upload-rules";
 import type { Asset, AssetCategory } from "@/types";
 
 
 // ---------- Regras fixas ----------
 
 const BALDE = "midias";
-const TAMANHO_MAX_MB = 50; // limite por arquivo do plano gratuito do Supabase
+const TAMANHO_MAX_MB = 50; // MiB: decisao de produto, tambem limitada no Storage
 
 // Valores de cofre (inglês, do tipo AssetCategory) × rótulos da tela (PT-BR)
 const categorias = [
@@ -392,10 +393,9 @@ export function MídiasView() {
       setErroDialog("Escolha um arquivo primeiro (clica na caixa tracejada).");
       return;
     }
-    if (arquivo.size > TAMANHO_MAX_MB * 1024 * 1024) {
-      setErroDialog(
-        `Esse arquivo passa de ${TAMANHO_MAX_MB} MB — limite por arquivo no plano gratuito.`
-      );
+    const erroArquivo = validarMidia(arquivo);
+    if (erroArquivo) {
+      setErroDialog(erroArquivo);
       return;
     }
     const supabase = getSupabaseBrowser();
@@ -422,7 +422,7 @@ export function MídiasView() {
 
     const { error: erroUpload } = await supabase.storage
       .from(BALDE)
-      .upload(caminho, arquivo, { cacheControl: "3600", upsert: false });
+      .upload(caminho, arquivo, { cacheControl: "3600", upsert: false, contentType: arquivo.type.toLowerCase() });
     if (erroUpload) {
       setEnviando(false);
       setErroDialog(
@@ -597,7 +597,7 @@ export function MídiasView() {
                       Clique para escolher o arquivo
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      MP4, MOV, PNG, JPG ou GIF · até {TAMANHO_MAX_MB} MB
+                      PNG, JPEG, WebP, GIF, MP4, MOV ou WebM · até {TAMANHO_MAX_MB} MiB
                     </p>
                   </>
                 )}
@@ -605,7 +605,7 @@ export function MídiasView() {
               <input
                 id="asset-file"
                 type="file"
-                accept="video/*,image/*"
+                accept={MIME_MIDIAS.join(",")}
                 className="hidden"
                 onChange={(event) => {
                   const escolhido = event.target.files?.[0] ?? null;

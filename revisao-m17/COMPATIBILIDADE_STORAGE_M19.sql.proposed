@@ -1,0 +1,131 @@
+-- M19: compatibilidade OWNED SQL do AnuncIA com imagem OFICIAL Storage 1.84.23.
+-- Nao altera codigo do Storage, grants de API, ownership ou o pacote M17 original.
+-- Aplicar somente apos conferir instancia local, digest, M17 e baseline gerida.
+BEGIN;
+DO $guard$
+BEGIN
+ IF current_setting('anuncia.m19_review',true) IS DISTINCT FROM 'ISOLATED_LOCAL_M19'
+ OR current_user <> 'postgres' THEN RAISE EXCEPTION 'M19 exige alvo local verificado'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_catalog.pg_trigger WHERE tgrelid='storage.objects'::regclass
+   AND tgname='t17_storage_active_owner' AND tgenabled='O') THEN
+   RAISE EXCEPTION 'Trigger M17 esperado nao encontrado';
+ END IF;
+END $guard$;
+CREATE OR REPLACE FUNCTION anuncia_private.t17_storage_active_owner() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $fn$
+DECLARE
+ prefix text;
+ actor uuid;
+ locked_actor uuid;
+ max_size bigint;
+ allowed_mime text[];
+BEGIN
+ -- Nao interferir em buckets fora do escopo T10. Nao permitir mover para fora.
+ IF TG_OP='UPDATE' AND OLD.bucket_id IN ('midias','avatars') AND
+    NEW.bucket_id IS DISTINCT FROM OLD.bucket_id THEN
+   RAISE EXCEPTION 'M17: transferencia de bucket nao permitida' USING ERRCODE='42501';
+ END IF;
+ IF NEW.bucket_id NOT IN ('midias','avatars') THEN RETURN NEW; END IF;
+ prefix := pg_catalog.split_part(NEW.name,'/',1);
+ IF prefix IS NULL OR prefix !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    OR NEW.owner_id IS DISTINCT FROM prefix
+    OR (NEW.owner IS NOT NULL AND NEW.owner::text IS DISTINCT FROM prefix) THEN
+   RAISE EXCEPTION 'M17: ownership de arquivo inconsistente' USING ERRCODE='42501';
+ END IF;
+ IF TG_OP='UPDATE' AND (
+    pg_catalog.split_part(OLD.name,'/',1) IS DISTINCT FROM prefix
+    OR OLD.owner_id IS DISTINCT FROM NEW.owner_id
+    OR OLD.owner IS DISTINCT FROM NEW.owner) THEN
+   RAISE EXCEPTION 'M17: transferencia de proprietario nao permitida' USING ERRCODE='42501';
+ END IF;
+ -- Repete a forma de caminho da T10 tambem na finalizacao privilegiada.
+ IF pg_catalog.split_part(NEW.name,'/',2) = '' OR NEW.name ~ '(^|/)[.]{1,2}(/|$)'
+    OR NEW.name ~ '//' OR pg_catalog.right(NEW.name,1) = '/'
+    OR pg_catalog.strpos(NEW.name,'%') > 0
+    OR pg_catalog.strpos(NEW.name,pg_catalog.chr(92)) > 0
+    OR NEW.name ~ '[[:cntrl:]]'
+    OR NEW.name ~ '(^|/)\.emptyFolderPlaceholder(/|$)' THEN
+   RAISE EXCEPTION 'M17: caminho de arquivo nao permitido' USING ERRCODE='42501';
+ END IF;
+ IF NEW.bucket_id='avatars' AND NEW.name NOT IN
+    (prefix||'/avatar.png',prefix||'/avatar.jpg',prefix||'/avatar.webp') THEN
+   RAISE EXCEPTION 'M17: caminho de avatar nao permitido' USING ERRCODE='42501';
+ END IF;
+ -- O teste de permissao do Storage usa metadata NULL e e desfeito.
+ -- A finalizacao desta versao fornece tamanho real e MIME em metadata.
+ -- Nao e inspecao de bytes/antivirus e nao limita bytes em transito.
+ IF NEW.metadata IS NOT NULL THEN
+   IF NEW.bucket_id='avatars' THEN
+     max_size := 2097152;
+     allowed_mime := ARRAY['image/png','image/jpeg','image/webp'];
+   ELSE
+     max_size := 52428800;
+     allowed_mime := ARRAY['image/png','image/jpeg','image/webp','image/gif','video/mp4','video/quicktime','video/webm'];
+   END IF;
+   IF pg_catalog.jsonb_typeof(NEW.metadata) IS DISTINCT FROM 'object' THEN
+     RAISE EXCEPTION 'M17: metadados finais invalidos' USING ERRCODE='42501';
+   END IF;
+   -- M19: Storage 1.84.23 testa RLS com version='1' e metadata parcial.
+   -- A constraint DEFERRED abaixo exige tamanho/MIME completos no COMMIT.
+   -- Nao existe permissao para persistir esse estado provisorio.
+   IF NOT (NEW.version='1' AND NOT (NEW.metadata ? 'size')) THEN
+     IF coalesce(NEW.metadata->>'size','') !~ '^[0-9]+$' THEN
+       RAISE EXCEPTION 'M17: metadados finais invalidos' USING ERRCODE='42501';
+     END IF;
+     IF (NEW.metadata->>'size')::numeric > max_size
+        OR ((NEW.metadata->>'mimetype') = ANY(allowed_mime)) IS DISTINCT FROM true THEN
+       RAISE EXCEPTION 'M17: formato ou tamanho nao permitido' USING ERRCODE='42501';
+     END IF;
+   END IF;
+   -- No pedido de URL assinada, o MIME do probe e application/json (pedido),
+   -- nao o MIME do arquivo futuro. Apenas o probe version='1' sem size pode
+   -- ter MIME provisorio. A constraint DEFERRED valida o registro no COMMIT.
+
+ END IF;
+ actor := prefix::uuid;
+ -- Inclusive na finalizacao administrativa: lock fica ate COMMIT/ROLLBACK.
+ -- FOR SHARE conflita com DELETE e com UPDATE de deleted_at (KEY SHARE nao basta).
+ SELECT u.id INTO locked_actor FROM auth.users AS u
+   WHERE u.id=actor AND u.deleted_at IS NULL FOR SHARE;
+ IF NOT FOUND THEN
+   RAISE EXCEPTION 'M17: conta de arquivo ausente ou excluida' USING ERRCODE='42501';
+ END IF;
+ RETURN NEW;
+END
+$fn$;
+REVOKE ALL ON FUNCTION anuncia_private.t17_storage_active_owner() FROM PUBLIC,anon,authenticated;
+CREATE FUNCTION anuncia_private.t19_complete_storage_metadata() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $fn$
+DECLARE
+ row_bucket text;
+ row_metadata jsonb;
+ max_size bigint;
+ allowed_mime text[];
+BEGIN
+ -- Examina a linha final corrente: updates validos na mesma transacao nao
+ -- sao recusados por um snapshot NEW intermediario; linha removida nao persiste.
+ SELECT o.bucket_id,o.metadata INTO row_bucket,row_metadata
+ FROM storage.objects o WHERE o.id=NEW.id;
+ IF NOT FOUND OR row_bucket NOT IN ('midias','avatars') THEN RETURN NULL; END IF;
+ IF row_bucket='avatars' THEN
+  max_size:=2097152;allowed_mime:=ARRAY['image/png','image/jpeg','image/webp'];
+ ELSE
+  max_size:=52428800;allowed_mime:=ARRAY['image/png','image/jpeg','image/webp','image/gif','video/mp4','video/quicktime','video/webm'];
+ END IF;
+ IF row_metadata IS NULL OR pg_catalog.jsonb_typeof(row_metadata) IS DISTINCT FROM 'object'
+ OR coalesce(row_metadata->>'size','') !~ '^[0-9]+$' THEN
+  RAISE EXCEPTION 'M19: metadados incompletos nao podem persistir no COMMIT' USING ERRCODE='42501';
+ END IF;
+ IF (row_metadata->>'size')::numeric > max_size
+ OR ((row_metadata->>'mimetype')=ANY(allowed_mime)) IS DISTINCT FROM true THEN
+  RAISE EXCEPTION 'M19: metadados finais fora dos limites' USING ERRCODE='42501';
+ END IF;
+ RETURN NULL;
+END $fn$;
+REVOKE ALL ON FUNCTION anuncia_private.t19_complete_storage_metadata() FROM PUBLIC,anon,authenticated;
+CREATE CONSTRAINT TRIGGER zz_t19_complete_metadata AFTER INSERT OR UPDATE ON storage.objects
+DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+WHEN (NEW.bucket_id IN ('midias','avatars'))
+EXECUTE FUNCTION anuncia_private.t19_complete_storage_metadata();
+NOTIFY pgrst,'reload schema';
+COMMIT;

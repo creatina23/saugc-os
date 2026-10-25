@@ -1,0 +1,17 @@
+{
+  "scope": "PROPOSTA PARA REVISAO; aplicada apenas no laboratorio M19",
+  "storage_tag": "v1.84.23",
+  "storage_image": "docker.io/supabase/storage-api@sha256:7112e91307968d3eceffb5228291202d7bac8015a27af25d4b5a4b0543eadf22",
+  "storage_image_id": "sha256:2a109dc3d00d98655c91f0b428f24289ef95ed17c69ae3ce56b1b713d033f4f9",
+  "platform": "linux/amd64",
+  "postgres": "15.8.1.060",
+  "gotrue": "2.170.0",
+  "postgrest": "12.2.8",
+  "sql_M17_sha256": "ea56a3a542ab38c34a49724396edc53ce6940fe4b452fcdd12ce885c5483742b",
+  "sql_compat_M19_sha256": "dd8187e0f03a4214a752face1a6b86129f8765d5da61a4be1f98fd819e0d899f",
+  "storage_backend": "file",
+  "pg_queue_enable": false,
+  "bucket_versioning": "DISABLED",
+  "internal_storage_fork": false,
+  "new_credentials_local_only": true
+}
