@@ -49,6 +49,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { prompts } from "@/lib/mock-data";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { camposParaAtualizacao } from "@/lib/supabase/editable-fields";
 import { cn } from "@/lib/utils";
 
 
@@ -302,7 +303,7 @@ export function PromptsView() {
       // update sem tocar em "parameters" (preserva o que já existia)
       const { data: linha, error } = await supabase
         .from("prompts")
-        .update(registro)
+        .update(camposParaAtualizacao(registro))
         .eq("id", editingId)
         .select(COLUNAS)
         .single();

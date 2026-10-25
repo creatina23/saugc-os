@@ -13,7 +13,7 @@
 // • 016d — metade inferior reconstruída após corte da colagem (a tela
 //   de carga parava na linha 384; kanban e modal nasceram de novo).
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowLeft,
@@ -124,7 +124,7 @@ async function coletarDeals(): Promise<Deal[] | null> {
     .select("id, title, client_name, value, stage, probability, owner")
     .order("created_at", { ascending: false });
 
-  if (error) return null;
+  if (error) throw new Error("Não foi possível carregar os negócios.");
 
   return ((data ?? []) as LinhaDeal[]).map(dealDaLinha);
 }
@@ -188,6 +188,9 @@ export function CrmView() {
   const [form, setForm] = useState(emptyForm);
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState<string | null>(null);
+  const [erroAcao, setErroAcao] = useState<string | null>(null);
+  const [ocupados, setOcupados] = useState<Record<string, boolean>>({});
+  const mutacoes = useRef(new Set<string>());
 
   // Carga inicial: migra o localStorage e busca os negócios do banco.
   // Todo setState acontece dentro do .then() — regra do nosso ESLint.
@@ -201,6 +204,10 @@ export function CrmView() {
       } else {
         setDeals(resultado);
       }
+      setCarregando(false);
+    }).catch(() => {
+      if (!ativo) return;
+      setErroAcao("Não consegui carregar os negócios. Recarregue a página para tentar novamente.");
       setCarregando(false);
     });
     return () => {
@@ -327,32 +334,52 @@ export function CrmView() {
     setDialogOpen(false);
   }
 
-  // Move o negócio uma etapa pra frente (+1) ou pra trás (-1).
-  // A tela atualiza na hora; o banco recebe o update em seguida.
-  async function moverDeEtapa(deal: Deal, direcao: 1 | -1) {
-    const indice = dealStageOrder.indexOf(deal.stage);
-    const novaEtapa = dealStageOrder[indice + direcao];
-    if (!novaEtapa) return;
-
-    setDeals((atual) =>
-      atual.map((item) =>
-        item.id === deal.id ? { ...item, stage: novaEtapa } : item
-      )
-    );
-
+  // Dados reais só mudam na tela após o banco confirmar exatamente a linha.
+  async function persistirAcao(deal: Deal, novaEtapa: DealStage | null) {
+    if (mutacoes.current.has(deal.id)) return;
+    setErroAcao(null);
+    const aplicar = () => setDeals((atual) => novaEtapa === null
+      ? atual.filter((item) => item.id !== deal.id)
+      : atual.map((item) => item.id === deal.id ? { ...item, stage: novaEtapa } : item));
+    if (modoDemo) {
+      aplicar();
+      return;
+    }
     const supabase = getSupabaseBrowser();
-    if (supabase && !deal.id.startsWith("local-")) {
-      await supabase.from("deals").update({ stage: novaEtapa }).eq("id", deal.id);
+    if (!supabase) {
+      setErroAcao("Banco indisponível. Nenhuma alteração foi confirmada; recarregue a página.");
+      return;
+    }
+    mutacoes.current.add(deal.id);
+    setOcupados((atual) => ({ ...atual, [deal.id]: true }));
+    try {
+      const consulta = novaEtapa === null
+        ? supabase.from("deals").delete()
+        : supabase.from("deals").update({ stage: novaEtapa });
+      const { data, error } = await consulta.eq("id", deal.id).select("id, stage");
+      if (error || !data || data.length !== 1 || data[0].id !== deal.id ||
+          (novaEtapa !== null && data[0].stage !== novaEtapa)) {
+        setErroAcao("O banco não confirmou a alteração. Recarregue a página para conferir o estado atual.");
+        return;
+      }
+      aplicar();
+    } catch {
+      // Uma falha de transporte não comprova se o servidor gravou ou não.
+      setErroAcao("Não consegui confirmar a alteração. Confira sua conexão e recarregue a página antes de tentar novamente.");
+    } finally {
+      mutacoes.current.delete(deal.id);
+      setOcupados((atual) => ({ ...atual, [deal.id]: false }));
     }
   }
 
-  async function excluirDeal(deal: Deal) {
-    setDeals((atual) => atual.filter((item) => item.id !== deal.id));
+  async function moverDeEtapa(deal: Deal, direcao: 1 | -1) {
+    const indice = dealStageOrder.indexOf(deal.stage);
+    const novaEtapa = dealStageOrder[indice + direcao];
+    if (novaEtapa) await persistirAcao(deal, novaEtapa);
+  }
 
-    const supabase = getSupabaseBrowser();
-    if (supabase && !deal.id.startsWith("local-")) {
-      await supabase.from("deals").delete().eq("id", deal.id);
-    }
+  async function excluirDeal(deal: Deal) {
+    await persistirAcao(deal, null);
   }
 
   // ---------- Tela em carregamento (esqueleto) ----------
@@ -412,6 +439,8 @@ export function CrmView() {
           <Plus /> Novo Negócio
         </Button>
       </div>
+
+      {erroAcao && <p role="alert" className="mt-4 text-sm text-red-400">{erroAcao}</p>}
 
       {/* KPIs do funil — passe o mouse sobre o cartão para ver a conta */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -522,6 +551,7 @@ export function CrmView() {
                           <button
                             type="button"
                             aria-label={`Excluir ${deal.title}`}
+                            disabled={ocupados[deal.id]}
                             onClick={() => void excluirDeal(deal)}
                             className="shrink-0 cursor-pointer text-muted-foreground transition-colors hover:text-red-400"
                           >
@@ -557,7 +587,7 @@ export function CrmView() {
                               size="icon"
                               aria-label={`Voltar ${deal.title} uma etapa`}
                               disabled={
-                                dealStageOrder.indexOf(deal.stage) === 0
+                                ocupados[deal.id] || dealStageOrder.indexOf(deal.stage) === 0
                               }
                               onClick={() => void moverDeEtapa(deal, -1)}
                               className="size-7 text-muted-foreground"
@@ -569,7 +599,7 @@ export function CrmView() {
                               size="icon"
                               aria-label={`Avançar ${deal.title} uma etapa`}
                               disabled={
-                                dealStageOrder.indexOf(deal.stage) ===
+                                ocupados[deal.id] || dealStageOrder.indexOf(deal.stage) ===
                                 dealStageOrder.length - 1
                               }
                               onClick={() => void moverDeEtapa(deal, 1)}

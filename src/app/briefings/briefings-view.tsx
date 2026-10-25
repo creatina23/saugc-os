@@ -64,6 +64,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { briefings } from "@/lib/mock-data";
 import { iaService } from "@/lib/services/ia-service";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { camposParaAtualizacao } from "@/lib/supabase/editable-fields";
 import { cn } from "@/lib/utils";
 import type { BriefingStatus } from "@/types";
 
@@ -383,7 +384,7 @@ export function BriefingsView() {
     if (editingId) {
       const { data: linha, error } = await supabase
         .from("briefings")
-        .update(registro)
+        .update(camposParaAtualizacao(registro))
         .eq("id", editingId)
         .select(COLUNAS)
         .single();
